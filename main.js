@@ -1968,6 +1968,8 @@ layerSwitcher.on("select", (e) => {
 const modifyFeature = document.getElementById("modifyFeature");
 
 //MODIFY INTERACTION
+let modifiedFeatureData = null;
+
 modifyFeature.addEventListener("click", (e) => {
   if (!vectorLayer) {
     alert("Please select a layer first.");
@@ -1977,18 +1979,43 @@ modifyFeature.addEventListener("click", (e) => {
   const modify = new Modify({ source: source });
   map.addInteraction(modify);
 
-  // Define a function to handle the geometry modification event
+  // Handle geometry modification without saving yet
   modify.on("modifyend", function (event) {
     // Get the modified feature
     const modifiedFeature = event.features.item(0);
-    // Get the modified geometry
-    const modifiedGeometry = modifiedFeature.getGeometry().getCoordinates();
-    if (layerType === "Polygon") {
-      formattedCoordinates = modifiedGeometry[0][0]
-        .map((coord) => `${coord[0]},${coord[1]}`)
-        .join(" ");
-      console.log(formattedCoordinates);
-      body = `<wfs:Transaction service="WFS" version="1.0.0"
+    // Store the modified feature and layer type for later
+    modifiedFeatureData = {
+      feature: modifiedFeature,
+      geometry: modifiedFeature.getGeometry().getCoordinates(),
+      layerType: layerType, // Store current layer type
+    };
+    console.log("Feature modified. Click 'Save' to apply changes.");
+  });
+});
+
+// SAVE FEATURE EVENT
+const saveFeatureButton = document.getElementById("saveFeature");
+saveFeatureButton.addEventListener("click", () => {
+  if (!modifiedFeatureData) {
+    alert("No modifications to save.");
+    return;
+  }
+
+  // Destructure the stored data
+  const {
+    feature: modifiedFeature,
+    geometry: modifiedGeometry,
+    layerType,
+  } = modifiedFeatureData;
+  let formattedCoordinates;
+  let body;
+
+  // Construct the WFS transaction request based on the layer type
+  if (layerType === "Polygon") {
+    formattedCoordinates = modifiedGeometry[0][0]
+      .map((coord) => `${coord[0]},${coord[1]}`)
+      .join(" ");
+    body = `<wfs:Transaction service="WFS" version="1.0.0"
       xmlns:wfs="http://www.opengis.net/wfs"
       xmlns:ogc="http://www.opengis.net/ogc"
       xmlns:gml="http://www.opengis.net/gml"
@@ -2012,11 +2039,11 @@ modifyFeature.addEventListener("click", (e) => {
         </ogc:Filter>
       </wfs:Update>
     </wfs:Transaction>`;
-    } else if (layerType === "LineString") {
-      formattedCoordinates = modifiedGeometry
-        .map((pairArray) => pairArray.map((pair) => pair.join(",")).join(" "))
-        .join(" ");
-      body = `<wfs:Transaction service="WFS" version="1.0.0"
+  } else if (layerType === "LineString") {
+    formattedCoordinates = modifiedGeometry
+      .map((pairArray) => pairArray.map((pair) => pair.join(",")).join(" "))
+      .join(" ");
+    body = `<wfs:Transaction service="WFS" version="1.0.0"
         xmlns:topp="http://www.openplans.org/topp"
         xmlns:ogc="http://www.opengis.net/ogc"
         xmlns:wfs="http://www.opengis.net/wfs"
@@ -2041,9 +2068,9 @@ modifyFeature.addEventListener("click", (e) => {
           </ogc:Filter>
         </wfs:Update>
       </wfs:Transaction>`;
-    } else if (layerType === "Point") {
-      formattedCoordinates = modifiedGeometry.join(",");
-      body = `<wfs:Transaction service="WFS" version="1.0.0"
+  } else if (layerType === "Point") {
+    formattedCoordinates = modifiedGeometry.join(",");
+    body = `<wfs:Transaction service="WFS" version="1.0.0"
       xmlns:wfs="http://www.opengis.net/wfs"
       xmlns:ogc="http://www.opengis.net/ogc"
       xmlns:gml="http://www.opengis.net/gml"
@@ -2063,27 +2090,28 @@ modifyFeature.addEventListener("click", (e) => {
         </ogc:Filter>
       </wfs:Update>
     </wfs:Transaction>`;
-    }
+  }
 
-    // Send a WFS Transaction request to update the geometry
-    const url = `http://${host}:8080/geoserver/test/ows`;
+  // Send the WFS Transaction request to update the geometry
+  const url = `http://${host}:8080/geoserver/test/ows`;
 
-    // Send the WFS Transaction request
-    fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "text/xml",
-      },
-      body: body,
+  // Send the WFS Transaction request
+  fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/xml",
+    },
+    body: body,
+  })
+    .then((response) => response.text())
+    .then((data) => {
+      console.log("Geometry updated successfully:", data);
+      alert("Changes saved successfully.");
     })
-      .then((response) => response.text())
-      .then((data) => {
-        console.log("Geometry updated successfully:", data);
-      })
-      .catch((error) => {
-        console.error("Error updating geometry:", error);
-      });
-  });
+    .catch((error) => {
+      console.error("Error updating geometry:", error);
+      alert("Error saving changes.");
+    });
 });
 
 //SELECT FEATURE
