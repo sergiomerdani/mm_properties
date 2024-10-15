@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link
+      rel="icon"
+      type="image/x-icon"
+      href="https://openlayers.org/favicon.ico"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script
+      src="https://kit.fontawesome.com/ddf386aee4.js"
+      crossorigin="anonymous"
+    ></script>
+    <title>MM WEBGIS</title>
+  </head>
+  <body>
+    <div class="grid-container">
+      <div class="navbar">
+        <div class="buttons">
+          <button class="fa-button" id="identify" title="Get Information">
+            <i class="fa-solid fa-circle-info"></i>
+          </button>
+          <button class="fa-button" id="move-right" title="Move Right">
+            <i class="fa-solid fa-circle-right"></i>
+          </button>
+          <button class="fa-button" id="move-left" title="Move Left">
+            <i class="fa-solid fa-circle-left"></i>
+          </button>
+          <button class="fa-button" id="zoom-out" title="Zoom Out">
+            <i class="fa-solid fa-magnifying-glass-minus"></i>
+          </button>
+          <input type="text" id="scaleInput" />
+          <button class="fa-button" id="zoom-in" title="Zoom In">
+            <i class="fa-solid fa-magnifying-glass-plus"></i>
+          </button>
+          <button class="fa-button" id="coords" title="XY Coordinates">
+            <i class="fa-solid fa-thumbtack"></i>
+          </button>
+          <button class="fa-button" id="pan" title="DragPan">
+            <i class="fa-regular fa-hand"></i>
+          </button>
+          <button class="fa-button" id="zoom-extent" title="Zoom Extent">
+            <i class="fa-solid fa-globe"></i>
+          </button>
+          <button class="fa-button" id="graticuleButton" title="Show/Hide Grid">
+            <i class="fa-solid fa-table-cells-large"></i>
+          </button>
+          <button
+            class="fa-button"
+            id="getGeolocation"
+            title="Your Current Location"
+          >
+            <i class="fa-solid fa-location-dot"></i>
+          </button>
+          <div class="measurement">
+            <button
+              class="fa-button"
+              id="measure-length"
+              title="Measure Length"
+            >
+              <i class="fa-solid fa-ruler"></i>
+            </button>
+            <button class="fa-button" id="measure-area" title="Measure Area">
+              <i class="fa-solid fa-ruler-combined"></i>
+            </button>
+            <label for="segments">Show segment lengths: </label>
+            <input type="checkbox" id="segments" checked />
+            <label for="clear">Clear previous measure: </label>
+            <input type="checkbox" id="clear" checked />
+          </div>
+          <button
+            class="fa-button"
+            id="selectControlButton"
+            title="Select By Attributes"
+          >
+            <i class="fa-solid fa-binoculars"></i>
+          </button>
+          <button class="fa-button" id="printContent" title="Print">
+            <i class="fa-solid fa-print"></i>
+          </button>
+          <button class="fa-button" id="editButton" title="Edit layer">
+            <i class="fa-solid fa-pen-to-square"></i>
+          </button>
+          <button class="fa-button" id="addNewFeature" title="Add New Feature">
+            <i class="fa-solid fa-plus"></i>
+          </button>
+          <button class="fa-button" id="modifyFeature" title="Modify Feature">
+            <i class="fa-solid fa-pen"></i>
+          </button>
+          <button class="fa-button" id="selectFeature" title="Select Feature">
+            <i class="fa-solid fa-arrow-pointer"></i>
+          </button>
+          <button class="fa-button" id="deleteFeature" title="Delete Feature">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+          <button class="fa-button" id="saveFeature" title="Save Feature">
+            <i class="fa-regular fa-floppy-disk"></i>
+          </button>
+          <button class="logout" id="logout" title="Logout">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+          </button>
+        </div>
+      </div>
+      <div class="selectControl" id="selectControl" hidden>
+        <h1>Layer Selector</h1>
+        <label for="layerSelect">Select Layer:</label>
+        <select id="layerSelect">
+          <option value="" selected disabled></option>
+        </select>
+        <label for="fieldSelect">Select Field:</label>
+        <select id="fieldSelect"></select>
+        <label for="operator">Select Operator:</label>
+        <select id="operator">
+          <option value="" selected disabled></option>
+          <option value="=">Equal (=)</option>
+          <option value=">">Greater Than (>)</option>
+          <option value="&lt;">Less Than (&lt;)</option>
+          <option value="LIKE">Like (LIKE)</option>
+        </select>
+        <label for="attributeSelect">Select Attribute:</label>
+        <select id="attributeSelect"></select>
+        <input
+          type="button"
+          value="Submit"
+          id="sumbmitBtn"
+          class="layerSelectorButton"
+        />
+        <input
+          type="button"
+          value="Reset"
+          id="resetBtn"
+          class="layerSelectorButton"
+        />
+      </div>
+      <div id="map">
+        <div class="form-container" style="display: none">
+          <span class="close-form">&times;</span>
+        </div>
+      </div>
+    </div>
+    <div id="myModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <p>Koordinatat</p>
+        <table style="width: 100%">
+          <tr>
+            <th>Coordinate System</th>
+            <th>Easting</th>
+            <th>Northing</th>
+          </tr>
+          <tr>
+            <td id="coordinateSystem">KRGJSH 2010 / TM λ=20 o</td>
+            <td id="easting"></td>
+            <td id="northing"></td>
+          </tr>
+          <tr>
+            <td id="coordinateSystem">WGS84</td>
+            <td id="easting1"></td>
+            <td id="northing1"></td>
+          </tr>
+          <tr>
+            <td id="coordinateSystem">UTM Zone 34N</td>
+            <td id="easting2"></td>
+            <td id="northing2"></td>
+          </tr>
+        </table>
+      </div>
+    </div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

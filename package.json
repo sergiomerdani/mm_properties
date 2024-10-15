@@ -1,0 +1,21 @@
+{
+  "name": "myapp",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "vite",
+    "build": "vite build",
+    "serve": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.4.7"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.4",
+    "file-saver": "^2.0.5",
+    "jspdf": "^2.5.2",
+    "jszip": "^3.10.1",
+    "ol": "latest",
+    "ol-ext": "^4.0.23",
+    "proj4": "^2.12.1"
+  }
+}

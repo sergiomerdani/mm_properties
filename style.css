@@ -1,0 +1,312 @@
+@import "node_modules/ol/ol.css";
+@import "./node_modules/ol-ext/control/LayerSwitcher.css";
+@import "./node_modules/ol-ext/control/Search.css";
+@import "./node_modules/ol-ext/overlay/Popup.css";
+@import "./node_modules/ol-ext/control/Overview.css";
+@import "./node_modules/ol-ext/control/PrintDialog.css";
+@import "./node_modules/ol-ext/control/Legend.css";
+@import "./node_modules/ol-ext/dist/ol-ext.css";
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.ol-zoom {
+  display: none;
+}
+
+/* ol-mouse posistion */
+.custom-mouse-position {
+  position: fixed;
+  bottom: 50px;
+  right: 10px;
+  background-color: rgba(187, 178, 178, 0.507);
+  padding: 5px 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 14px;
+  color: #ffffff;
+}
+
+.ol-attribution {
+  bottom: 25px;
+  color: blue;
+}
+
+/* scale-bar  */
+.ol-scale-bar {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  position: absolute;
+  bottom: 25px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+header {
+  font-weight: bold;
+  font-size: 15px;
+  text-align: left;
+  margin-bottom: 10px;
+  border-bottom: 1px solid black;
+}
+
+.grid-container {
+  display: grid;
+  /* grid-template-columns: 100%; */
+  grid-template-rows: 5% 95%;
+  height: 100vh;
+}
+
+/* Set the styles for the navbar */
+.navbar {
+  display: flex;
+  flex-direction: column;
+  background-color: #dce5e7;
+  padding-left: 10px;
+  height: 350px;
+}
+
+.ol-search {
+  left: 10px;
+}
+
+#map {
+  height: -90%;
+}
+/* 
+.ol-layerswitcher {
+  pointer-events: auto;
+  position: absolute;
+  left: 10px;
+  width: 20%;
+}
+
+.ol-layerswitcher-image > button,
+.ol-layerswitcher > button {
+  background-color: white;
+  float: left;
+  z-index: 10;
+  position: relative;
+  font-size: 1.7em;
+} */
+
+.form-container {
+  padding: 30px;
+  position: fixed;
+  top: 90px;
+  left: 20px;
+  width: auto;
+  height: auto;
+  background-color: #c7e6ff;
+  z-index: 1000;
+  opacity: 0.9;
+}
+
+/* Add custom CSS to format the form rows */
+.form-container-el {
+  display: block;
+}
+
+.form-container-el label {
+  display: inline-flex;
+  width: 100px;
+  text-align: left;
+  margin-right: 10px;
+}
+
+.form-container-el input {
+  display: inline-block;
+  width: calc(
+    100% - 120px
+  ); /* Adjust the width to create space between label and input */
+  margin-bottom: 5px;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #ccc;
+  margin: 10px 0;
+}
+
+/* The Modal (background) */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1;
+  padding-top: 100px;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgb(0, 0, 0);
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+/* Modal Content */
+.modal-content {
+  background-color: #a9c8ce;
+  margin: auto;
+  padding: 20px;
+  border: 1px solid #888;
+  width: 40%;
+  height: 30%;
+  opacity: 0.9;
+}
+
+/* The Close Button */
+.close {
+  color: #aaaaaa;
+  float: right;
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.close:hover,
+.close:focus {
+  color: #000;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+table,
+th,
+td {
+  border: 1px solid black;
+}
+
+/* Custom CSS for the scale input */
+#scaleInput {
+  width: 150px;
+  text-align: center;
+  padding: 5px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+.buttons {
+  width: 100%;
+}
+
+.buttons button {
+  transform: scale(1.2);
+  margin-right: 5px;
+}
+
+.measurement {
+  border: 1px solid #050505;
+  padding: 5px;
+  display: inline-block;
+  margin-right: 5px;
+}
+
+.ol-ext-print-dialog .ol-print-param {
+  position: absolute;
+  overflow-x: hidden;
+  top: 50px;
+  bottom: 20px;
+  left: 20px;
+  width: 18rem;
+  background-color: #fff;
+  padding: 1em;
+  box-sizing: border-box;
+}
+
+.selectControl {
+  padding: 30px;
+  position: fixed;
+  top: 90px;
+  left: 20px;
+  width: auto;
+  height: auto;
+  background-color: #c7e6ff;
+  z-index: 1000;
+  opacity: 0.9;
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.selectControl h1 {
+  font-size: 24px;
+  margin-bottom: 10px;
+}
+
+.selectControl label {
+  display: block;
+  font-weight: bold;
+  margin-top: 10px;
+}
+
+.selectControl select {
+  width: 100%;
+  padding: 5px;
+  margin-top: 5px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+}
+
+.selectControl input[type="button"] {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.selectControl input[type="button"]:hover {
+  background-color: #0056b3;
+}
+
+#printContent {
+  position: relative;
+}
+/* .search-wrapper {
+  padding-top: 5px;
+  position: relative;
+} */
+.autocomplete {
+  width: 100%;
+}
+
+/* .button-group {
+  display: inline-block;
+} */
+
+#second-group {
+  margin-left: 10px; /* Add 10px margin to the left */
+}
+
+/* Styling for the popup */
+.ol-popup {
+  position: absolute;
+  background-color: white;
+  padding: 15px;
+  border: 1px solid #cccccc;
+  bottom: 12px;
+  left: -50px;
+  min-width: 100px;
+}
+
+.primary {
+  background-color: rgb(116, 196, 116);
+}
+
+button {
+  margin-left: 10px;
+}
+
+.logout {
+  position: absolute;
+  top: 10px; /* Adjust this to position vertically */
+  right: 20px; /* Moves the button to the right */
+}
