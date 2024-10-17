@@ -57,6 +57,7 @@ import { GPX, GeoJSON, IGC, KML, TopoJSON } from "ol/format";
 import JSZip from "jszip";
 import ImageWMS from "ol/source/ImageWMS";
 import { Image as ImageLayer } from "ol/layer.js";
+import ol_control_Graticule from "ol-ext/control/Graticule";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -610,26 +611,44 @@ const searchBox = document.querySelector(".ol-search");
 //Show/Hide graticule
 const toggleButton = document.getElementById("graticuleButton");
 
-let graticule; // Declare the graticule variable outside the click event listener
+const graticuleStyle = new Style({
+  stroke: new Stroke({
+    color: "rgba(128, 128, 128, 0.7)", // Grey color with 70% transparency
+    width: 1.25, // Line width
+  }),
+  text: new Text({
+    font: "12px Calibri,sans-serif",
+    fill: new Fill({
+      color: "#000", // Black text color
+    }),
+    stroke: new Stroke({
+      color: "#fff", // White border around text
+      width: 3,
+    }),
+    textAlign: "center", // Align text in the center
+    offsetY: -10, // Adjusts text placement above the line
+  }),
+});
+
+let graticuleControl;
 
 toggleButton.addEventListener("click", function () {
-  if (graticule) {
-    // Graticule already exists, remove it from the map
-    map.removeControl(graticule);
-    graticule = undefined; // Set graticule variable to undefined
+  if (graticuleControl) {
+    map.removeControl(graticuleControl);
+    graticuleControl = undefined;
   } else {
-    // Graticule doesn't exist, create and add it to the map
-    graticule = new Graticule({
-      strokeStyle: new Stroke({
-        color: "rgba(255, 120, 0, 0.9)",
-        width: 2,
-        lineDash: [0.5, 4],
-      }),
-      showLabels: true,
+    graticuleControl = new ol_control_Graticule({
+      step: 10, // Distance between lines in degrees (longitude/latitude)
+      stepCoord: 2, // Step for coordinates
+      spacing: 120,
+      projection: proj32634, // Set the projection (default is the map's projection)
+      style: graticuleStyle,
+      showLabel: true, // Show latitude/longitude labels
     });
-    map.addControl(graticule);
+    map.addControl(graticuleControl);
   }
 });
+
 //________________________________________________________________________________________________________
 //Geolocation API
 const geolocationButton = document.getElementById("getGeolocation");
@@ -2554,6 +2573,8 @@ addNewFeature.addEventListener("click", (e) => {
 // DELETE WFS Event Listener
 const deleteFeature = document.getElementById("deleteFeature");
 
+let featuresToDelete = []; // Array to store features marked for deletion
+
 deleteFeature.addEventListener("click", (e) => {
   if (!vectorLayer) {
     alert("Please select a layer first.");
@@ -2563,62 +2584,68 @@ deleteFeature.addEventListener("click", (e) => {
     alert("Please select a feature first.");
     return;
   }
+
   const selectedFeatures = selectSingleClick.getFeatures();
   const selectedFeaturesArray = selectedFeatures.getArray();
+
+  if (selectedFeaturesArray.length === 0) {
+    alert("No features selected for deletion.");
+    return;
+  }
+
   selectedFeaturesArray.forEach((feature) => {
-    // Do something with the feature
-    source.removeFeature(feature);
     const selectedFeatureValueID = feature.get("id");
-    // You can perform any other operations with the feature here
-    url = `http://${host}:8080/geoserver/test/ows`;
-    const body = `<wfs:Transaction service="WFS" version="1.0.0"
-                  xmlns:cdf="http://www.opengis.net/cite/data"
-                  xmlns:ogc="http://www.opengis.net/ogc"
-                  xmlns:wfs="http://www.opengis.net/wfs"
-                  xmlns:topp="http://www.openplans.org/topp">
-                  <wfs:Delete typeName="${layerName}">
-                    <ogc:Filter>
-                      <ogc:PropertyIsEqualTo>
-                        <ogc:PropertyName>id</ogc:PropertyName>
-                        <ogc:Literal>${selectedFeatureValueID}</ogc:Literal>
-                      </ogc:PropertyIsEqualTo>
-                    </ogc:Filter>
-                  </wfs:Delete>
-                </wfs:Transaction>`;
 
-    const options = {
-      method: "POST",
-      headers: {
-        "Content-Type": "text/xml",
-      },
-      body: body,
-    };
+    // Mark feature for deletion by adding it to the featuresToDelete array
+    featuresToDelete.push({
+      feature: feature,
+      featureID: selectedFeatureValueID,
+    });
 
-    // Make the POST request using the Fetch API
-    fetch(url, options)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("Network response was not ok");
-        }
-        // Parse the JSON response
-        return response.text();
-      })
-      .then((data) => {
-        // Handle the data returned by the server
-        console.log("Response from server:", data);
-      })
-      .catch((error) => {
-        // Handle errors that occur during the fetch request
-        console.error("There was a problem with your fetch operation:", error);
-      });
+    console.log("Marked for deletion:", selectedFeatureValueID);
   });
+
+  // Provide feedback to the user
+  alert("Feature(s) marked for deletion. Click 'Save' to confirm.");
 });
 
 // SAVE FEATURE EVENT
 const saveFeatureButton = document.getElementById("saveFeature");
 saveFeatureButton.addEventListener("click", () => {
-  let body, formattedCoordinates;
+  if (
+    !newFeatureData &&
+    !modifiedFeatureData &&
+    featuresToDelete.length === 0 &&
+    !selectSingleClick.getFeatures().getLength()
+  ) {
+    alert("No modifications or deletions to save.");
+    return;
+  }
+  let body = "",
+    formattedCoordinates;
+  // Handle feature deletion
+  // Handle feature deletion if any are marked for deletion
+  if (featuresToDelete.length > 0) {
+    featuresToDelete.forEach(({ feature, featureID }) => {
+      console.log("Deleting feature with ID:", featureID);
+      body += `<wfs:Transaction service="WFS" version="1.0.0"
+                  xmlns:ogc="http://www.opengis.net/ogc"
+                  xmlns:wfs="http://www.opengis.net/wfs">
+                  <wfs:Delete typeName="${layerName}">
+                    <ogc:Filter>
+                      <ogc:PropertyIsEqualTo>
+                        <ogc:PropertyName>id</ogc:PropertyName>
+                        <ogc:Literal>${featureID}</ogc:Literal>
+                      </ogc:PropertyIsEqualTo>
+                    </ogc:Filter>
+                  </wfs:Delete>
+                </wfs:Transaction>`;
+      source.removeFeature(feature); // Remove feature from map
+    });
 
+    // Clear the featuresToDelete array after deletion
+    featuresToDelete = [];
+  }
   // If a new feature is being added
   if (isAddingFeature && newFeatureData) {
     const { feature, geometry, layerType } = newFeatureData;
