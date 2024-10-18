@@ -3082,7 +3082,7 @@ map.on("singleclick", (event) => {
     highlightFeature(feature);
 
     // Trigger the select event on the FeatureList
-    featureList.selectFeature(feature);
+    featureList.select(feature);
 
     console.log("Selected feature from map:", feature.get("id"));
 
@@ -3103,7 +3103,7 @@ function highlightFeature(feature) {
         // Style for point features
         f.setStyle(
           new Style({
-            image: new Circle({
+            image: new CircleStyle({
               radius: 10, // Adjust size as needed
               fill: new Fill({ color: "rgba(255, 0, 0, 0.8)" }), // Fill color
               stroke: new Stroke({
