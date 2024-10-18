@@ -58,6 +58,7 @@ import JSZip from "jszip";
 import ImageWMS from "ol/source/ImageWMS";
 import { Image as ImageLayer } from "ol/layer.js";
 import ol_control_Graticule from "ol-ext/control/Graticule";
+import ol_control_FeatureList from "ol-ext/control/FeatureList";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -2851,3 +2852,284 @@ saveFeatureButton.addEventListener("click", () => {
       alert("Error saving changes.");
     });
 });
+
+//GET STYLES
+const getStylesButton = document.getElementById("getStyles");
+
+getStylesButton.addEventListener("click", () => {
+  // Step 1: Create the new style with a POST request
+  fetch("http://localhost:8080/geoserver/rest/styles", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/xml",
+      Authorization: "Basic " + btoa("admin:geoserver"), // Replace with your credentials
+    },
+    body: `
+      <style>
+        <name>roads_rest</name>
+        <filename>roads_rest.sld</filename>
+      </style>
+    `,
+  })
+    .then((response) => {
+      if (response.ok) {
+        console.log("Style metadata created successfully");
+        // Step 2: Upload the SLD content for the newly created style
+        return fetch(
+          "http://localhost:8080/geoserver/rest/styles/roads_rest.sld",
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/vnd.ogc.sld+xml",
+              Authorization: "Basic " + btoa("admin:geoserver"),
+            },
+            body: `<?xml version="1.0" encoding="UTF-8"?>
+          <StyledLayerDescriptor version="1.0.0" 
+            xsi:schemaLocation="http://www.opengis.net/sld StyledLayerDescriptor.xsd" 
+            xmlns="http://www.opengis.net/sld" xmlns:ogc="http://www.opengis.net/ogc" 
+            xmlns:xlink="http://www.w3.org/1999/xlink" 
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <NamedLayer> <Name> area landmarks </Name>
+              <UserStyle>
+                   <FeatureTypeStyle>
+                      <FeatureTypeName>Feature</FeatureTypeName>
+                <Rule>  
+                           <MinScaleDenominator>32000</MinScaleDenominator>
+                       <LineSymbolizer>
+                           <Stroke>
+                        <CssParameter name="stroke">
+                          <ogc:Literal>#666666</ogc:Literal>
+                        </CssParameter>
+                        <CssParameter name="stroke-width">
+                          <ogc:Literal>2</ogc:Literal>
+                        </CssParameter>
+                      </Stroke>
+                       </LineSymbolizer>
+                      </Rule>
+          
+                      <Rule>	<!-- thick line drawn first-->
+                  <MaxScaleDenominator>32000</MaxScaleDenominator>
+                  <LineSymbolizer>
+                    <Stroke>
+                      <CssParameter name="stroke">
+                        <ogc:Literal>#666666</ogc:Literal>
+                      </CssParameter>
+                      <CssParameter name="stroke-width">
+                        <ogc:Literal>7</ogc:Literal>
+                      </CssParameter>
+                    </Stroke>
+                  </LineSymbolizer>
+                      </Rule>
+                  </FeatureTypeStyle>
+                  <FeatureTypeStyle>
+                     <FeatureTypeName>Feature</FeatureTypeName>
+                     <Rule>	<!-- thin line drawn second -->
+                  <MaxScaleDenominator>32000</MaxScaleDenominator>
+                        <LineSymbolizer>
+                           <Stroke>
+                        <CssParameter name="stroke">
+                          <ogc:Literal>#FFFFFF</ogc:Literal>
+                        </CssParameter>
+                        <CssParameter name="stroke-width">
+                          <ogc:Literal>4</ogc:Literal>
+                        </CssParameter>
+                      </Stroke>
+                  </LineSymbolizer>
+                      </Rule> 
+                      <!-- label -->     
+                <Rule>
+                  <MaxScaleDenominator>32000</MaxScaleDenominator>
+                  <TextSymbolizer>
+                    <Label>
+                      <ogc:PropertyName>NAME</ogc:PropertyName>
+                    </Label>
+                    <Font>
+                      <CssParameter name="font-family">Times New Roman</CssParameter>
+                      <CssParameter name="font-style">Normal</CssParameter>
+                      <CssParameter name="font-size">14</CssParameter>
+                      <CssParameter name="font-weight">bold</CssParameter>
+                    </Font>
+                    <LabelPlacement>
+                      <LinePlacement>
+                      </LinePlacement>
+                    </LabelPlacement>
+                    <Halo>
+                      <Radius>
+                        <ogc:Literal>2</ogc:Literal>
+                      </Radius>
+                      <Fill>
+                        <CssParameter name="fill">#FFFFFF</CssParameter>
+                        <CssParameter name="fill-opacity">0.85</CssParameter>				
+                      </Fill>
+                    </Halo>
+                    <Fill>
+                      <CssParameter name="fill">#000000</CssParameter>
+                    </Fill>
+                    <VendorOption name="group">true</VendorOption>
+                  </TextSymbolizer>
+                </Rule>
+                  </FeatureTypeStyle>
+                  
+              </UserStyle>
+              </NamedLayer>
+          </StyledLayerDescriptor>
+          `,
+          }
+        );
+      } else {
+        throw new Error("Failed to create style metadata");
+      }
+    })
+    .then((response) => {
+      if (response.ok) {
+        console.log("SLD style uploaded successfully");
+      } else {
+        console.error("Failed to upload SLD style", response.statusText);
+      }
+    })
+    .catch((error) => console.error("Error:", error));
+});
+
+//FEATURE LIST
+const featureListButton = document.getElementById("featureList");
+let featureList;
+
+featureListButton.addEventListener("click", () => {
+  vectorLayer
+    .getSource()
+    .getFeatures()
+    .forEach((feature) => {
+      console.log(feature);
+    });
+
+  // Create a FeatureList control
+  featureList = new ol_control_FeatureList({
+    source: vectorLayer.getSource(),
+    features: vectorLayer.getSource().getFeatures(),
+    selectEvent: "click",
+    pageLength: 10,
+    target: document.getElementById("feature-list"),
+    className: "featureList",
+  });
+
+  // Add the control to the map
+  map.addControl(featureList);
+
+  // Event listener for feature selection
+  featureList.on("select", function (event) {
+    const selectedFeature = event.feature;
+
+    // Highlight the selected feature on the map
+    highlightFeature(selectedFeature);
+    // Highlight the selected feature
+    const featureId = selectedFeature.getId();
+    vectorLayer.getSource().forEachFeature((feature) => {
+      if (feature.getId() === featureId) {
+        const geometryType = feature.getGeometry().getType();
+
+        if (geometryType === "Point") {
+          // Style for point features
+          feature.setStyle(
+            new Style({
+              image: new CircleStyle({
+                radius: 10, // Size of the circle
+                fill: new Fill({ color: "rgba(255, 0, 0, 0.8)" }), // Fill color
+                stroke: new Stroke({
+                  color: "red",
+                  width: 2,
+                }),
+              }),
+            })
+          );
+        } else {
+          // Change style for other types (e.g., LineString, Polygon)
+          feature.setStyle(
+            new Style({
+              stroke: new Stroke({
+                color: "red",
+                width: 3,
+              }),
+              fill: new Fill({
+                color: "rgba(255, 0, 0, 0.3)",
+              }),
+            })
+          );
+        }
+      } else {
+        // Reset style for other features (customize as needed)
+        feature.setStyle(null);
+      }
+    });
+
+    console.log("Selected feature:", selectedFeature.get("id"));
+
+    // Zoom to the selected feature's extent
+    const extent = selectedFeature.getGeometry().getExtent();
+    map.getView().fit(extent, { duration: 500 });
+  });
+});
+
+//SELECT RECORD FROM FEATURE ON MAP
+
+// Add a click listener to the map to handle feature selection
+map.on("singleclick", (event) => {
+  // Get the coordinate of the click
+  const coordinate = event.coordinate;
+
+  // Get features at the clicked coordinate
+  map.forEachFeatureAtPixel(event.pixel, (feature) => {
+    // Highlight the selected feature in the FeatureList
+    highlightFeature(feature);
+
+    // Trigger the select event on the FeatureList
+    featureList.selectFeature(feature);
+
+    console.log("Selected feature from map:", feature.get("id"));
+
+    // Zoom to the selected feature's extent
+    const extent = feature.getGeometry().getExtent();
+    map.getView().fit(extent, { duration: 500 });
+  });
+});
+
+// Function to highlight a feature
+function highlightFeature(feature) {
+  const featureId = feature.getId();
+  vectorLayer.getSource().forEachFeature((f) => {
+    if (f.getId() === featureId) {
+      const geometryType = f.getGeometry().getType();
+
+      if (geometryType === "Point") {
+        // Style for point features
+        f.setStyle(
+          new Style({
+            image: new Circle({
+              radius: 10, // Adjust size as needed
+              fill: new Fill({ color: "rgba(255, 0, 0, 0.8)" }), // Fill color
+              stroke: new Stroke({
+                color: "red",
+                width: 2,
+              }),
+            }),
+          })
+        );
+      } else {
+        // Change style for other types (e.g., LineString, Polygon)
+        f.setStyle(
+          new Style({
+            stroke: new Stroke({
+              color: "red",
+              width: 3,
+            }),
+            fill: new Fill({
+              color: "rgba(255, 0, 0, 0.3)",
+            }),
+          })
+        );
+      }
+    } else {
+      // Reset style for other features (customize as needed)
+      f.setStyle(null);
+    }
+  });
+}

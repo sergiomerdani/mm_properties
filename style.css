@@ -6,6 +6,7 @@
 @import "./node_modules/ol-ext/control/PrintDialog.css";
 @import "./node_modules/ol-ext/control/Legend.css";
 @import "./node_modules/ol-ext/dist/ol-ext.css";
+@import "./node_modules/ol-ext/control/FeatureList.css";
 
 * {
   margin: 0;
@@ -74,9 +75,11 @@ header {
   left: 10px;
 }
 
+/* Map styling */
 #map {
-  height: -90%;
+  height: -93;
 }
+
 /* 
 .ol-layerswitcher {
   pointer-events: auto;

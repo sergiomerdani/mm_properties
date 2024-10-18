@@ -97,6 +97,12 @@
           <button class="fa-button" id="saveFeature" title="Save Feature">
             <i class="fa-solid fa-floppy-disk"></i>
           </button>
+          <button class="fa-button" id="getStyles" title="Styles">
+            <i class="fa-solid fa-palette"></i>
+          </button>
+          <button class="fa-button" id="featureList" title="Feature List">
+            <i class="fa-solid fa-list"></i>
+          </button>
           <button class="logout" id="logout" title="Logout">
             <i class="fa-solid fa-arrow-right-from-bracket"></i>
           </button>
@@ -133,10 +139,12 @@
           class="layerSelectorButton"
         />
       </div>
+
       <div id="map">
         <div class="form-container" style="display: none">
           <span class="close-form">&times;</span>
         </div>
+        <div id="feature-list"></div>
       </div>
     </div>
     <div id="myModal" class="modal">
