@@ -2853,10 +2853,9 @@ saveFeatureButton.addEventListener("click", () => {
     });
 });
 
-//GET STYLES
-const getStylesButton = document.getElementById("getStyles");
-
-getStylesButton.addEventListener("click", () => {
+//CREATE STYLE
+const createStaticStyle = document.getElementById("createStyles");
+createStaticStyle.addEventListener("click", () => {
   // Step 1: Create the new style with a POST request
   fetch("http://localhost:8080/geoserver/rest/styles", {
     method: "POST",
@@ -2866,8 +2865,9 @@ getStylesButton.addEventListener("click", () => {
     },
     body: `
       <style>
-        <name>roads_rest</name>
-        <filename>roads_rest.sld</filename>
+        <name>polygon_rest</name>
+        <filename>polygon_rest.sld</filename>
+        <workspace>finiq_ws</workspace>
       </style>
     `,
   })
@@ -2876,104 +2876,123 @@ getStylesButton.addEventListener("click", () => {
         console.log("Style metadata created successfully");
         // Step 2: Upload the SLD content for the newly created style
         return fetch(
-          "http://localhost:8080/geoserver/rest/styles/roads_rest.sld",
+          "http://localhost:8080/geoserver/rest/workspaces/finiq_ws/styles/polygon_rest.sld",
           {
             method: "PUT",
             headers: {
               "Content-Type": "application/vnd.ogc.sld+xml",
               Authorization: "Basic " + btoa("admin:geoserver"),
             },
-            body: `<?xml version="1.0" encoding="UTF-8"?>
-          <StyledLayerDescriptor version="1.0.0" 
-            xsi:schemaLocation="http://www.opengis.net/sld StyledLayerDescriptor.xsd" 
-            xmlns="http://www.opengis.net/sld" xmlns:ogc="http://www.opengis.net/ogc" 
-            xmlns:xlink="http://www.w3.org/1999/xlink" 
-            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-          <NamedLayer> <Name> area landmarks </Name>
-              <UserStyle>
-                   <FeatureTypeStyle>
-                      <FeatureTypeName>Feature</FeatureTypeName>
-                <Rule>  
-                           <MinScaleDenominator>32000</MinScaleDenominator>
-                       <LineSymbolizer>
-                           <Stroke>
-                        <CssParameter name="stroke">
-                          <ogc:Literal>#666666</ogc:Literal>
-                        </CssParameter>
-                        <CssParameter name="stroke-width">
-                          <ogc:Literal>2</ogc:Literal>
-                        </CssParameter>
-                      </Stroke>
-                       </LineSymbolizer>
-                      </Rule>
-          
-                      <Rule>	<!-- thick line drawn first-->
-                  <MaxScaleDenominator>32000</MaxScaleDenominator>
-                  <LineSymbolizer>
-                    <Stroke>
-                      <CssParameter name="stroke">
-                        <ogc:Literal>#666666</ogc:Literal>
-                      </CssParameter>
-                      <CssParameter name="stroke-width">
-                        <ogc:Literal>7</ogc:Literal>
-                      </CssParameter>
-                    </Stroke>
-                  </LineSymbolizer>
-                      </Rule>
-                  </FeatureTypeStyle>
-                  <FeatureTypeStyle>
-                     <FeatureTypeName>Feature</FeatureTypeName>
-                     <Rule>	<!-- thin line drawn second -->
-                  <MaxScaleDenominator>32000</MaxScaleDenominator>
-                        <LineSymbolizer>
-                           <Stroke>
-                        <CssParameter name="stroke">
-                          <ogc:Literal>#FFFFFF</ogc:Literal>
-                        </CssParameter>
-                        <CssParameter name="stroke-width">
-                          <ogc:Literal>4</ogc:Literal>
-                        </CssParameter>
-                      </Stroke>
-                  </LineSymbolizer>
-                      </Rule> 
-                      <!-- label -->     
-                <Rule>
-                  <MaxScaleDenominator>32000</MaxScaleDenominator>
-                  <TextSymbolizer>
-                    <Label>
-                      <ogc:PropertyName>NAME</ogc:PropertyName>
-                    </Label>
-                    <Font>
-                      <CssParameter name="font-family">Times New Roman</CssParameter>
-                      <CssParameter name="font-style">Normal</CssParameter>
-                      <CssParameter name="font-size">14</CssParameter>
-                      <CssParameter name="font-weight">bold</CssParameter>
-                    </Font>
-                    <LabelPlacement>
-                      <LinePlacement>
-                      </LinePlacement>
-                    </LabelPlacement>
-                    <Halo>
-                      <Radius>
-                        <ogc:Literal>2</ogc:Literal>
-                      </Radius>
-                      <Fill>
-                        <CssParameter name="fill">#FFFFFF</CssParameter>
-                        <CssParameter name="fill-opacity">0.85</CssParameter>				
-                      </Fill>
-                    </Halo>
-                    <Fill>
-                      <CssParameter name="fill">#000000</CssParameter>
-                    </Fill>
-                    <VendorOption name="group">true</VendorOption>
-                  </TextSymbolizer>
-                </Rule>
-                  </FeatureTypeStyle>
-                  
-              </UserStyle>
-              </NamedLayer>
-          </StyledLayerDescriptor>
-          `,
+            body: `<?xml version="1.1" encoding="UTF-8"?>
+<StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:ogc="http://www.opengis.net/ogc" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.1.0" xmlns:se="http://www.opengis.net/se" xsi:schemaLocation="http://www.opengis.net/sld http://schemas.opengis.net/sld/1.1.0/StyledLayerDescriptor.xsd" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <NamedLayer>
+    <se:Name>polygon</se:Name>
+    <UserStyle>
+      <se:Name>polygon</se:Name>
+      <se:FeatureTypeStyle>
+        <se:Rule>
+          <se:Name>false</se:Name>
+          <se:Description>
+            <se:Title>false</se:Title>
+          </se:Description>
+          <ogc:Filter xmlns:ogc="http://www.opengis.net/ogc">
+            <ogc:PropertyIsEqualTo>
+              <ogc:PropertyName>polygon_column</ogc:PropertyName>
+              <ogc:Literal>false</ogc:Literal>
+            </ogc:PropertyIsEqualTo>
+          </ogc:Filter>
+          <se:PolygonSymbolizer>
+            <se:Fill>
+              <se:SvgParameter name="fill">#b8e35c</se:SvgParameter>
+              <se:SvgParameter name="fill-opacity">0.7</se:SvgParameter>
+            </se:Fill>
+            <se:Stroke>
+              <se:SvgParameter name="stroke">#232323</se:SvgParameter>
+              <se:SvgParameter name="stroke-opacity">0.7</se:SvgParameter>
+              <se:SvgParameter name="stroke-width">1</se:SvgParameter>
+              <se:SvgParameter name="stroke-linejoin">bevel</se:SvgParameter>
+            </se:Stroke>
+          </se:PolygonSymbolizer>
+        </se:Rule>
+        <se:Rule>
+          <se:Name>true</se:Name>
+          <se:Description>
+            <se:Title>true</se:Title>
+          </se:Description>
+          <ogc:Filter xmlns:ogc="http://www.opengis.net/ogc">
+            <ogc:PropertyIsEqualTo>
+              <ogc:PropertyName>polygon_column</ogc:PropertyName>
+              <ogc:Literal>true</ogc:Literal>
+            </ogc:PropertyIsEqualTo>
+          </ogc:Filter>
+          <se:PolygonSymbolizer>
+            <se:Fill>
+              <se:SvgParameter name="fill">#2da3d5</se:SvgParameter>
+              <se:SvgParameter name="fill-opacity">0.7</se:SvgParameter>
+            </se:Fill>
+            <se:Stroke>
+              <se:SvgParameter name="stroke">#232323</se:SvgParameter>
+              <se:SvgParameter name="stroke-opacity">0.7</se:SvgParameter>
+              <se:SvgParameter name="stroke-width">1</se:SvgParameter>
+              <se:SvgParameter name="stroke-linejoin">bevel</se:SvgParameter>
+            </se:Stroke>
+          </se:PolygonSymbolizer>
+        </se:Rule>
+        <se:Rule>
+          <se:Name></se:Name>
+          <se:Description>
+            <se:Title>polygon_column is ''</se:Title>
+          </se:Description>
+          <ogc:Filter xmlns:ogc="http://www.opengis.net/ogc">
+            <ogc:Or>
+              <ogc:PropertyIsEqualTo>
+                <ogc:PropertyName>polygon_column</ogc:PropertyName>
+                <ogc:Literal></ogc:Literal>
+              </ogc:PropertyIsEqualTo>
+              <ogc:PropertyIsNull>
+                <ogc:PropertyName>polygon_column</ogc:PropertyName>
+              </ogc:PropertyIsNull>
+            </ogc:Or>
+          </ogc:Filter>
+          <se:PolygonSymbolizer>
+            <se:Fill>
+              <se:SvgParameter name="fill">#ed63c1</se:SvgParameter>
+            </se:Fill>
+            <se:Stroke>
+              <se:SvgParameter name="stroke">#232323</se:SvgParameter>
+              <se:SvgParameter name="stroke-width">1</se:SvgParameter>
+              <se:SvgParameter name="stroke-linejoin">bevel</se:SvgParameter>
+            </se:Stroke>
+          </se:PolygonSymbolizer>
+        </se:Rule>
+        <se:Rule>
+          <se:TextSymbolizer>
+            <se:Label>
+              <ogc:PropertyName>id</ogc:PropertyName>
+            </se:Label>
+            <se:Font>
+              <se:SvgParameter name="font-family">Open Sans</se:SvgParameter>
+              <se:SvgParameter name="font-size">13</se:SvgParameter>
+            </se:Font>
+            <se:LabelPlacement>
+              <se:PointPlacement>
+                <se:AnchorPoint>
+                  <se:AnchorPointX>0</se:AnchorPointX>
+                  <se:AnchorPointY>0.5</se:AnchorPointY>
+                </se:AnchorPoint>
+              </se:PointPlacement>
+            </se:LabelPlacement>
+            <se:Fill>
+              <se:SvgParameter name="fill">#323232</se:SvgParameter>
+            </se:Fill>
+            <se:VendorOption name="maxDisplacement">1</se:VendorOption>
+          </se:TextSymbolizer>
+        </se:Rule>
+      </se:FeatureTypeStyle>
+    </UserStyle>
+  </NamedLayer>
+</StyledLayerDescriptor>
+`,
           }
         );
       } else {
@@ -2990,107 +3009,156 @@ getStylesButton.addEventListener("click", () => {
     .catch((error) => console.error("Error:", error));
 });
 
+//APPLY STYLE
+document.getElementById("applyStyle").addEventListener("click", () => {
+  // Step 1: Apply the style to the specific layer 'polygon' in the workspace 'test'
+  fetch("http://localhost:8080/geoserver/rest/layers/test:polygon", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/xml",
+      Authorization: "Basic " + btoa("admin:geoserver"), // Replace with your credentials
+    },
+    body: `
+      <layer>
+        <defaultStyle>
+          <name>polygon_rest</name>
+        </defaultStyle>
+      </layer>
+    `,
+  })
+    .then((response) => {
+      if (response.ok) {
+        console.log("Style applied to layer 'polygon' successfully");
+      } else {
+        console.error("Failed to apply style to layer", response.statusText);
+      }
+    })
+    .catch((error) => console.error("Error:", error));
+});
+
 //FEATURE LIST
 const featureListButton = document.getElementById("featureList");
-let featureList;
+let featureList,
+  isMapClickListenerActive = false;
 
 featureListButton.addEventListener("click", () => {
-  vectorLayer
-    .getSource()
-    .getFeatures()
-    .forEach((feature) => {
-      console.log(feature);
+  // Get the feature list container and make it visible as an overlay
+  const featureListContainer = document.getElementById("feature-list");
+  featureListContainer.style.display = "block"; // Show the feature list
+
+  // Get the element with class `ol-feature-list` and remove the `ol-collapsed` class
+  const featureListElement = document.querySelector(
+    ".featureList.ol-feature-list"
+  );
+
+  if (featureListElement) {
+    featureListElement.classList.remove("ol-collapsed"); // Remove the collapsed class if present
+  }
+
+  // Check if the FeatureList is already added to avoid duplicates
+  if (!featureList) {
+    // Create the FeatureList control
+    featureList = new ol_control_FeatureList({
+      source: vectorLayer.getSource(),
+      features: vectorLayer.getSource().getFeatures(),
+      selectEvent: "click",
+      pageLength: 100,
+      target: featureListContainer, // The div within the map
+      className: "featureList",
     });
 
-  // Create a FeatureList control
-  featureList = new ol_control_FeatureList({
-    source: vectorLayer.getSource(),
-    features: vectorLayer.getSource().getFeatures(),
-    selectEvent: "click",
-    pageLength: 10,
-    target: document.getElementById("feature-list"),
-    className: "featureList",
-  });
+    // Add the control to the map
+    map.addControl(featureList);
+    featureList.enableSort("polygon_column", "name", "id");
 
-  // Add the control to the map
-  map.addControl(featureList);
+    // Event listener for feature selection in FeatureList
+    featureList.on("select", function (event) {
+      const selectedFeature = event.feature;
+      // Highlight the selected feature on the map
+      highlightFeature(selectedFeature);
 
-  // Event listener for feature selection
-  featureList.on("select", function (event) {
-    const selectedFeature = event.feature;
-
-    // Highlight the selected feature on the map
-    highlightFeature(selectedFeature);
-    // Highlight the selected feature
-    const featureId = selectedFeature.getId();
-    vectorLayer.getSource().forEachFeature((feature) => {
-      if (feature.getId() === featureId) {
-        const geometryType = feature.getGeometry().getType();
-
-        if (geometryType === "Point") {
-          // Style for point features
-          feature.setStyle(
-            new Style({
-              image: new CircleStyle({
-                radius: 10, // Size of the circle
-                fill: new Fill({ color: "rgba(255, 0, 0, 0.8)" }), // Fill color
+      const featureId = selectedFeature.getId();
+      vectorLayer.getSource().forEachFeature((feature) => {
+        if (feature.getId() === featureId) {
+          const geometryType = feature.getGeometry().getType();
+          if (geometryType === "Point") {
+            // Style for point features
+            feature.setStyle(
+              new Style({
+                image: new CircleStyle({
+                  radius: 10,
+                  fill: new Fill({ color: "rgba(255, 0, 0, 0.8)" }), // Red fill
+                  stroke: new Stroke({
+                    color: "red",
+                    width: 2,
+                  }),
+                }),
+              })
+            );
+          } else {
+            // Style for other geometries (e.g., LineString, Polygon)
+            feature.setStyle(
+              new Style({
                 stroke: new Stroke({
                   color: "red",
-                  width: 2,
+                  width: 3,
                 }),
-              }),
-            })
-          );
+                fill: new Fill({
+                  color: "rgba(255, 0, 0, 0.3)",
+                }),
+              })
+            );
+          }
         } else {
-          // Change style for other types (e.g., LineString, Polygon)
-          feature.setStyle(
-            new Style({
-              stroke: new Stroke({
-                color: "red",
-                width: 3,
-              }),
-              fill: new Fill({
-                color: "rgba(255, 0, 0, 0.3)",
-              }),
-            })
-          );
+          // Reset style for other features
+          feature.setStyle(null);
         }
-      } else {
-        // Reset style for other features (customize as needed)
-        feature.setStyle(null);
-      }
+      });
+
+      // Zoom to the selected feature's extent
+      const extent = selectedFeature.getGeometry().getExtent();
+      map.getView().fit(extent, { duration: 500 });
     });
 
-    console.log("Selected feature:", selectedFeature.get("id"));
+    // Add the closebox click listener after FeatureList is created
+    const closeButton = document.querySelector(".ol-closebox");
+    if (closeButton) {
+      closeButton.addEventListener("click", () => {
+        featureListContainer.style.display = "none"; // Hide the feature list
+      });
+    }
+  }
 
-    // Zoom to the selected feature's extent
-    const extent = selectedFeature.getGeometry().getExtent();
-    map.getView().fit(extent, { duration: 500 });
-  });
+  // Add click listener to the map if it's not already active
+  if (!isMapClickListenerActive) {
+    isMapClickListenerActive = true;
+
+    // Add a click listener to the map to handle feature selection
+    map.on("singleclick", (event) => {
+      // Get the coordinate of the click
+      const coordinate = event.coordinate;
+
+      // Get features at the clicked coordinate
+      map.forEachFeatureAtPixel(event.pixel, (feature) => {
+        // Highlight the selected feature in the FeatureList
+        highlightFeature(feature);
+
+        // Trigger the select event on the FeatureList
+        featureList.select(feature);
+
+        console.log("Selected feature from map:", feature.get("id"));
+
+        // Zoom to the selected feature's extent
+        const extent = feature.getGeometry().getExtent();
+        map.getView().fit(extent, { duration: 500 });
+      });
+    });
+  }
 });
 
 //SELECT RECORD FROM FEATURE ON MAP
 
 // Add a click listener to the map to handle feature selection
-map.on("singleclick", (event) => {
-  // Get the coordinate of the click
-  const coordinate = event.coordinate;
-
-  // Get features at the clicked coordinate
-  map.forEachFeatureAtPixel(event.pixel, (feature) => {
-    // Highlight the selected feature in the FeatureList
-    highlightFeature(feature);
-
-    // Trigger the select event on the FeatureList
-    featureList.select(feature);
-
-    console.log("Selected feature from map:", feature.get("id"));
-
-    // Zoom to the selected feature's extent
-    const extent = feature.getGeometry().getExtent();
-    map.getView().fit(extent, { duration: 500 });
-  });
-});
 
 // Function to highlight a feature
 function highlightFeature(feature) {

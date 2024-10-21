@@ -75,11 +75,6 @@ header {
   left: 10px;
 }
 
-/* Map styling */
-#map {
-  height: -93;
-}
-
 /* 
 .ol-layerswitcher {
   pointer-events: auto;
@@ -312,4 +307,26 @@ button {
   position: absolute;
   top: 10px; /* Adjust this to position vertically */
   right: 20px; /* Moves the button to the right */
+}
+
+#map {
+  height: -85;
+}
+
+#feature-list {
+  display: none; /* Hidden initially */
+  position: absolute;
+  bottom: 0; /* Stick to the bottom of the map */
+  left: 0;
+  width: 100%; /* Full width of the map */
+  height: 250px; /* Adjust the height of the table */
+  background-color: rgba(
+    255,
+    255,
+    255,
+    0.9
+  ); /* Slightly transparent background */
+  overflow-y: auto; /* Allow scrolling if content overflows */
+  z-index: 1000; /* Ensure it is on top of the map */
+  border-top: 1px solid #ccc; /* Optional: border for separation */
 }
