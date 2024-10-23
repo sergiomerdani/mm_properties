@@ -59,6 +59,7 @@ import ImageWMS from "ol/source/ImageWMS";
 import { Image as ImageLayer } from "ol/layer.js";
 import ol_control_Graticule from "ol-ext/control/Graticule";
 import ol_control_FeatureList from "ol-ext/control/FeatureList";
+import ol_control_SearchCoordinates from "ol-ext/control/SearchCoordinates";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -2854,187 +2855,187 @@ saveFeatureButton.addEventListener("click", () => {
 });
 
 //CREATE STYLE
-const createStaticStyle = document.getElementById("createStyles");
-createStaticStyle.addEventListener("click", () => {
-  // Step 1: Create the new style with a POST request
-  fetch("http://localhost:8080/geoserver/rest/styles", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/xml",
-      Authorization: "Basic " + btoa("admin:geoserver"), // Replace with your credentials
-    },
-    body: `
-      <style>
-        <name>polygon_rest</name>
-        <filename>polygon_rest.sld</filename>
-        <workspace>finiq_ws</workspace>
-      </style>
-    `,
-  })
-    .then((response) => {
-      if (response.ok) {
-        console.log("Style metadata created successfully");
-        // Step 2: Upload the SLD content for the newly created style
-        return fetch(
-          "http://localhost:8080/geoserver/rest/workspaces/finiq_ws/styles/polygon_rest.sld",
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/vnd.ogc.sld+xml",
-              Authorization: "Basic " + btoa("admin:geoserver"),
-            },
-            body: `<?xml version="1.1" encoding="UTF-8"?>
-<StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:ogc="http://www.opengis.net/ogc" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.1.0" xmlns:se="http://www.opengis.net/se" xsi:schemaLocation="http://www.opengis.net/sld http://schemas.opengis.net/sld/1.1.0/StyledLayerDescriptor.xsd" xmlns:xlink="http://www.w3.org/1999/xlink">
-  <NamedLayer>
-    <se:Name>polygon</se:Name>
-    <UserStyle>
-      <se:Name>polygon</se:Name>
-      <se:FeatureTypeStyle>
-        <se:Rule>
-          <se:Name>false</se:Name>
-          <se:Description>
-            <se:Title>false</se:Title>
-          </se:Description>
-          <ogc:Filter xmlns:ogc="http://www.opengis.net/ogc">
-            <ogc:PropertyIsEqualTo>
-              <ogc:PropertyName>polygon_column</ogc:PropertyName>
-              <ogc:Literal>false</ogc:Literal>
-            </ogc:PropertyIsEqualTo>
-          </ogc:Filter>
-          <se:PolygonSymbolizer>
-            <se:Fill>
-              <se:SvgParameter name="fill">#b8e35c</se:SvgParameter>
-              <se:SvgParameter name="fill-opacity">0.7</se:SvgParameter>
-            </se:Fill>
-            <se:Stroke>
-              <se:SvgParameter name="stroke">#232323</se:SvgParameter>
-              <se:SvgParameter name="stroke-opacity">0.7</se:SvgParameter>
-              <se:SvgParameter name="stroke-width">1</se:SvgParameter>
-              <se:SvgParameter name="stroke-linejoin">bevel</se:SvgParameter>
-            </se:Stroke>
-          </se:PolygonSymbolizer>
-        </se:Rule>
-        <se:Rule>
-          <se:Name>true</se:Name>
-          <se:Description>
-            <se:Title>true</se:Title>
-          </se:Description>
-          <ogc:Filter xmlns:ogc="http://www.opengis.net/ogc">
-            <ogc:PropertyIsEqualTo>
-              <ogc:PropertyName>polygon_column</ogc:PropertyName>
-              <ogc:Literal>true</ogc:Literal>
-            </ogc:PropertyIsEqualTo>
-          </ogc:Filter>
-          <se:PolygonSymbolizer>
-            <se:Fill>
-              <se:SvgParameter name="fill">#2da3d5</se:SvgParameter>
-              <se:SvgParameter name="fill-opacity">0.7</se:SvgParameter>
-            </se:Fill>
-            <se:Stroke>
-              <se:SvgParameter name="stroke">#232323</se:SvgParameter>
-              <se:SvgParameter name="stroke-opacity">0.7</se:SvgParameter>
-              <se:SvgParameter name="stroke-width">1</se:SvgParameter>
-              <se:SvgParameter name="stroke-linejoin">bevel</se:SvgParameter>
-            </se:Stroke>
-          </se:PolygonSymbolizer>
-        </se:Rule>
-        <se:Rule>
-          <se:Name></se:Name>
-          <se:Description>
-            <se:Title>polygon_column is ''</se:Title>
-          </se:Description>
-          <ogc:Filter xmlns:ogc="http://www.opengis.net/ogc">
-            <ogc:Or>
-              <ogc:PropertyIsEqualTo>
-                <ogc:PropertyName>polygon_column</ogc:PropertyName>
-                <ogc:Literal></ogc:Literal>
-              </ogc:PropertyIsEqualTo>
-              <ogc:PropertyIsNull>
-                <ogc:PropertyName>polygon_column</ogc:PropertyName>
-              </ogc:PropertyIsNull>
-            </ogc:Or>
-          </ogc:Filter>
-          <se:PolygonSymbolizer>
-            <se:Fill>
-              <se:SvgParameter name="fill">#ed63c1</se:SvgParameter>
-            </se:Fill>
-            <se:Stroke>
-              <se:SvgParameter name="stroke">#232323</se:SvgParameter>
-              <se:SvgParameter name="stroke-width">1</se:SvgParameter>
-              <se:SvgParameter name="stroke-linejoin">bevel</se:SvgParameter>
-            </se:Stroke>
-          </se:PolygonSymbolizer>
-        </se:Rule>
-        <se:Rule>
-          <se:TextSymbolizer>
-            <se:Label>
-              <ogc:PropertyName>id</ogc:PropertyName>
-            </se:Label>
-            <se:Font>
-              <se:SvgParameter name="font-family">Open Sans</se:SvgParameter>
-              <se:SvgParameter name="font-size">13</se:SvgParameter>
-            </se:Font>
-            <se:LabelPlacement>
-              <se:PointPlacement>
-                <se:AnchorPoint>
-                  <se:AnchorPointX>0</se:AnchorPointX>
-                  <se:AnchorPointY>0.5</se:AnchorPointY>
-                </se:AnchorPoint>
-              </se:PointPlacement>
-            </se:LabelPlacement>
-            <se:Fill>
-              <se:SvgParameter name="fill">#323232</se:SvgParameter>
-            </se:Fill>
-            <se:VendorOption name="maxDisplacement">1</se:VendorOption>
-          </se:TextSymbolizer>
-        </se:Rule>
-      </se:FeatureTypeStyle>
-    </UserStyle>
-  </NamedLayer>
-</StyledLayerDescriptor>
-`,
-          }
-        );
-      } else {
-        throw new Error("Failed to create style metadata");
-      }
-    })
-    .then((response) => {
-      if (response.ok) {
-        console.log("SLD style uploaded successfully");
-      } else {
-        console.error("Failed to upload SLD style", response.statusText);
-      }
-    })
-    .catch((error) => console.error("Error:", error));
-});
+// const createStaticStyle = document.getElementById("createStyles");
+// createStaticStyle.addEventListener("click", () => {
+//   // Step 1: Create the new style with a POST request
+//   fetch("http://localhost:8080/geoserver/rest/styles", {
+//     method: "POST",
+//     headers: {
+//       "Content-Type": "application/xml",
+//       Authorization: "Basic " + btoa("admin:geoserver"), // Replace with your credentials
+//     },
+//     body: `
+//       <style>
+//         <name>polygon_rest</name>
+//         <filename>polygon_rest.sld</filename>
+//         <workspace>finiq_ws</workspace>
+//       </style>
+//     `,
+//   })
+//     .then((response) => {
+//       if (response.ok) {
+//         console.log("Style metadata created successfully");
+//         // Step 2: Upload the SLD content for the newly created style
+//         return fetch(
+//           "http://localhost:8080/geoserver/rest/workspaces/finiq_ws/styles/polygon_rest.sld",
+//           {
+//             method: "PUT",
+//             headers: {
+//               "Content-Type": "application/vnd.ogc.sld+xml",
+//               Authorization: "Basic " + btoa("admin:geoserver"),
+//             },
+//             body: `<?xml version="1.1" encoding="UTF-8"?>
+// <StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:ogc="http://www.opengis.net/ogc" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.1.0" xmlns:se="http://www.opengis.net/se" xsi:schemaLocation="http://www.opengis.net/sld http://schemas.opengis.net/sld/1.1.0/StyledLayerDescriptor.xsd" xmlns:xlink="http://www.w3.org/1999/xlink">
+//   <NamedLayer>
+//     <se:Name>polygon</se:Name>
+//     <UserStyle>
+//       <se:Name>polygon</se:Name>
+//       <se:FeatureTypeStyle>
+//         <se:Rule>
+//           <se:Name>false</se:Name>
+//           <se:Description>
+//             <se:Title>false</se:Title>
+//           </se:Description>
+//           <ogc:Filter xmlns:ogc="http://www.opengis.net/ogc">
+//             <ogc:PropertyIsEqualTo>
+//               <ogc:PropertyName>polygon_column</ogc:PropertyName>
+//               <ogc:Literal>false</ogc:Literal>
+//             </ogc:PropertyIsEqualTo>
+//           </ogc:Filter>
+//           <se:PolygonSymbolizer>
+//             <se:Fill>
+//               <se:SvgParameter name="fill">#b8e35c</se:SvgParameter>
+//               <se:SvgParameter name="fill-opacity">0.7</se:SvgParameter>
+//             </se:Fill>
+//             <se:Stroke>
+//               <se:SvgParameter name="stroke">#232323</se:SvgParameter>
+//               <se:SvgParameter name="stroke-opacity">0.7</se:SvgParameter>
+//               <se:SvgParameter name="stroke-width">1</se:SvgParameter>
+//               <se:SvgParameter name="stroke-linejoin">bevel</se:SvgParameter>
+//             </se:Stroke>
+//           </se:PolygonSymbolizer>
+//         </se:Rule>
+//         <se:Rule>
+//           <se:Name>true</se:Name>
+//           <se:Description>
+//             <se:Title>true</se:Title>
+//           </se:Description>
+//           <ogc:Filter xmlns:ogc="http://www.opengis.net/ogc">
+//             <ogc:PropertyIsEqualTo>
+//               <ogc:PropertyName>polygon_column</ogc:PropertyName>
+//               <ogc:Literal>true</ogc:Literal>
+//             </ogc:PropertyIsEqualTo>
+//           </ogc:Filter>
+//           <se:PolygonSymbolizer>
+//             <se:Fill>
+//               <se:SvgParameter name="fill">#2da3d5</se:SvgParameter>
+//               <se:SvgParameter name="fill-opacity">0.7</se:SvgParameter>
+//             </se:Fill>
+//             <se:Stroke>
+//               <se:SvgParameter name="stroke">#232323</se:SvgParameter>
+//               <se:SvgParameter name="stroke-opacity">0.7</se:SvgParameter>
+//               <se:SvgParameter name="stroke-width">1</se:SvgParameter>
+//               <se:SvgParameter name="stroke-linejoin">bevel</se:SvgParameter>
+//             </se:Stroke>
+//           </se:PolygonSymbolizer>
+//         </se:Rule>
+//         <se:Rule>
+//           <se:Name></se:Name>
+//           <se:Description>
+//             <se:Title>polygon_column is ''</se:Title>
+//           </se:Description>
+//           <ogc:Filter xmlns:ogc="http://www.opengis.net/ogc">
+//             <ogc:Or>
+//               <ogc:PropertyIsEqualTo>
+//                 <ogc:PropertyName>polygon_column</ogc:PropertyName>
+//                 <ogc:Literal></ogc:Literal>
+//               </ogc:PropertyIsEqualTo>
+//               <ogc:PropertyIsNull>
+//                 <ogc:PropertyName>polygon_column</ogc:PropertyName>
+//               </ogc:PropertyIsNull>
+//             </ogc:Or>
+//           </ogc:Filter>
+//           <se:PolygonSymbolizer>
+//             <se:Fill>
+//               <se:SvgParameter name="fill">#ed63c1</se:SvgParameter>
+//             </se:Fill>
+//             <se:Stroke>
+//               <se:SvgParameter name="stroke">#232323</se:SvgParameter>
+//               <se:SvgParameter name="stroke-width">1</se:SvgParameter>
+//               <se:SvgParameter name="stroke-linejoin">bevel</se:SvgParameter>
+//             </se:Stroke>
+//           </se:PolygonSymbolizer>
+//         </se:Rule>
+//         <se:Rule>
+//           <se:TextSymbolizer>
+//             <se:Label>
+//               <ogc:PropertyName>id</ogc:PropertyName>
+//             </se:Label>
+//             <se:Font>
+//               <se:SvgParameter name="font-family">Open Sans</se:SvgParameter>
+//               <se:SvgParameter name="font-size">13</se:SvgParameter>
+//             </se:Font>
+//             <se:LabelPlacement>
+//               <se:PointPlacement>
+//                 <se:AnchorPoint>
+//                   <se:AnchorPointX>0</se:AnchorPointX>
+//                   <se:AnchorPointY>0.5</se:AnchorPointY>
+//                 </se:AnchorPoint>
+//               </se:PointPlacement>
+//             </se:LabelPlacement>
+//             <se:Fill>
+//               <se:SvgParameter name="fill">#323232</se:SvgParameter>
+//             </se:Fill>
+//             <se:VendorOption name="maxDisplacement">1</se:VendorOption>
+//           </se:TextSymbolizer>
+//         </se:Rule>
+//       </se:FeatureTypeStyle>
+//     </UserStyle>
+//   </NamedLayer>
+// </StyledLayerDescriptor>
+// `,
+//           }
+//         );
+//       } else {
+//         throw new Error("Failed to create style metadata");
+//       }
+//     })
+//     .then((response) => {
+//       if (response.ok) {
+//         console.log("SLD style uploaded successfully");
+//       } else {
+//         console.error("Failed to upload SLD style", response.statusText);
+//       }
+//     })
+//     .catch((error) => console.error("Error:", error));
+// });
 
 //APPLY STYLE
-document.getElementById("applyStyle").addEventListener("click", () => {
-  // Step 1: Apply the style to the specific layer 'polygon' in the workspace 'test'
-  fetch("http://localhost:8080/geoserver/rest/layers/test:polygon", {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/xml",
-      Authorization: "Basic " + btoa("admin:geoserver"), // Replace with your credentials
-    },
-    body: `
-      <layer>
-        <defaultStyle>
-          <name>polygon_rest</name>
-        </defaultStyle>
-      </layer>
-    `,
-  })
-    .then((response) => {
-      if (response.ok) {
-        console.log("Style applied to layer 'polygon' successfully");
-      } else {
-        console.error("Failed to apply style to layer", response.statusText);
-      }
-    })
-    .catch((error) => console.error("Error:", error));
-});
+// document.getElementById("applyStyle").addEventListener("click", () => {
+//   // Step 1: Apply the style to the specific layer 'polygon' in the workspace 'test'
+//   fetch("http://localhost:8080/geoserver/rest/layers/test:polygon", {
+//     method: "PUT",
+//     headers: {
+//       "Content-Type": "application/xml",
+//       Authorization: "Basic " + btoa("admin:geoserver"), // Replace with your credentials
+//     },
+//     body: `
+//       <layer>
+//         <defaultStyle>
+//           <name>polygon_rest</name>
+//         </defaultStyle>
+//       </layer>
+//     `,
+//   })
+//     .then((response) => {
+//       if (response.ok) {
+//         console.log("Style applied to layer 'polygon' successfully");
+//       } else {
+//         console.error("Failed to apply style to layer", response.statusText);
+//       }
+//     })
+//     .catch((error) => console.error("Error:", error));
+// });
 
 //FEATURE LIST
 const featureListButton = document.getElementById("featureList");
@@ -3201,3 +3202,63 @@ function highlightFeature(feature) {
     }
   });
 }
+
+//OL EXT SEARCH COORDINATES
+
+// Initialize the search control with custom options
+const searchCoordinates = new ol_control_SearchCoordinates({
+  zoom: 14, // Set the default zoom level when coordinates are found
+  projection: proj32634, // Set your desired projection (e.g., EPSG:4326 for lat/long)
+  label: "Search Coordinates", // Optional: customize the label if needed
+  minLength: 4, // Minimum input length before triggering search
+  placeholder: "Enter coordinates...", // Customize the placeholder text
+});
+
+// Add control to the map
+map.addControl(searchCoordinates);
+
+// Style for the point feature
+const pointStyle = new Style({
+  image: new CircleStyle({
+    radius: 6,
+    fill: new Fill({ color: "red" }),
+    stroke: new Stroke({ color: "white", width: 2 }),
+  }),
+});
+
+// Create a vector layer to hold the point feature
+const gpsSource = new VectorSource();
+const gpsLayer = new VectorLayer({
+  source: gpsSource,
+  style: pointStyle,
+});
+
+// Add the vector layer to the map
+map.addLayer(gpsLayer);
+
+// Add an event listener for the "select" event
+searchCoordinates.on("select", function (event) {
+  const coord = event.search.gps;
+  console.log(coord);
+
+  // Transform the coordinates to the map's projection (if needed)
+  const mapProjection = map.getView().getProjection();
+  console.log(mapProjection);
+
+  const transformedCoord = transform(coord, proj32634, mapProjection); // Change EPSG:4326 to your desired input projection
+  console.log(transformedCoord);
+
+  const pointFeature = new Feature({
+    geometry: new Point(transformedCoord),
+  });
+
+  // Clear any existing features and add the new point to the vector source
+  gpsSource.clear(); // Clear previous points
+  gpsSource.addFeature(pointFeature); // Add the new point
+
+  // Zoom to the coordinates
+  map.getView().setCenter(transformedCoord);
+  map.getView().setZoom(20); // Set a zoom level for the focused view
+
+  console.log("Zooming to coordinates:", transformedCoord); // Optional logging
+});
