@@ -7,6 +7,7 @@
 @import "./node_modules/ol-ext/control/Legend.css";
 @import "./node_modules/ol-ext/dist/ol-ext.css";
 @import "./node_modules/ol-ext/control/FeatureList.css";
+@import "./node_modules/ol-ext/control/Select.css";
 
 * {
   margin: 0;
@@ -334,4 +335,10 @@ button {
 .ol-searchcoord {
   /* position: relative; */
   top: 60px; /* Adjust this value as needed */
+}
+
+.ol-control.ol-select {
+  top: 3.8em;
+  left: 3em;
+  background-color: rgba(255, 255, 255, 0.5);
 }

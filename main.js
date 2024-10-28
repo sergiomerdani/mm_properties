@@ -60,6 +60,7 @@ import { Image as ImageLayer } from "ol/layer.js";
 import ol_control_Graticule from "ol-ext/control/Graticule";
 import ol_control_FeatureList from "ol-ext/control/FeatureList";
 import ol_control_SearchCoordinates from "ol-ext/control/SearchCoordinates";
+import ol_control_Select from "ol-ext/control/Select";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -3203,8 +3204,7 @@ function highlightFeature(feature) {
   });
 }
 
-//OL EXT SEARCH COORDINATES
-
+//OL-EXT SEARCH COORDINATES
 // Initialize the search control with custom options
 const searchCoordinates = new ol_control_SearchCoordinates({
   zoom: 14, // Set the default zoom level when coordinates are found
@@ -3262,3 +3262,92 @@ searchCoordinates.on("select", function (event) {
 
   console.log("Zooming to coordinates:", transformedCoord); // Optional logging
 });
+
+// _______________________________________________________________________________
+const vectorSource2 = new VectorSource();
+const feature = new Feature({
+  geometry: new Point([2206185.65, 5060810.15]),
+  id: 1,
+  name: "point1", // Attribute
+  category: "A", // Another attribute (optional)
+});
+const feature2 = new Feature({
+  geometry: new Point([2204500.65, 5060000.15]),
+  id: 2,
+  name: "point1", // Attribute
+  category: "B", // Another attribute (optional)
+});
+const feature3 = new Feature({
+  geometry: new Point([2206500.65, 5069000.15]),
+  id: 3,
+  name: "point2", // Attribute
+  category: "B", // Another attribute (optional)
+});
+
+const features2 = vectorSource.getFeatures();
+features2.forEach((feature) => {
+  console.log("Feature attributes:", feature.getProperties());
+});
+vectorSource2.addFeature(feature);
+vectorSource2.addFeature(feature2);
+vectorSource2.addFeature(feature3);
+
+const vectorLayer2 = new VectorLayer({
+  source: vectorSource2,
+  style: new Style({
+    image: new CircleStyle({
+      radius: 5,
+      fill: new Fill({ color: "red" }),
+      stroke: new Stroke({ color: "white", width: 1 }),
+    }),
+  }),
+});
+
+// Add the vector layer to the map
+map.addLayer(vectorLayer2);
+
+// OL-EXT SELECT CONTROL
+const selectControl = new ol_control_Select({
+  source: vectorSource2,
+  className: "ol-select",
+});
+
+const selectedStyle = new Style({
+  image: new CircleStyle({
+    radius: 10, // Larger radius for emphasis
+    fill: new Fill({ color: "blue" }), // Blue fill color for the selected point
+    stroke: new Stroke({ color: "yellow", width: 2 }), // Yellow outline
+  }),
+});
+// Define a default style for points
+const defaultStyle = new Style({
+  image: new CircleStyle({
+    radius: 5,
+    fill: new Fill({ color: "red" }),
+    stroke: new Stroke({ color: "white", width: 1 }),
+  }),
+});
+
+let previouslySelectedFeatures = []; // To store all previously selected features
+
+selectControl.on("select", function (event) {
+  const features = event.features; // Get the selected features
+
+  // Reset the style of all previously selected features
+  previouslySelectedFeatures.forEach((feat) => {
+    feat.setStyle(defaultStyle);
+  });
+
+  // Apply the selected style to each currently selected feature
+  features.forEach((feat) => {
+    if (feat) {
+      feat.setStyle(selectedStyle);
+    }
+  });
+
+  // Update the array of previously selected features
+  previouslySelectedFeatures = [...features]; // Store the new selected features
+});
+
+// Add the control to the map
+map.addControl(selectControl);
