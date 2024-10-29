@@ -1897,6 +1897,11 @@ let layerType,
   layerParam,
   features;
 
+const selectControl = new ol_control_Select({
+  source: null, // Set initially to null
+  className: "ol-select",
+});
+
 layerSwitcher.on("select", (e) => {
   map.removeInteraction(draw);
   selectedLayer = e.layer;
@@ -1976,6 +1981,7 @@ layerSwitcher.on("select", (e) => {
             console.log("Geometry (layertype):", layerType);
             console.log("Vector Layer: ", vectorLayer);
             console.log("Vector Source: ", source);
+            selectControl.setSources(source);
             console.log(url);
           }
         }
@@ -3264,67 +3270,29 @@ searchCoordinates.on("select", function (event) {
 });
 
 // _______________________________________________________________________________
-const vectorSource2 = new VectorSource();
-const feature = new Feature({
-  geometry: new Point([2206185.65, 5060810.15]),
-  id: 1,
-  name: "point1", // Attribute
-  category: "A", // Another attribute (optional)
-});
-const feature2 = new Feature({
-  geometry: new Point([2204500.65, 5060000.15]),
-  id: 2,
-  name: "point1", // Attribute
-  category: "B", // Another attribute (optional)
-});
-const feature3 = new Feature({
-  geometry: new Point([2206500.65, 5069000.15]),
-  id: 3,
-  name: "point2", // Attribute
-  category: "B", // Another attribute (optional)
-});
-
-const features2 = vectorSource.getFeatures();
-features2.forEach((feature) => {
-  console.log("Feature attributes:", feature.getProperties());
-});
-vectorSource2.addFeature(feature);
-vectorSource2.addFeature(feature2);
-vectorSource2.addFeature(feature3);
-
-const vectorLayer2 = new VectorLayer({
-  source: vectorSource2,
-  style: new Style({
-    image: new CircleStyle({
-      radius: 5,
-      fill: new Fill({ color: "red" }),
-      stroke: new Stroke({ color: "white", width: 1 }),
-    }),
-  }),
-});
-
-// Add the vector layer to the map
-map.addLayer(vectorLayer2);
-
-// OL-EXT SELECT CONTROL
-const selectControl = new ol_control_Select({
-  source: vectorSource2,
-  className: "ol-select",
-});
-
-const selectedStyle = new Style({
+const pointSelectedStyle = new Style({
   image: new CircleStyle({
     radius: 10, // Larger radius for emphasis
     fill: new Fill({ color: "blue" }), // Blue fill color for the selected point
     stroke: new Stroke({ color: "yellow", width: 2 }), // Yellow outline
   }),
 });
-// Define a default style for points
-const defaultStyle = new Style({
-  image: new CircleStyle({
-    radius: 5,
-    fill: new Fill({ color: "red" }),
-    stroke: new Stroke({ color: "white", width: 1 }),
+
+const polygonSelectedStyle = new Style({
+  stroke: new Stroke({
+    color: "blue",
+    width: 3,
+  }),
+  fill: new Fill({
+    color: "rgba(0, 0, 255, 0.3)", // Blue fill with opacity
+  }),
+});
+
+const lineStringSelectedStyle = new Style({
+  stroke: new Stroke({
+    color: "green",
+    width: 4,
+    lineDash: [10, 10], // Dashed pattern
   }),
 });
 
@@ -3335,13 +3303,19 @@ selectControl.on("select", function (event) {
 
   // Reset the style of all previously selected features
   previouslySelectedFeatures.forEach((feat) => {
-    feat.setStyle(defaultStyle);
+    feat.setStyle(null);
   });
 
   // Apply the selected style to each currently selected feature
+  // Apply appropriate style based on geometry type
   features.forEach((feat) => {
-    if (feat) {
-      feat.setStyle(selectedStyle);
+    console.log(geometryType);
+    if (geometryType === "PointPropertyType") {
+      feat.setStyle(pointSelectedStyle);
+    } else if (geometryType === "GeometryPropertyType") {
+      feat.setStyle(polygonSelectedStyle);
+    } else if (geometryType === "MultiLineStringPropertyType") {
+      feat.setStyle(lineStringSelectedStyle);
     }
   });
 
