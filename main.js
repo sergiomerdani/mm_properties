@@ -3349,6 +3349,7 @@ function getLayers() {
   });
 }
 
+let properties;
 async function getFields2(layerIndex) {
   try {
     const selectedLayer = layersArray[layerIndex];
@@ -3363,7 +3364,7 @@ async function getFields2(layerIndex) {
 
     // Populate attribute options based on the feature properties in the JSON
     if (data.features && data.features.length > 0) {
-      const properties = Object.keys(data.features[0].properties);
+      properties = Object.keys(data.features[0].properties);
       properties.forEach((property) => {
         const option = document.createElement("option");
         option.value = property;
@@ -3397,20 +3398,65 @@ searchControlButton.addEventListener("click", () => {
   }
 });
 
+// document.getElementById("search").addEventListener("click", async () => {
+//   const layerIndex = selectLayers.value;
+//   const attribute = attributeSelect2.value;
+//   const operator = document.getElementById("operator").value;
+//   const value = document.getElementById("value").value;
+
+//   if (!layerIndex || !attribute || !operator || !value) {
+//     console.log("Please complete all fields.");
+//     return;
+//   }
+
+//   const selectedLayer = layersArray[layerIndex];
+//   const layerParams = selectedLayer.getSource().getParams().LAYERS;
+//   const layerWFS = `http://${host}:8080/geoserver/test/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json&cql_filter=${attribute} ${operator} '${value}'`;
+
+//   try {
+//     const response = await fetch(layerWFS);
+//     const data = await response.json();
+
+//     if (data.features && data.features.length > 0) {
+//       console.log("Matching features found:", data.features);
+//       data.features.forEach((feature) => {
+//         console.log("Feature ID:", feature.properties.name);
+//       });
+//     } else {
+//       console.log("No matching features found.");
+//     }
+//   } catch (error) {
+//     console.error("Error fetching data:", error);
+//   }
+// });
+
 document.getElementById("search").addEventListener("click", async () => {
   const layerIndex = selectLayers.value;
-  const attribute = attributeSelect2.value;
-  const operator = document.getElementById("operator").value;
-  const value = document.getElementById("value").value;
-
-  if (!layerIndex || !attribute || !operator || !value) {
-    console.log("Please complete all fields.");
+  if (!layerIndex) {
+    console.log("Please select a layer.");
     return;
   }
 
+  // Gather all conditions from rules
+  const conditions = Array.from(rulesContainer.querySelectorAll(".rule"))
+    .map((rule) => {
+      const attribute = rule.querySelector(".attribute-select").value;
+      const operator = rule.querySelector(".operator").value;
+      const value = rule.querySelector(".value").value;
+      if (attribute && operator && value) {
+        return `${attribute} ${operator} '${value}'`;
+      }
+      return null;
+    })
+    .filter(Boolean); // Filter out any incomplete conditions
+
+  // Combine conditions into a single cql_filter string
+  const cqlFilter = conditions.join(" AND ");
+
+  // Construct the WFS request URL with the combined cql_filter
   const selectedLayer = layersArray[layerIndex];
   const layerParams = selectedLayer.getSource().getParams().LAYERS;
-  const layerWFS = `http://${host}:8080/geoserver/test/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json&cql_filter=${attribute} ${operator} '${value}'`;
+  const layerWFS = `http://${host}:8080/geoserver/test/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json&cql_filter=${cqlFilter}`;
 
   try {
     const response = await fetch(layerWFS);
@@ -3460,8 +3506,7 @@ addRuleButton.addEventListener("click", () => {
 // Dummy function to populate attribute options
 function populateAttributeSelect(selectElement) {
   // Populate options as needed (replace with your attribute population logic)
-  const sampleAttributes = ["attribute1", "attribute2", "attribute3"];
-  sampleAttributes.forEach((attr) => {
+  properties.forEach((attr) => {
     const option = document.createElement("option");
     option.value = attr;
     option.text = attr;
