@@ -76,6 +76,13 @@
           >
             <i class="fa-solid fa-binoculars"></i>
           </button>
+          <button
+            class="fa-button"
+            id="searchControlButton"
+            title="Search By Attributes"
+          >
+            <i class="fa-solid fa-magnifying-glass"></i>
+          </button>
           <button class="fa-button" id="printContent" title="Print">
             <i class="fa-solid fa-print"></i>
           </button>
@@ -111,6 +118,56 @@
           </button>
         </div>
       </div>
+      <!-- <div id="search-container" hidden>
+        <label for="layer-select">Layer:</label>
+        <select id="layer-select"></select>
+
+        <label for="attribute">Attribute:</label>
+
+        <select id="attribute-select"></select>
+
+        <select id="operator">
+          <option value="=">=</option>
+          <option value="!=">≠</option>
+          <option value="&lt;">&lt;</option>
+          <option value="&gt;">&gt;</option>
+          <option value="&lt;=">&#8804;</option>
+          <option value="&gt;=">&#8805;</option>
+        </select>
+
+        <input type="text" id="value" placeholder="value" />
+
+        <button id="add-rule">Add Rule</button>
+        <button id="search">OK</button>
+      </div> -->
+
+      <div id="search-container" hidden>
+        <label for="layer-select">Layer:</label>
+        <select id="layer-select">
+          <!-- Options will be populated dynamically -->
+        </select>
+
+        <div id="rules-container">
+          <!-- Rules will be dynamically added here -->
+          <div class="rule">
+            <label>Attribute:</label>
+            <select id="attribute-select"></select>
+            <select id="operator">
+              <option value="=">=</option>
+              <option value="!=">≠</option>
+              <option value="&lt;">&lt;</option>
+              <option value="&gt;">&gt;</option>
+              <option value="&lt;=">&#8804;</option>
+              <option value="&gt;=">&#8805;</option>
+            </select>
+            <input type="text" id="value" placeholder="value" />
+          </div>
+        </div>
+
+        <button id="add-rule">Add Rule</button>
+        <button id="search">OK</button>
+      </div>
+
       <div class="selectControl" id="selectControl" hidden>
         <h1>Layer Selector</h1>
         <label for="layerSelect">Select Layer:</label>

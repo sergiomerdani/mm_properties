@@ -311,6 +311,7 @@ button {
 }
 
 #map {
+  /* position: relative; */
   height: -85;
 }
 
@@ -341,4 +342,17 @@ button {
   top: 3.8em;
   left: 3em;
   background-color: rgba(255, 255, 255, 0.5);
+}
+
+#search-container {
+  position: fixed; /* Fix to viewport */
+  top: 200px; /* Adjust as desired */
+  left: 20px; /* Adjust as desired */
+  background-color: #c7e6ff;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  opacity: 0.95;
 }

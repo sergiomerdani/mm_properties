@@ -1945,6 +1945,8 @@ layerSwitcher.on("select", (e) => {
     fetch(describeFeatureTypeUrl)
       .then((response) => response.text())
       .then((data) => {
+        console.log(data);
+
         const parser = new DOMParser();
         const doc = parser.parseFromString(data, "text/xml");
 
@@ -3165,9 +3167,7 @@ featureListButton.addEventListener("click", () => {
 });
 
 //SELECT RECORD FROM FEATURE ON MAP
-
 // Add a click listener to the map to handle feature selection
-
 // Function to highlight a feature
 function highlightFeature(feature) {
   const featureId = feature.getId();
@@ -3270,6 +3270,7 @@ searchCoordinates.on("select", function (event) {
 });
 
 // _______________________________________________________________________________
+// SELECY CONTROL OL-EXT
 const pointSelectedStyle = new Style({
   image: new CircleStyle({
     radius: 10, // Larger radius for emphasis
@@ -3325,3 +3326,145 @@ selectControl.on("select", function (event) {
 
 // Add the control to the map
 map.addControl(selectControl);
+
+// SEARCH CONTROL
+// Get the button and form elements
+const selectLayers = document.getElementById("layer-select");
+const attributeSelect2 = document.getElementById("attribute-select");
+
+function getLayers() {
+  selectLayers.innerHTML = "";
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.text = "Select a layer...";
+  selectLayers.appendChild(defaultOption);
+  layersArray.forEach((wmsLayer, index) => {
+    if (wmsLayer.getVisible()) {
+      const layerToAdd = layersArray[index];
+      const option = document.createElement("option");
+      option.value = index;
+      option.text = layerToAdd.get("title");
+      selectLayers.appendChild(option);
+    }
+  });
+}
+
+async function getFields2(layerIndex) {
+  try {
+    const selectedLayer = layersArray[layerIndex];
+    const layerParams = selectedLayer.getSource().getParams().LAYERS;
+    const layerWFS = `http://${host}:8080/geoserver/test/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json`;
+
+    const response = await fetch(layerWFS);
+    const data = await response.json();
+
+    // Clear existing fields
+    attributeSelect2.innerHTML = "";
+
+    // Populate attribute options based on the feature properties in the JSON
+    if (data.features && data.features.length > 0) {
+      const properties = Object.keys(data.features[0].properties);
+      properties.forEach((property) => {
+        const option = document.createElement("option");
+        option.value = property;
+        option.text = property;
+        attributeSelect2.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error("Error fetching fields:", error);
+  }
+}
+
+// Listen for layer selection changes
+selectLayers.addEventListener("change", (event) => {
+  const layerIndex = event.target.value;
+  if (layerIndex) {
+    getFields2(layerIndex); // Populate attributes based on selected layer
+  }
+});
+
+const searchControlButton = document.getElementById("searchControlButton");
+const searchContainer = document.getElementById("search-container");
+
+// Toggle the visibility when the button is clicked
+searchControlButton.addEventListener("click", () => {
+  if (searchContainer.hasAttribute("hidden")) {
+    searchContainer.removeAttribute("hidden");
+    getLayers();
+  } else {
+    searchContainer.setAttribute("hidden", ""); // Hide the form
+  }
+});
+
+document.getElementById("search").addEventListener("click", async () => {
+  const layerIndex = selectLayers.value;
+  const attribute = attributeSelect2.value;
+  const operator = document.getElementById("operator").value;
+  const value = document.getElementById("value").value;
+
+  if (!layerIndex || !attribute || !operator || !value) {
+    console.log("Please complete all fields.");
+    return;
+  }
+
+  const selectedLayer = layersArray[layerIndex];
+  const layerParams = selectedLayer.getSource().getParams().LAYERS;
+  const layerWFS = `http://${host}:8080/geoserver/test/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json&cql_filter=${attribute} ${operator} '${value}'`;
+
+  try {
+    const response = await fetch(layerWFS);
+    const data = await response.json();
+
+    if (data.features && data.features.length > 0) {
+      console.log("Matching features found:", data.features);
+      data.features.forEach((feature) => {
+        console.log("Feature ID:", feature.id);
+      });
+    } else {
+      console.log("No matching features found.");
+    }
+  } catch (error) {
+    console.error("Error fetching data:", error);
+  }
+});
+
+const rulesContainer = document.getElementById("rules-container");
+const addRuleButton = document.getElementById("add-rule");
+
+addRuleButton.addEventListener("click", () => {
+  // Create a new rule element
+  const ruleDiv = document.createElement("div");
+  ruleDiv.classList.add("rule");
+  ruleDiv.innerHTML = `
+    <label>Attribute:</label>
+    <select class="attribute-select"></select>
+    <select class="operator">
+      <option value="=">=</option>
+      <option value="!=">≠</option>
+      <option value="&lt;">&lt;</option>
+      <option value="&gt;">&gt;</option>
+      <option value="&lt;=">&#8804;</option>
+      <option value="&gt;=">&#8805;</option>
+    </select>
+    <input type="text" class="value" placeholder="value" />
+  `;
+
+  // Append the new rule to the rules container
+  rulesContainer.appendChild(ruleDiv);
+
+  // Optionally, populate the new attribute select options
+  populateAttributeSelect(ruleDiv.querySelector(".attribute-select"));
+});
+
+// Dummy function to populate attribute options
+function populateAttributeSelect(selectElement) {
+  // Populate options as needed (replace with your attribute population logic)
+  const sampleAttributes = ["attribute1", "attribute2", "attribute3"];
+  sampleAttributes.forEach((attr) => {
+    const option = document.createElement("option");
+    option.value = attr;
+    option.text = attr;
+    selectElement.appendChild(option);
+  });
+}
