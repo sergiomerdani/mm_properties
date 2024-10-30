@@ -101,14 +101,15 @@ const wgs84Center = [19.820709, 41.33042];
 
 //URLs
 
-let host = "localhost";
+let host = "localhost",
+  workspaceName = "test";
 const asigWmsUrl =
   "https://geoportal.asig.gov.al/service/kufinjt_e_njesive_administrative/wms?request=GetCapabilities";
 
 const asigWmsService = "https://geoportal.asig.gov.al/service";
 
 // const apiUrl = "http://${host}:8080/geoserver/rest/layergroups"; //${host}
-const apiUrl = `http://${host}:8080/geoserver/rest/workspaces/test/layergroups`; //server
+const apiUrl = `http://${host}:8080/geoserver/rest/workspaces/${workspaceName}/layergroups`; //server
 
 function camelCase(str) {
   // Split the string into words
@@ -476,7 +477,7 @@ const roadsAdr = new Tile({
 });
 
 //EXTRA LAYER FOR CRUD
-const wfsLayerUrl = `http://${host}:8080/geoserver/test/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=`;
+const wfsLayerUrl = `http://${host}:8080/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=`;
 const wfsLayerUrlEnd = "&maxFeatures=50&outputFormat=application/json";
 
 let wfsVectorLayer, wfsVectorSource;
@@ -1661,7 +1662,7 @@ layerSelect.addEventListener("change", function () {
   const selectedLayer = layersArray[selectedIndex];
   const selectedLayerSource = selectedLayer.getSource();
   const layerParams = selectedLayerSource.getParams().LAYERS;
-  layerWFS = `http://${host}:8080/geoserver/test/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json`;
+  layerWFS = `http://${host}:8080/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json`;
   getFields();
   getAttributeValues();
   updateOperatorOptions();
@@ -2103,7 +2104,7 @@ const selectLayer = () => {
     selectedLayerInChart = event.target.value;
 
     // Update the link based on the selected layer
-    link = `http://${host}:8080/geoserver/test/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=${selectedLayerInChart}&maxFeatures=500&outputFormat=application/json`;
+    link = `http://${host}:8080/geoserver/${workspaceName}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=${selectedLayerInChart}&maxFeatures=500&outputFormat=application/json`;
 
     // Generate chart and dropdowns for X-Axis and Y-Axis
     generateChart();
@@ -3354,7 +3355,7 @@ async function getFields2(layerIndex) {
   try {
     const selectedLayer = layersArray[layerIndex];
     const layerParams = selectedLayer.getSource().getParams().LAYERS;
-    const layerWFS = `http://${host}:8080/geoserver/test/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json`;
+    const layerWFS = `http://${host}:8080/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json`;
 
     const response = await fetch(layerWFS);
     const data = await response.json();
@@ -3456,17 +3457,30 @@ document.getElementById("search").addEventListener("click", async () => {
   // Construct the WFS request URL with the combined cql_filter
   const selectedLayer = layersArray[layerIndex];
   const layerParams = selectedLayer.getSource().getParams().LAYERS;
-  const layerWFS = `http://${host}:8080/geoserver/test/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json&cql_filter=${cqlFilter}`;
+  const layerWFS = `http://${host}:8080/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json&cql_filter=${cqlFilter}`;
 
   try {
     const response = await fetch(layerWFS);
     const data = await response.json();
 
     if (data.features && data.features.length > 0) {
-      console.log("Matching features found:", data.features);
-      data.features.forEach((feature) => {
-        console.log("Feature ID:", feature.id);
+      const features = data.features.map((feature) => {
+        const olFeature = new GeoJSON().readFeature(feature);
+        return olFeature;
       });
+
+      const vectorSource2 = new VectorSource({
+        features: features,
+      });
+
+      console.log(vectorSource2.getFeatures());
+
+      // Get the extent of all features
+      const extent = vectorSource2.getExtent();
+      console.log(extent);
+
+      // Fit the map view to the extent of the selected features
+      map.getView().fit(extent, { duration: 1000, padding: [50, 50, 50, 50] });
     } else {
       console.log("No matching features found.");
     }
