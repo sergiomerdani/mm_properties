@@ -345,9 +345,9 @@ button {
 }
 
 #search-container {
-  position: fixed; /* Fix to viewport */
-  top: 200px; /* Adjust as desired */
-  left: 20px; /* Adjust as desired */
+  position: fixed;
+  top: 200px;
+  left: 20px;
   background-color: #c7e6ff;
   padding: 20px;
   border: 1px solid #ccc;
@@ -355,4 +355,40 @@ button {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   z-index: 1000;
   opacity: 0.95;
+}
+
+#attribute-table-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  max-height: 300px; /* Adjust height as needed */
+  overflow-y: auto;
+  background-color: white;
+  border-top: 2px solid #ccc;
+  box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+}
+
+#layer-selector-container {
+  padding: 10px;
+  background-color: #f2f2f2;
+  border-bottom: 1px solid #ddd;
+}
+
+#attribute-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+#attribute-table th,
+#attribute-table td {
+  padding: 8px;
+  border: 1px solid #ddd;
+  text-align: left;
+  white-space: nowrap;
+}
+
+#attribute-table th {
+  background-color: #e8e8e8;
 }

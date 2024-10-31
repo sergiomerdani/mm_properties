@@ -3399,44 +3399,14 @@ searchControlButton.addEventListener("click", () => {
   }
 });
 
-// document.getElementById("search").addEventListener("click", async () => {
-//   const layerIndex = selectLayers.value;
-//   const attribute = attributeSelect2.value;
-//   const operator = document.getElementById("operator").value;
-//   const value = document.getElementById("value").value;
-
-//   if (!layerIndex || !attribute || !operator || !value) {
-//     console.log("Please complete all fields.");
-//     return;
-//   }
-
-//   const selectedLayer = layersArray[layerIndex];
-//   const layerParams = selectedLayer.getSource().getParams().LAYERS;
-//   const layerWFS = `http://${host}:8080/geoserver/test/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json&cql_filter=${attribute} ${operator} '${value}'`;
-
-//   try {
-//     const response = await fetch(layerWFS);
-//     const data = await response.json();
-
-//     if (data.features && data.features.length > 0) {
-//       console.log("Matching features found:", data.features);
-//       data.features.forEach((feature) => {
-//         console.log("Feature ID:", feature.properties.name);
-//       });
-//     } else {
-//       console.log("No matching features found.");
-//     }
-//   } catch (error) {
-//     console.error("Error fetching data:", error);
-//   }
-// });
-
 document.getElementById("search").addEventListener("click", async () => {
   const layerIndex = selectLayers.value;
   if (!layerIndex) {
     console.log("Please select a layer.");
     return;
   }
+
+  const logicalOperator = document.getElementById("logical-operator").value;
 
   // Gather all conditions from rules
   const conditions = Array.from(rulesContainer.querySelectorAll(".rule"))
@@ -3451,8 +3421,8 @@ document.getElementById("search").addEventListener("click", async () => {
     })
     .filter(Boolean); // Filter out any incomplete conditions
 
-  // Combine conditions into a single cql_filter string
-  const cqlFilter = conditions.join(" AND ");
+  // Combine conditions using the selected logical operator
+  const cqlFilter = conditions.join(` ${logicalOperator} `);
 
   // Construct the WFS request URL with the combined cql_filter
   const selectedLayer = layersArray[layerIndex];
@@ -3477,7 +3447,6 @@ document.getElementById("search").addEventListener("click", async () => {
 
       // Get the extent of all features
       const extent = vectorSource2.getExtent();
-      console.log(extent);
 
       // Fit the map view to the extent of the selected features
       map.getView().fit(extent, { duration: 1000, padding: [50, 50, 50, 50] });
@@ -3525,5 +3494,129 @@ function populateAttributeSelect(selectElement) {
     option.value = attr;
     option.text = attr;
     selectElement.appendChild(option);
+  });
+}
+
+// __________________________________________________________________________________________
+
+//FEATURE LIST BY ME
+let ft;
+
+const attributeLayerSelect = document.getElementById("attribute-layer-select");
+
+// Listen for layer selection changes
+selectLayers.addEventListener("change", (event) => {
+  const layerIndex = event.target.value;
+  if (layerIndex) {
+    getFields2(layerIndex); // Populate attributes based on selected layer
+  }
+});
+
+function getLayers2() {
+  attributeLayerSelect.innerHTML = "";
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.text = "Select a layer...";
+  attributeLayerSelect.appendChild(defaultOption);
+  layersArray.forEach((wmsLayer, index) => {
+    if (wmsLayer.getVisible()) {
+      const layerToAdd = layersArray[index];
+      const option = document.createElement("option");
+      option.value = index;
+      option.text = layerToAdd.get("title");
+      attributeLayerSelect.appendChild(option);
+    }
+  });
+}
+
+let layerIndex;
+
+document
+  .getElementById("attributeTable")
+  .addEventListener("click", async () => {
+    const tableContainer = document.getElementById("attribute-table-container");
+    tableContainer.hidden = !tableContainer.hidden;
+    getLayers2();
+  });
+
+attributeLayerSelect.addEventListener("change", (event) => {
+  layerIndex = event.target.value;
+  console.log(layerIndex);
+  const selectedLayer = layersArray[layerIndex];
+  console.log(selectedLayer);
+  getSelectedLayerTable(selectedLayer);
+});
+function getSelectedLayerTable(selectedLayer) {
+  const layerParams = selectedLayer.getSource().getParams().LAYERS;
+  const layerWFS = `http://${host}:8080/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json`;
+
+  async function fetchData() {
+    try {
+      const response = await fetch(layerWFS);
+
+      // Check if the response is successful
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      // Parse the JSON data
+      const data = await response.json();
+      const features = data.features;
+      if (data.features && data.features.length > 0) {
+        const features = data.features.map((feature) => {
+          const olFeature = new GeoJSON().readFeature(feature);
+          return olFeature;
+        });
+
+        const vectorSource2 = new VectorSource({
+          features: features,
+        });
+        ft = vectorSource2.getFeatures();
+      }
+
+      populateAttributeTable(ft);
+
+      // You can now work with the data object
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    }
+  }
+
+  // Call the fetchData function
+  fetchData();
+}
+
+function populateAttributeTable(features) {
+  const tableHeaders = document.getElementById("table-headers");
+  const tableBody = document.getElementById("table-body");
+
+  // Clear existing table content
+  tableHeaders.innerHTML = "";
+  tableBody.innerHTML = "";
+
+  if (features.length === 0) {
+    const row = tableBody.insertRow();
+    const cell = row.insertCell();
+    cell.colSpan = "100%";
+    cell.textContent = "No attributes available.";
+    return;
+  }
+
+  // Extract and set headers from feature properties
+  const firstFeature = features[0];
+  const headers = Object.keys(firstFeature.getProperties());
+  headers.forEach((header) => {
+    const th = document.createElement("th");
+    th.textContent = header;
+    tableHeaders.appendChild(th);
+  });
+
+  // Populate table rows with feature attributes
+  features.forEach((feature) => {
+    const row = tableBody.insertRow();
+    headers.forEach((header) => {
+      const cell = row.insertCell();
+      cell.textContent = feature.get(header) || "";
+    });
   });
 }

@@ -113,42 +113,32 @@
           <button class="fa-button" id="featureList" title="Feature List">
             <i class="fa-solid fa-list"></i>
           </button>
+          <button class="fa-button" id="attributeTable" title="Attribute table">
+            <i class="fa-solid fa-table"></i>
+          </button>
           <button class="logout" id="logout" title="Logout">
             <i class="fa-solid fa-arrow-right-from-bracket"></i>
           </button>
         </div>
       </div>
-      <!-- <div id="search-container" hidden>
-        <label for="layer-select">Layer:</label>
-        <select id="layer-select"></select>
 
-        <label for="attribute">Attribute:</label>
-
-        <select id="attribute-select"></select>
-
-        <select id="operator">
-          <option value="=">=</option>
-          <option value="!=">≠</option>
-          <option value="&lt;">&lt;</option>
-          <option value="&gt;">&gt;</option>
-          <option value="&lt;=">&#8804;</option>
-          <option value="&gt;=">&#8805;</option>
-        </select>
-
-        <input type="text" id="value" placeholder="value" />
-
-        <button id="add-rule">Add Rule</button>
-        <button id="search">OK</button>
-      </div> -->
+      <div id="attribute-table-container" hidden>
+        <div id="layer-selector-container">
+          <label for="attribute-layer-select">Select Layer:</label>
+          <select id="attribute-layer-select"></select>
+        </div>
+        <table id="attribute-table">
+          <thead>
+            <tr id="table-headers"></tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
 
       <div id="search-container" hidden>
         <label for="layer-select">Layer:</label>
-        <select id="layer-select">
-          <!-- Options will be populated dynamically -->
-        </select>
-
+        <select id="layer-select"></select>
         <div id="rules-container">
-          <!-- Rules will be dynamically added here -->
           <div class="rule">
             <label>Attribute:</label>
             <select id="attribute-select" class="attribute-select"></select>
@@ -161,9 +151,13 @@
               <option value="&gt;=">&#8805;</option>
             </select>
             <input type="text" id="value" class="value" placeholder="value" />
+            <label for="logical-operator">Combine Conditions:</label>
+            <select id="logical-operator">
+              <option value="AND">AND</option>
+              <option value="OR">OR</option>
+            </select>
           </div>
         </div>
-
         <button id="add-rule">Add Rule</button>
         <button id="search">OK</button>
       </div>
