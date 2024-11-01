@@ -3047,126 +3047,6 @@ saveFeatureButton.addEventListener("click", () => {
 //     .catch((error) => console.error("Error:", error));
 // });
 
-//FEATURE LIST
-const featureListButton = document.getElementById("featureList");
-let featureList,
-  isMapClickListenerActive = false;
-
-featureListButton.addEventListener("click", () => {
-  // Get the feature list container and make it visible as an overlay
-  const featureListContainer = document.getElementById("feature-list");
-  featureListContainer.style.display = "block"; // Show the feature list
-
-  // Get the element with class `ol-feature-list` and remove the `ol-collapsed` class
-  const featureListElement = document.querySelector(
-    ".featureList.ol-feature-list"
-  );
-
-  if (featureListElement) {
-    featureListElement.classList.remove("ol-collapsed"); // Remove the collapsed class if present
-  }
-
-  // Check if the FeatureList is already added to avoid duplicates
-  if (!featureList) {
-    // Create the FeatureList control
-    featureList = new ol_control_FeatureList({
-      source: vectorLayer.getSource(),
-      features: vectorLayer.getSource().getFeatures(),
-      selectEvent: "click",
-      pageLength: 100,
-      target: featureListContainer, // The div within the map
-      className: "featureList",
-    });
-
-    // Add the control to the map
-    map.addControl(featureList);
-    featureList.enableSort("polygon_column", "name", "id");
-
-    // Event listener for feature selection in FeatureList
-    featureList.on("select", function (event) {
-      const selectedFeature = event.feature;
-      // Highlight the selected feature on the map
-      highlightFeature(selectedFeature);
-
-      const featureId = selectedFeature.getId();
-      vectorLayer.getSource().forEachFeature((feature) => {
-        if (feature.getId() === featureId) {
-          const geometryType = feature.getGeometry().getType();
-          if (geometryType === "Point") {
-            // Style for point features
-            feature.setStyle(
-              new Style({
-                image: new CircleStyle({
-                  radius: 10,
-                  fill: new Fill({ color: "rgba(255, 0, 0, 0.8)" }), // Red fill
-                  stroke: new Stroke({
-                    color: "red",
-                    width: 2,
-                  }),
-                }),
-              })
-            );
-          } else {
-            // Style for other geometries (e.g., LineString, Polygon)
-            feature.setStyle(
-              new Style({
-                stroke: new Stroke({
-                  color: "red",
-                  width: 3,
-                }),
-                fill: new Fill({
-                  color: "rgba(255, 0, 0, 0.3)",
-                }),
-              })
-            );
-          }
-        } else {
-          // Reset style for other features
-          feature.setStyle(null);
-        }
-      });
-
-      // Zoom to the selected feature's extent
-      const extent = selectedFeature.getGeometry().getExtent();
-      map.getView().fit(extent, { duration: 500 });
-    });
-
-    // Add the closebox click listener after FeatureList is created
-    const closeButton = document.querySelector(".ol-closebox");
-    if (closeButton) {
-      closeButton.addEventListener("click", () => {
-        featureListContainer.style.display = "none"; // Hide the feature list
-      });
-    }
-  }
-
-  // Add click listener to the map if it's not already active
-  if (!isMapClickListenerActive) {
-    isMapClickListenerActive = true;
-
-    // Add a click listener to the map to handle feature selection
-    map.on("singleclick", (event) => {
-      // Get the coordinate of the click
-      const coordinate = event.coordinate;
-
-      // Get features at the clicked coordinate
-      map.forEachFeatureAtPixel(event.pixel, (feature) => {
-        // Highlight the selected feature in the FeatureList
-        highlightFeature(feature);
-
-        // Trigger the select event on the FeatureList
-        featureList.select(feature);
-
-        console.log("Selected feature from map:", feature.get("id"));
-
-        // Zoom to the selected feature's extent
-        const extent = feature.getGeometry().getExtent();
-        map.getView().fit(extent, { duration: 500 });
-      });
-    });
-  }
-});
-
 //SELECT RECORD FROM FEATURE ON MAP
 // Add a click listener to the map to handle feature selection
 // Function to highlight a feature
@@ -3604,15 +3484,66 @@ function populateAttributeTable(features) {
 
   // Extract and set headers from feature properties
   const firstFeature = features[0];
-  const headers = Object.keys(firstFeature.getProperties());
+  const headers = Object.keys(firstFeature.getProperties()).filter(
+    (header) => header !== "geometry"
+  );
+
+  // Create header row
+  const headerRow = document.createElement("tr");
   headers.forEach((header) => {
     const th = document.createElement("th");
     th.textContent = header;
-    tableHeaders.appendChild(th);
+    headerRow.appendChild(th);
   });
+  tableHeaders.appendChild(headerRow);
+
+  // Create filter row
+  const filterRow = document.createElement("tr");
+  headers.forEach((header) => {
+    const filterCell = document.createElement("th");
+    const filterInput = document.createElement("input");
+    filterInput.type = "text";
+    filterInput.placeholder = `Filter ${header}`;
+    filterInput.addEventListener("input", () => applyFilter(features));
+    filterCell.appendChild(filterInput);
+    filterRow.appendChild(filterCell);
+  });
+  tableHeaders.appendChild(filterRow);
 
   // Populate table rows with feature attributes
   features.forEach((feature) => {
+    const row = tableBody.insertRow();
+    headers.forEach((header) => {
+      const cell = row.insertCell();
+      cell.textContent = feature.get(header) || "";
+    });
+  });
+}
+
+// Apply filter function to filter rows based on input values
+function applyFilter(features) {
+  const tableBody = document.getElementById("table-body");
+  const filterInputs = Array.from(
+    document.querySelectorAll("#table-headers input")
+  );
+  const headers = filterInputs.map((input) =>
+    input.placeholder.replace("Filter ", "")
+  );
+
+  // Clear existing table body content
+  tableBody.innerHTML = "";
+
+  // Filter features based on each input value
+  const filteredFeatures = features.filter((feature) => {
+    return headers.every((header, index) => {
+      const filterValue = filterInputs[index].value.toLowerCase();
+      const featureValue = (feature.get(header) || "").toString().toLowerCase();
+      return featureValue.includes(filterValue);
+    });
+  });
+
+  // Repopulate table body with filtered features
+  filteredFeatures.forEach((feature) => {
     const row = tableBody.insertRow();
     headers.forEach((header) => {
       const cell = row.insertCell();
