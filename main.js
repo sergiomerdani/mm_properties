@@ -3409,7 +3409,7 @@ function getLayers2() {
   });
 }
 
-let layerIndex;
+let layerIndex, selectedLayer2;
 
 document
   .getElementById("attributeTable")
@@ -3422,9 +3422,9 @@ document
 attributeLayerSelect.addEventListener("change", (event) => {
   layerIndex = event.target.value;
   console.log(layerIndex);
-  const selectedLayer = layersArray[layerIndex];
-  console.log(selectedLayer);
-  getSelectedLayerTable(selectedLayer);
+  selectedLayer2 = layersArray[layerIndex];
+  console.log(selectedLayer2);
+  getSelectedLayerTable(selectedLayer2);
 });
 function getSelectedLayerTable(selectedLayer) {
   const layerParams = selectedLayer.getSource().getParams().LAYERS;
@@ -3593,5 +3593,76 @@ function applyFilter(features) {
       // Zoom to the feature's extent
       zoomToFeatureExtent(feature);
     });
+  });
+}
+
+//SELECT ATTRIBUTE ROW FROM FEATURE ON THE MAP
+
+map.on("singleclick", function (evt) {
+  const viewResolution = map.getView().getResolution();
+  console.log(selectedLayer2);
+
+  const layerSource = selectedLayer2.getSource(); // Replace with your TileWMS layer source
+
+  // Construct the GetFeatureInfo URL
+  const url = layerSource.getFeatureInfoUrl(
+    evt.coordinate,
+    viewResolution,
+    map.getView().getProjection(),
+    {
+      INFO_FORMAT: "application/json",
+      FEATURE_COUNT: 1, // Retrieve only one feature
+    }
+  );
+
+  if (url) {
+    // Fetch feature info from WMS
+    fetch(url)
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.features && data.features.length > 0) {
+          const featureData = data.features[0].properties;
+          console.log(featureData);
+
+          selectTableRow(featureData); // Function to highlight the corresponding row
+        } else {
+          console.log("No feature found at the clicked location.");
+        }
+      })
+      .catch((error) => console.error("Error fetching feature info:", error));
+  }
+});
+
+function selectTableRow(featureData) {
+  const tableHeaders = Array.from(
+    document.querySelectorAll("#table-headers th")
+  );
+  const tableBody = document.getElementById("table-body");
+  const rows = Array.from(tableBody.rows);
+
+  rows.forEach((row) => {
+    const cells = Array.from(row.cells);
+    const match = cells.every((cell, index) => {
+      const header = tableHeaders[index].textContent;
+
+      // Convert both featureData and cell content to strings and trim them
+      const featureValue = String(featureData[header]).trim();
+      const cellValue = String(cell.textContent).trim();
+
+      console.log(
+        `Comparing feature "${featureValue}" with table cell "${cellValue}"`
+      ); // Debug: Log comparison
+
+      return featureValue === cellValue;
+    });
+
+    console.log("Row match result:", match); // Log whether the row was matched
+
+    // Apply the highlight class if there's a match
+    if (match) {
+      row.classList.add("highlighted-row");
+    } else {
+      row.classList.remove("highlighted-row");
+    }
   });
 }
