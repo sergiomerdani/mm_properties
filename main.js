@@ -3528,7 +3528,6 @@ function populateAttributeTable(features) {
       if (highlightedRow) {
         highlightedRow.classList.remove("highlighted-row");
       }
-
       // Highlight the clicked row
       row.classList.add("highlighted-row");
       highlightedRow = row;
@@ -3538,7 +3537,6 @@ function populateAttributeTable(features) {
       headers.forEach((header) => {
         rowData[header] = feature.get(header);
       });
-      console.log("Row Data:", rowData);
       zoomToFeatureExtent(feature);
     });
   });
@@ -3643,37 +3641,36 @@ function selectTableRow(featureData) {
   let foundMatch = false;
 
   rows.forEach((row) => {
-    const cells = Array.from(row.cells);
-    const match = cells.every((cell, index) => {
-      const header = tableHeaders[index].textContent;
+    const firstCell = row.cells[0]; // Use only the first cell for matching
+    const header = tableHeaders[0].textContent; // Header for the first column
 
-      // Convert both featureData and cell content to strings and trim them
-      const featureValue = String(featureData[header]).trim();
-      const cellValue = String(cell.textContent).trim();
+    // Convert both featureData and first cell content to strings and trim them
+    const featureValue = String(featureData[header]).trim();
+    const cellValue = String(firstCell.textContent).trim();
 
-      console.log(
-        `Comparing feature "${featureValue}" with table cell "${cellValue}"`
-      ); // Debug: Log comparison
+    console.log(
+      `Comparing feature "${featureValue}" with table cell "${cellValue}"`
+    ); // Debug: Log comparison
 
-      return featureValue === cellValue;
-    });
+    const match = featureValue === cellValue;
 
     console.log("Row match result:", match); // Log whether the row was matched
 
     // Apply the highlight class if there's a match
     if (match) {
+      // Remove the highlight from the previous row, if any
       if (highlightedRow) {
         highlightedRow.classList.remove("highlighted-row");
       }
 
       row.classList.add("highlighted-row");
-      if (!foundMatch) {
-        row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
 
-        // Update the previous highlighted row
-        highlightedRow = row;
-        foundMatch = true; // Ensures only the first matched row is scrolled to
-      }
+      // Update the previous highlighted row
+      highlightedRow = row;
+
+      // Exit the loop once a match is found
+      return;
     } else {
       row.classList.remove("highlighted-row");
     }
