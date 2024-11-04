@@ -3640,6 +3640,8 @@ function selectTableRow(featureData) {
   const tableBody = document.getElementById("table-body");
   const rows = Array.from(tableBody.rows);
 
+  let foundMatch = false;
+
   rows.forEach((row) => {
     const cells = Array.from(row.cells);
     const match = cells.every((cell, index) => {
@@ -3660,7 +3662,18 @@ function selectTableRow(featureData) {
 
     // Apply the highlight class if there's a match
     if (match) {
+      if (highlightedRow) {
+        highlightedRow.classList.remove("highlighted-row");
+      }
+
       row.classList.add("highlighted-row");
+      if (!foundMatch) {
+        row.scrollIntoView({ behavior: "smooth", block: "center" });
+
+        // Update the previous highlighted row
+        highlightedRow = row;
+        foundMatch = true; // Ensures only the first matched row is scrolled to
+      }
     } else {
       row.classList.remove("highlighted-row");
     }
