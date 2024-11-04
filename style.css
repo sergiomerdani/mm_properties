@@ -386,9 +386,15 @@ button {
   padding: 8px;
   border: 1px solid #ddd;
   text-align: left;
-  white-space: nowrap;
 }
 
-#attribute-table th {
-  background-color: #e8e8e8;
+#attribute-table th input[type="text"] {
+  width: 90%; /* Adjust width as needed */
+  box-sizing: border-box;
+  padding: 4px;
+}
+
+/* Style for the highlighted row */
+.highlighted-row {
+  background-color: #d3d3d3;
 }

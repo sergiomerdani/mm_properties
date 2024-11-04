@@ -3466,6 +3466,8 @@ function getSelectedLayerTable(selectedLayer) {
   fetchData();
 }
 
+let highlightedRow = null;
+
 function populateAttributeTable(features) {
   const tableHeaders = document.getElementById("table-headers");
   const tableBody = document.getElementById("table-body");
@@ -3482,13 +3484,14 @@ function populateAttributeTable(features) {
     return;
   }
 
-  // Extract and set headers from feature properties
+  // Extract headers from feature properties and exclude 'geometry'
   const firstFeature = features[0];
   const headers = Object.keys(firstFeature.getProperties()).filter(
     (header) => header !== "geometry"
   );
 
   // Create header row
+  // Create a header row for column names
   const headerRow = document.createElement("tr");
   headers.forEach((header) => {
     const th = document.createElement("th");
@@ -3497,7 +3500,7 @@ function populateAttributeTable(features) {
   });
   tableHeaders.appendChild(headerRow);
 
-  // Create filter row
+  // Create a filter row below the header row
   const filterRow = document.createElement("tr");
   headers.forEach((header) => {
     const filterCell = document.createElement("th");
@@ -3510,6 +3513,8 @@ function populateAttributeTable(features) {
   });
   tableHeaders.appendChild(filterRow);
 
+  // Variable to keep track of the currently highlighted row
+
   // Populate table rows with feature attributes
   features.forEach((feature) => {
     const row = tableBody.insertRow();
@@ -3517,7 +3522,32 @@ function populateAttributeTable(features) {
       const cell = row.insertCell();
       cell.textContent = feature.get(header) || "";
     });
+
+    row.addEventListener("click", () => {
+      // Remove the highlight from the previously selected row
+      if (highlightedRow) {
+        highlightedRow.classList.remove("highlighted-row");
+      }
+
+      // Highlight the clicked row
+      row.classList.add("highlighted-row");
+      highlightedRow = row;
+
+      // Extract row data and log it to the console
+      const rowData = {};
+      headers.forEach((header) => {
+        rowData[header] = feature.get(header);
+      });
+      console.log("Row Data:", rowData);
+      zoomToFeatureExtent(feature);
+    });
   });
+}
+
+// Function to zoom to a feature's extent
+function zoomToFeatureExtent(feature) {
+  const extent = feature.getGeometry().getExtent();
+  map.getView().fit(extent, { duration: 1000, padding: [50, 50, 50, 50] });
 }
 
 // Apply filter function to filter rows based on input values
@@ -3548,6 +3578,20 @@ function applyFilter(features) {
     headers.forEach((header) => {
       const cell = row.insertCell();
       cell.textContent = feature.get(header) || "";
+    });
+    // Add click event listener to the row for zooming
+    row.addEventListener("click", () => {
+      // Remove previous highlight if any
+      if (highlightedRow) {
+        highlightedRow.classList.remove("highlighted-row");
+      }
+
+      // Highlight the clicked row
+      row.classList.add("highlighted-row");
+      highlightedRow = row;
+
+      // Zoom to the feature's extent
+      zoomToFeatureExtent(feature);
     });
   });
 }
