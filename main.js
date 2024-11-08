@@ -3490,30 +3490,25 @@ function populateAttributeTable(features) {
     (header) => header !== "geometry"
   );
 
-  // Create header row
-  // Create a header row for column names
-  const headerRow = document.createElement("tr");
+  // Create header row and filter row combined in a stacked layout
   headers.forEach((header) => {
     const th = document.createElement("th");
-    th.textContent = header;
-    headerRow.appendChild(th);
-  });
-  tableHeaders.appendChild(headerRow);
+    const headerDiv = document.createElement("div");
+    headerDiv.textContent = header;
 
-  // Create a filter row below the header row
-  const filterRow = document.createElement("tr");
-  headers.forEach((header) => {
-    const filterCell = document.createElement("th");
     const filterInput = document.createElement("input");
     filterInput.type = "text";
     filterInput.placeholder = `Filter ${header}`;
     filterInput.addEventListener("input", () => applyFilter(features));
-    filterCell.appendChild(filterInput);
-    filterRow.appendChild(filterCell);
+
+    // Stack header text and filter input
+    th.appendChild(headerDiv);
+    th.appendChild(filterInput);
+    tableHeaders.appendChild(th);
   });
-  tableHeaders.appendChild(filterRow);
 
   // Variable to keep track of the currently highlighted row
+  let highlightedRow = null;
 
   // Populate table rows with feature attributes
   features.forEach((feature) => {
