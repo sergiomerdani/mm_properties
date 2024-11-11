@@ -1219,7 +1219,7 @@ function getInfo(event) {
               headerElement.classList.add("form-header");
               const layerTitle = getLayerTitle(layer);
               if (layerTitle) {
-                headerElement.textContent = layerTitle;
+                headerElement.innerHTML = `Layer name: <b>${layerTitle}</b>`;
               }
               formContainer.appendChild(headerElement);
 
@@ -2518,8 +2518,11 @@ function selectStyle(feature) {
 }
 
 let selectSingleClick, featureID, url, extent, selectedFeatures, aaa;
+// Initialize a flag to control the map single-click event
+let isSelectFeatureActive = false;
 
 selectFeature.addEventListener("click", (e) => {
+  isSelectFeatureActive = true;
   map.removeInteraction(draw);
   map.removeInteraction(modify);
   selectSingleClick = new Select({ style: selectStyle, hitTolerance: 5 });
@@ -3592,6 +3595,10 @@ function applyFilter(features) {
 //SELECT ATTRIBUTE ROW FROM FEATURE ON THE MAP
 
 map.on("singleclick", function (evt) {
+  if (isSelectFeatureActive) {
+    console.log("Single-click disabled while 'Select Feature' is active.");
+    return; // Exit early if select feature mode is active
+  }
   const viewResolution = map.getView().getResolution();
   console.log(selectedLayer2);
 
@@ -3624,6 +3631,15 @@ map.on("singleclick", function (evt) {
       })
       .catch((error) => console.error("Error fetching feature info:", error));
   }
+});
+
+// OPTIONAL: Add a button to deactivate 'Select Feature' mode
+const deactivateSelectFeature = document.getElementById(
+  "deactivateSelectFeature"
+);
+deactivateSelectFeature.addEventListener("click", (e) => {
+  isSelectFeatureActive = false; // Reset flag when deactivating select feature
+  map.removeInteraction(selectSingleClick); // Remove the select interaction
 });
 
 function selectTableRow(featureData) {
