@@ -12,46 +12,78 @@
       src="https://kit.fontawesome.com/ddf386aee4.js"
       crossorigin="anonymous"
     ></script>
-    <title>MM WEBGIS</title>
+    <title>INOVACIONI</title>
   </head>
   <body>
     <div class="grid-container">
       <div class="navbar">
         <div class="buttons">
           <button class="fa-button" id="identify" title="Get Information">
-            <i class="fa-solid fa-circle-info"></i>
+            <img
+              src="assets/icons/circle-info-solid.svg"
+              width="13"
+              height="13"
+            />
           </button>
           <button class="fa-button" id="move-right" title="Move Right">
-            <i class="fa-solid fa-circle-right"></i>
+            <img
+              src="assets/icons/circle-right-solid.svg"
+              width="13"
+              height="13"
+            />
           </button>
           <button class="fa-button" id="move-left" title="Move Left">
-            <i class="fa-solid fa-circle-left"></i>
+            <img
+              src="assets/icons/circle-arrow-left-solid.svg"
+              width="13"
+              height="13"
+            />
           </button>
           <button class="fa-button" id="zoom-out" title="Zoom Out">
-            <i class="fa-solid fa-magnifying-glass-minus"></i>
+            <img
+              src="assets/icons/magnifying-glass-minus-solid.svg"
+              width="13"
+              height="13"
+            />
           </button>
           <input type="text" id="scaleInput" />
           <button class="fa-button" id="zoom-in" title="Zoom In">
-            <i class="fa-solid fa-magnifying-glass-plus"></i>
+            <img
+              src="assets/icons/magnifying-glass-plus-solid.svg"
+              width="13"
+              height="13"
+            />
           </button>
           <button class="fa-button" id="coords" title="XY Coordinates">
-            <i class="fa-solid fa-thumbtack"></i>
+            <img
+              src="assets/icons/thumbtack-solid.svg"
+              width="13"
+              height="13"
+            />
           </button>
           <button class="fa-button" id="pan" title="DragPan">
-            <i class="fa-regular fa-hand"></i>
+            <img src="assets/icons/hand-solid.svg" width="13" height="13" />
           </button>
           <button class="fa-button" id="zoom-extent" title="Zoom Extent">
-            <i class="fa-solid fa-globe"></i>
+            <img src="assets/icons/globe-solid.svg" width="13" height="13" />
           </button>
           <button class="fa-button" id="graticuleButton" title="Show/Hide Grid">
-            <i class="fa-solid fa-table-cells-large"></i>
+            <img
+              src="assets/icons/table-cells-large-solid.svg"
+              width="13"
+              height="13"
+            />
           </button>
           <button
             class="fa-button"
             id="getGeolocation"
             title="Your Current Location"
           >
-            <i class="fa-solid fa-location-dot"></i>
+            <img
+              src="assets/icons/location-dot-solid.svg"
+              width="13"
+              height="13"
+            />
           </button>
           <div class="measurement">
             <button
@@ -59,10 +91,14 @@
               id="measure-length"
               title="Measure Length"
             >
-              <i class="fa-solid fa-ruler"></i>
+              <img src="assets/icons/ruler-solid.svg" width="13" height="13" />
             </button>
             <button class="fa-button" id="measure-area" title="Measure Area">
-              <i class="fa-solid fa-ruler-combined"></i>
+              <img
+                src="assets/icons/ruler-combined-solid.svg"
+                width="13"
+                height="13"
+              />
             </button>
             <label for="segments">Show segment lengths: </label>
             <input type="checkbox" id="segments" checked />
@@ -74,35 +110,51 @@
             id="selectControlButton"
             title="Select By Attributes"
           >
-            <i class="fa-solid fa-binoculars"></i>
+            <img
+              src="assets/icons/binoculars-solid.svg"
+              width="13"
+              height="13"
+            />
           </button>
           <button
             class="fa-button"
             id="searchControlButton"
             title="Search By Attributes"
           >
-            <i class="fa-solid fa-magnifying-glass"></i>
+            <img
+              src="assets/icons/magnifying-glass-solid.svg"
+              width="13"
+              height="13"
+            />
           </button>
           <button class="fa-button" id="printContent" title="Print">
-            <i class="fa-solid fa-print"></i>
+            <img src="assets/icons/print-solid.svg" width="13" height="13" />
           </button>
           <button class="fa-button" id="editButton" title="Edit layer">
-            <i class="fa-solid fa-pen-to-square"></i>
+            <img src="assets/icons/edit-button.svg" width="13" height="13" />
           </button>
           <button class="fa-button" id="addNewFeature" title="Add New Feature">
-            <i class="fa-solid fa-plus"></i>
+            <img src="assets/icons/plus-solid.svg" width="13" height="13" />
           </button>
           <button class="fa-button" id="modifyFeature" title="Modify Feature">
-            <i class="fa-solid fa-pen"></i>
+            <img src="assets/icons/pen-solid.svg" width="13" height="13" />
           </button>
           <button class="fa-button" id="selectFeature" title="Select Feature">
-            <i class="fa-solid fa-arrow-pointer"></i>
+            <img src="assets/icons/select-solid.svg" width="13" height="13" />
           </button>
           <button class="fa-button" id="deleteFeature" title="Delete Feature">
-            <i class="fa-solid fa-trash-can"></i>
+            <img
+              src="assets/icons/trash-can-solid.svg"
+              width="13"
+              height="13"
+            />
           </button>
           <button class="fa-button" id="saveFeature" title="Save Feature">
-            <i class="fa-solid fa-floppy-disk"></i>
+            <img
+              src="assets/icons/floppy-disk-solid.svg"
+              width="13"
+              height="13"
+            />
           </button>
 
           <!-- <button class="fa-button" id="createStyles" title="Styles">
@@ -115,10 +167,14 @@
             <i class="fa-solid fa-list"></i>
           </button> -->
           <button class="fa-button" id="attributeTable" title="Attribute table">
-            <i class="fa-solid fa-table"></i>
+            <img
+              src="assets/icons/table-cells-large-solid.svg"
+              width="13"
+              height="13"
+            />
           </button>
           <button class="logout" id="logout" title="Logout">
-            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+            <img src="assets/icons/logout-solid.svg" width="13" height="13" />
           </button>
         </div>
       </div>

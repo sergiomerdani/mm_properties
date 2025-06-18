@@ -61,13 +61,15 @@ import ol_control_Graticule from "ol-ext/control/Graticule";
 import ol_control_FeatureList from "ol-ext/control/FeatureList";
 import ol_control_SearchCoordinates from "ol-ext/control/SearchCoordinates";
 import ol_control_Select from "ol-ext/control/Select";
+import WMSCapabilities from "ol/format/WMSCapabilities";
+import { transformExtent } from "ol/proj";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
 
 proj4.defs(
   "EPSG:6870",
-  "+proj=tmerc +lat_0=0 +lon_0=20 +k=1 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs"
+  "+proj=tmerc +lat_0=0 +lon_0=20 +k=1 +x_0=500000 +y_0=0 +ellps=GRS8082 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs"
 );
 register(proj4);
 
@@ -101,15 +103,17 @@ const wgs84Center = [19.820709, 41.33042];
 
 //URLs
 
-let host = "localhost",
-  workspaceName = "test";
+let host = "localhost";
+let port = "8080";
+// let host = "localhost",
+let workspaceName = "roles_test";
 const asigWmsUrl =
   "https://geoportal.asig.gov.al/service/kufinjt_e_njesive_administrative/wms?request=GetCapabilities";
 
 const asigWmsService = "https://geoportal.asig.gov.al/service";
 
-// const apiUrl = "http://${host}:8080/geoserver/rest/layergroups"; //${host}
-const apiUrl = `http://${host}:8080/geoserver/rest/workspaces/${workspaceName}/layergroups`; //server
+// const apiUrl = "http://${host}:8082/geoserver/rest/layergroups"; //${host}
+const apiUrl = `http://${host}:${port}/geoserver/rest/workspaces/${workspaceName}/layergroups`; //server
 
 function camelCase(str) {
   // Split the string into words
@@ -140,13 +144,22 @@ function parseLayerInfo(layerParams) {
     .join(" ");
   return { workspace2, layerName2, layerTitle2 };
 }
-
+const username = "admin";
+const password = "geoserver";
 let layerGroupName,
   layerParams,
   layersArray = [];
 
 // Make a GET request to the API
-fetch(apiUrl)
+fetch(apiUrl, {
+  method: "GET",
+  // mode: "no-cors",
+  headers: {
+    Authorization: "Basic " + btoa(`${username}:${password}`), // Change credentials
+    Accept: "application/json",
+  },
+  credentials: "include",
+})
   .then((response) => {
     // Check if the response is successful (status code 200-299)
     if (!response.ok) {
@@ -170,7 +183,15 @@ fetch(apiUrl)
       const apiUrlLayerGroups =
         apiUrl + "/" + encodeURIComponent(layerGroupName);
 
-      fetch(apiUrlLayerGroups)
+      fetch(apiUrlLayerGroups, {
+        method: "GET",
+        // mode: "no-cors",
+        headers: {
+          Authorization: "Basic " + btoa(`${username}:${password}`), // Change credentials
+          Accept: "application/json",
+        },
+        credentials: "include",
+      })
         .then((response) => {
           if (!response.ok) {
             throw new Error("Network response was not ok");
@@ -186,13 +207,15 @@ fetch(apiUrl)
               parseLayerInfo(layerParams);
             const tileLayer = new ImageLayer({
               source: new ImageWMS({
-                url: `http://${host}:8080/geoserver/${workspace2}/wms`,
+                url: `http://${host}:${port}/geoserver/${workspace2}/wms`,
+                // url: `http://admin:geoserver@${host}:8082/geoserver/${workspace2}/wms`,
                 params: {
                   LAYERS: layerParams,
                   VERSION: "1.1.1",
                 },
                 ratio: 1,
                 serverType: "geoserver",
+                crossOrigin: "anonymous",
               }),
               visible: true,
               title: layerTitle2,
@@ -225,7 +248,7 @@ const zoomExtentBtn = document.getElementById("zoom-extent");
 zoomExtentBtn.addEventListener("click", function () {
   map
     .getView()
-    .fit([2064411.259926, 4774562.534805, 2399511.191928, 5332247.093174], {
+    .fit([2064411.259926, 4774562.53480825, 2399511.191928, 5332247.093174], {
       padding: [10, 10, 10, 10], // Optional padding around the extent
       maxZoom: 18, // Optional maximum zoom level
     });
@@ -399,7 +422,7 @@ const albBorders = new Tile({
       VERSION: "1.1.0",
     },
   }),
-  visible: false,
+  visible: true,
   title: "Kufi Shteteror",
   information: "Kufiri i tokësor i republikës së Shqipërisë",
   displayInLayerSwitcher: true,
@@ -413,7 +436,7 @@ const albRegions = new Tile({
       VERSION: "1.1.0",
     },
   }),
-  visible: false,
+  visible: true,
   title: "Qark",
   information: "Kufiri i tokësor i republikës së Shqipërisë",
   displayInLayerSwitcher: true,
@@ -477,7 +500,7 @@ const roadsAdr = new Tile({
 });
 
 //EXTRA LAYER FOR CRUD
-const wfsLayerUrl = `http://${host}:8080/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=`;
+const wfsLayerUrl = `http://${host}:${port}/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=`;
 const wfsLayerUrlEnd = "&maxFeatures=50&outputFormat=application/json";
 
 let wfsVectorLayer, wfsVectorSource;
@@ -513,13 +536,16 @@ const addressSystem = new LayerGroup({
   displayInLayerSwitcher: true,
 });
 
+const center_4326 = [19.80835, 41.310824];
+const center_3857 = [2206185.65, 5060810.15];
+
 const map = new Map({
   target: "map",
   controls: defaults({ attribution: false }).extend(mapControls),
   layers: [baseLayerGroup, asigLayers, addressSystem],
   view: new View({
-    projection: "EPSG:3857",
-    center: [2206185.65, 5060810.15],
+    projection: wgs84Proj,
+    center: center_4326,
     zoom: 8,
     maxZoom: 20,
   }),
@@ -1111,6 +1137,67 @@ layerGroupsArray.forEach((layerGroup, index) => {
   hasVisibleSubLayer(layerGroup);
 });
 
+function logWMSLayerExtent(layerName) {
+  const getCapabilitiesUrl =
+    "http://localhost:8080/geoserver/roles_test/wms?SERVICE=WMS&REQUEST=GetCapabilities";
+
+  fetch(getCapabilitiesUrl)
+    .then((response) => response.text())
+    .then((text) => {
+      const parser = new WMSCapabilities();
+      const result = parser.read(text);
+
+      const layers = result.Capability.Layer.Layer;
+      const targetLayer = layers.find((l) => l.Name === layerName);
+      console.log(targetLayer);
+
+      if (!targetLayer) {
+        console.warn(`Layer "${layerName}" not found in WMS capabilities.`);
+        return;
+      }
+
+      console.log(`--- Layer: ${layerName} ---`);
+
+      if (targetLayer.BoundingBox && targetLayer.BoundingBox.length) {
+        targetLayer.BoundingBox.forEach((bbox) => {
+          const [minx, miny, maxx, maxy] = bbox.extent;
+          console.log(
+            `CRS: ${bbox.crs}\n` +
+              `  minx: ${minx}\n` +
+              `  miny: ${miny}\n` +
+              `  maxx: ${maxx}\n` +
+              `  maxy: ${maxy}`
+          );
+        });
+      } else {
+        console.log("No BoundingBox entries found.");
+      }
+
+      if (targetLayer.EX_GeographicBoundingBox) {
+        const geo = targetLayer.EX_GeographicBoundingBox;
+        if (geo && Array.isArray(geo)) {
+          const [west, south, east, north] = geo;
+
+          console.log(
+            `EX_GeographicBoundingBox:\n` +
+              `  west: ${west}\n` +
+              `  south: ${south}\n` +
+              `  east: ${east}\n` +
+              `  north: ${north}`
+          );
+          map.getView().fit([west, south, east, north], {
+            padding: [20, 20, 20, 20],
+            duration: 500,
+            maxZoom: 18,
+          });
+        }
+      }
+    })
+    .catch((error) => {
+      console.error("Error reading WMS capabilities:", error);
+    });
+}
+
 const layerSwitcher = new LayerSwitcher({
   displayInLayerSwitcher: displayInLayerSwitcher,
   trash: true,
@@ -1118,15 +1205,14 @@ const layerSwitcher = new LayerSwitcher({
   show_proress: true,
   mouseover: true,
   collapsed: false,
-  extent: false,
+  extent: true,
   noScroll: false,
-  onextent: (e) => {
-    console.log(e);
-  },
-  oninfo: (e) => {
-    alert(e.values_.information);
-  },
   selection: true,
+  oninfo: (e) => {
+    const fullLayerName = e.values_.source.getParams().LAYERS;
+    const layerNameOnly = fullLayerName.split(":").pop();
+    logWMSLayerExtent(layerNameOnly);
+  },
 });
 
 map.addControl(layerSwitcher);
@@ -1199,7 +1285,7 @@ function getInfo(event) {
         map.getView().getProjection(),
         { INFO_FORMAT: "application/json" }
       );
-
+    console.log(url);
     if (url) {
       fetch(url)
         .then(function (response) {
@@ -1662,7 +1748,7 @@ layerSelect.addEventListener("change", function () {
   const selectedLayer = layersArray[selectedIndex];
   const selectedLayerSource = selectedLayer.getSource();
   const layerParams = selectedLayerSource.getParams().LAYERS;
-  layerWFS = `http://${host}:8080/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json`;
+  layerWFS = `http://${host}:${port}/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json`;
   getFields();
   getAttributeValues();
   updateOperatorOptions();
@@ -1904,6 +1990,12 @@ const selectControl = new ol_control_Select({
 });
 
 layerSwitcher.on("select", (e) => {
+  const fullLayerName = e.layer.getSource().getParams().LAYERS; // e.g., 'roles_test:test_4326'
+  const layerNameOnly = fullLayerName.split(":").pop(); // e.g., 'test_4326'
+
+  console.log("Full WMS Layer Name:", fullLayerName);
+  console.log("Just Layer Name:", layerNameOnly);
+
   map.removeInteraction(draw);
   selectedLayer = e.layer;
   if (selectedLayer instanceof LayerGroup) {
@@ -1940,7 +2032,7 @@ layerSwitcher.on("select", (e) => {
     // const workspace = urlParts.pathname.split("/")[2];
 
     // Construct the URL for DescribeFeatureType request
-    const describeFeatureTypeUrl = `http://${host}:8080/geoserver/${workspace}/ows?service=WFS&version=1.1.0&request=DescribeFeatureType&typeName=${layerParam}`;
+    const describeFeatureTypeUrl = `http://${host}:${port}/geoserver/${workspace}/ows?service=WFS&version=1.1.0&request=DescribeFeatureType&typeName=${layerParam}`;
 
     // Make an AJAX request to GeoServer
     fetch(describeFeatureTypeUrl)
@@ -2016,7 +2108,7 @@ const manageLegendItems = (layer) => {
           style: new Style({
             image: new Icon({
               src: subLayer.getSource().getLegendUrl(),
-              // crossOrigin: "anonymous",
+              crossOrigin: "anonymous",
             }),
           }),
         };
@@ -2031,7 +2123,7 @@ const manageLegendItems = (layer) => {
         style: new Style({
           image: new Icon({
             src: layer.getSource().getLegendUrl(),
-            // crossOrigin: "anonymous",
+            crossOrigin: "anonymous",
           }),
         }),
       };
@@ -2104,7 +2196,7 @@ const selectLayer = () => {
     selectedLayerInChart = event.target.value;
 
     // Update the link based on the selected layer
-    link = `http://${host}:8080/geoserver/${workspaceName}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=${selectedLayerInChart}&maxFeatures=500&outputFormat=application/json`;
+    link = `http://${host}:${port}/geoserver/${workspaceName}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=${selectedLayerInChart}&maxFeatures=500&outputFormat=application/json`;
 
     // Generate chart and dropdowns for X-Axis and Y-Axis
     generateChart();
@@ -2436,7 +2528,7 @@ editLayerButton.addEventListener("click", (e) => {
   wfsVectorLayer = new VectorLayer({
     source: wfsVectorSource,
     title: layerTitle,
-    // crossOrigin: "anonymous",
+    crossOrigin: "anonymous",
     // opacity: 0,
     visible: true,
     displayInLayerSwitcher: true,
@@ -2674,7 +2766,7 @@ saveFeatureButton.addEventListener("click", () => {
     xmlns:test="http://www.openplans.org/test"
     xmlns:gml="http://www.opengis.net/gml"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd http://www.openplans.org http://${host}:8080/geoserver/wfs/DescribeFeatureType?typename=test:line">
+    xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd http://www.openplans.org http://${host}:${port}/geoserver/wfs/DescribeFeatureType?typename=test:line">
     <wfs:Insert>
       <${layerName}>
         <${workspace}:geom>
@@ -2707,7 +2799,7 @@ saveFeatureButton.addEventListener("click", () => {
     xmlns:test="http://www.openplans.org/test"
     xmlns:gml="http://www.opengis.net/gml"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd http://www.openplans.org http://${host}:8080/geoserver/wfs/DescribeFeatureType?typename=test:line">
+    xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd http://www.openplans.org http://${host}:${port}/geoserver/wfs/DescribeFeatureType?typename=test:line">
     <wfs:Insert>
       <${layerName}>
         <${workspace}:geom>
@@ -2733,7 +2825,7 @@ saveFeatureButton.addEventListener("click", () => {
       xmlns:test="http://www.openplans.org/test"
       xmlns:gml="http://www.opengis.net/gml"
       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-      xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd http://www.openplans.org http://${host}:8080/geoserver/wfs/DescribeFeatureType?typename=test:line">
+      xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd http://www.openplans.org http://${host}:${port}/geoserver/wfs/DescribeFeatureType?typename=test:line">
       <wfs:Insert>
         <${layerName}>
           <${workspace}:geom>
@@ -2843,7 +2935,7 @@ saveFeatureButton.addEventListener("click", () => {
   }
 
   // Send the WFS Transaction request to update the geometry
-  const url = `http://${host}:8080/geoserver/test/ows`;
+  const url = `http://${host}:${port}/geoserver/test/ows`;
 
   // Send the WFS Transaction request
   fetch(url, {
@@ -2897,7 +2989,7 @@ function saveFeaturesToLayer() {
 }
 
 function updatePropertyID(featureID) {
-  url = `http://${host}:8080/geoserver/test/ows`;
+  url = `http://${host}:${port}/geoserver/test/ows`;
   featureIDvalue = featureID;
   var updateBody = `
       <wfs:Transaction service="WFS" version="1.1.0"
@@ -2941,7 +3033,7 @@ function updatePropertyID(featureID) {
 // const createStaticStyle = document.getElementById("createStyles");
 // createStaticStyle.addEventListener("click", () => {
 //   // Step 1: Create the new style with a POST request
-//   fetch("http://localhost:8080/geoserver/rest/styles", {
+//   fetch("http://localhost:8082/geoserver/rest/styles", {
 //     method: "POST",
 //     headers: {
 //       "Content-Type": "application/xml",
@@ -2960,7 +3052,7 @@ function updatePropertyID(featureID) {
 //         console.log("Style metadata created successfully");
 //         // Step 2: Upload the SLD content for the newly created style
 //         return fetch(
-//           "http://localhost:8080/geoserver/rest/workspaces/finiq_ws/styles/polygon_rest.sld",
+//           "http://localhost:8082/geoserver/rest/workspaces/finiq_ws/styles/polygon_rest.sld",
 //           {
 //             method: "PUT",
 //             headers: {
@@ -3096,7 +3188,7 @@ function updatePropertyID(featureID) {
 //APPLY STYLE
 // document.getElementById("applyStyle").addEventListener("click", () => {
 //   // Step 1: Apply the style to the specific layer 'polygon' in the workspace 'test'
-//   fetch("http://localhost:8080/geoserver/rest/layers/test:polygon", {
+//   fetch("http://localhost:8082/geoserver/rest/layers/test:polygon", {
 //     method: "PUT",
 //     headers: {
 //       "Content-Type": "application/xml",
@@ -3308,7 +3400,7 @@ async function getFields2(layerIndex) {
   try {
     const selectedLayer = layersArray[layerIndex];
     const layerParams = selectedLayer.getSource().getParams().LAYERS;
-    const layerWFS = `http://${host}:8080/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json`;
+    const layerWFS = `http://${host}:${port}/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json`;
 
     const response = await fetch(layerWFS);
     const data = await response.json();
@@ -3380,7 +3472,7 @@ document.getElementById("search").addEventListener("click", async () => {
   // Construct the WFS request URL with the combined cql_filter
   const selectedLayer = layersArray[layerIndex];
   const layerParams = selectedLayer.getSource().getParams().LAYERS;
-  const layerWFS = `http://${host}:8080/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json&cql_filter=${cqlFilter}`;
+  const layerWFS = `http://${host}:${port}/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json&cql_filter=${cqlFilter}`;
 
   try {
     const response = await fetch(layerWFS);
@@ -3501,7 +3593,7 @@ attributeLayerSelect.addEventListener("change", (event) => {
 });
 function getSelectedLayerTable(selectedLayer) {
   const layerParams = selectedLayer.getSource().getParams().LAYERS;
-  const layerWFS = `http://${host}:8080/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json`;
+  const layerWFS = `http://${host}:${port}/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json`;
 
   async function fetchData() {
     try {
@@ -3704,13 +3796,13 @@ map.on("singleclick", function (evt) {
 });
 
 // OPTIONAL: Add a button to deactivate 'Select Feature' mode
-const deactivateSelectFeature = document.getElementById(
-  "deactivateSelectFeature"
-);
-deactivateSelectFeature.addEventListener("click", (e) => {
-  isSelectFeatureActive = false; // Reset flag when deactivating select feature
-  map.removeInteraction(selectSingleClick); // Remove the select interaction
-});
+// const deactivateSelectFeature = document.getElementById(
+//   "deactivateSelectFeature"
+// );
+// deactivateSelectFeature.addEventListener("click", (e) => {
+//   isSelectFeatureActive = false; // Reset flag when deactivating select feature
+//   map.removeInteraction(selectSingleClick); // Remove the select interaction
+// });
 
 function selectTableRow(featureData) {
   const tableHeaders = Array.from(
