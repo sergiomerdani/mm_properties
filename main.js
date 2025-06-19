@@ -544,8 +544,8 @@ const map = new Map({
   controls: defaults({ attribution: false }).extend(mapControls),
   layers: [baseLayerGroup, asigLayers, addressSystem],
   view: new View({
-    projection: wgs84Proj,
-    center: center_4326,
+    projection: "EPSG:3857",
+    center: center_3857,
     zoom: 8,
     maxZoom: 20,
   }),
@@ -1146,51 +1146,34 @@ function logWMSLayerExtent(layerName) {
     .then((text) => {
       const parser = new WMSCapabilities();
       const result = parser.read(text);
-
       const layers = result.Capability.Layer.Layer;
       const targetLayer = layers.find((l) => l.Name === layerName);
-      console.log(targetLayer);
 
       if (!targetLayer) {
         console.warn(`Layer "${layerName}" not found in WMS capabilities.`);
         return;
       }
 
-      console.log(`--- Layer: ${layerName} ---`);
-
       if (targetLayer.BoundingBox && targetLayer.BoundingBox.length) {
         targetLayer.BoundingBox.forEach((bbox) => {
-          const [minx, miny, maxx, maxy] = bbox.extent;
-          console.log(
-            `CRS: ${bbox.crs}\n` +
-              `  minx: ${minx}\n` +
-              `  miny: ${miny}\n` +
-              `  maxx: ${maxx}\n` +
-              `  maxy: ${maxy}`
-          );
+          if (bbox.crs === "EPSG:3857") {
+            const [minx, miny, maxx, maxy] = bbox.extent;
+            console.log(
+              `CRS: ${bbox.crs}\n` +
+                `  minx: ${minx}\n` +
+                `  miny: ${miny}\n` +
+                `  maxx: ${maxx}\n` +
+                `  maxy: ${maxy}`
+            );
+            map.getView().fit([minx, miny, maxx, maxy], {
+              padding: [20, 20, 20, 20],
+              duration: 500,
+              maxZoom: 18,
+            });
+          }
         });
       } else {
         console.log("No BoundingBox entries found.");
-      }
-
-      if (targetLayer.EX_GeographicBoundingBox) {
-        const geo = targetLayer.EX_GeographicBoundingBox;
-        if (geo && Array.isArray(geo)) {
-          const [west, south, east, north] = geo;
-
-          console.log(
-            `EX_GeographicBoundingBox:\n` +
-              `  west: ${west}\n` +
-              `  south: ${south}\n` +
-              `  east: ${east}\n` +
-              `  north: ${north}`
-          );
-          map.getView().fit([west, south, east, north], {
-            padding: [20, 20, 20, 20],
-            duration: 500,
-            maxZoom: 18,
-          });
-        }
       }
     })
     .catch((error) => {
@@ -1990,12 +1973,6 @@ const selectControl = new ol_control_Select({
 });
 
 layerSwitcher.on("select", (e) => {
-  const fullLayerName = e.layer.getSource().getParams().LAYERS; // e.g., 'roles_test:test_4326'
-  const layerNameOnly = fullLayerName.split(":").pop(); // e.g., 'test_4326'
-
-  console.log("Full WMS Layer Name:", fullLayerName);
-  console.log("Just Layer Name:", layerNameOnly);
-
   map.removeInteraction(draw);
   selectedLayer = e.layer;
   if (selectedLayer instanceof LayerGroup) {
@@ -2763,10 +2740,10 @@ saveFeatureButton.addEventListener("click", () => {
       console.log("Line Coordinates:", formattedCoordinates);
       body = `<wfs:Transaction service="WFS" version="1.1.0"
     xmlns:wfs="http://www.opengis.net/wfs"
-    xmlns:test="http://www.openplans.org/test"
+    xmlns:roles_test="http://www.openplans.org/roles_test"
     xmlns:gml="http://www.opengis.net/gml"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd http://www.openplans.org http://${host}:${port}/geoserver/wfs/DescribeFeatureType?typename=test:line">
+    xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd http://www.openplans.org http://${host}:${port}/geoserver/wfs/DescribeFeatureType?typename=roles_test:line">
     <wfs:Insert>
       <${layerName}>
         <${workspace}:geom>
@@ -2796,10 +2773,10 @@ saveFeatureButton.addEventListener("click", () => {
       console.log("Polygon Coordinates:", formattedCoordinates);
       body = `<wfs:Transaction service="WFS" version="1.1.0"
     xmlns:wfs="http://www.opengis.net/wfs"
-    xmlns:test="http://www.openplans.org/test"
+    xmlns:roles_test="http://www.openplans.org/roles_test"
     xmlns:gml="http://www.opengis.net/gml"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd http://www.openplans.org http://${host}:${port}/geoserver/wfs/DescribeFeatureType?typename=test:line">
+    xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd http://www.openplans.org http://${host}:${port}/geoserver/wfs/DescribeFeatureType?typename=roles_test:line">
     <wfs:Insert>
       <${layerName}>
         <${workspace}:geom>
@@ -2822,10 +2799,10 @@ saveFeatureButton.addEventListener("click", () => {
       console.log("Point Coordinates:", formattedCoordinates);
       body = `<wfs:Transaction service="WFS" version="1.1.0"
       xmlns:wfs="http://www.opengis.net/wfs"
-      xmlns:test="http://www.openplans.org/test"
+      xmlns:roles_test="http://www.openplans.org/roles_test"
       xmlns:gml="http://www.opengis.net/gml"
       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-      xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd http://www.openplans.org http://${host}:${port}/geoserver/wfs/DescribeFeatureType?typename=test:line">
+      xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd http://www.openplans.org http://${host}:${port}/geoserver/wfs/DescribeFeatureType?typename=roles_test:line">
       <wfs:Insert>
         <${layerName}>
           <${workspace}:geom>
@@ -2935,7 +2912,7 @@ saveFeatureButton.addEventListener("click", () => {
   }
 
   // Send the WFS Transaction request to update the geometry
-  const url = `http://${host}:${port}/geoserver/test/ows`;
+  const url = `http://${host}:${port}/geoserver/roles_test/ows`;
 
   // Send the WFS Transaction request
   fetch(url, {
@@ -2989,7 +2966,7 @@ function saveFeaturesToLayer() {
 }
 
 function updatePropertyID(featureID) {
-  url = `http://${host}:${port}/geoserver/test/ows`;
+  url = `http://${host}:${port}/geoserver/roles_test/ows`;
   featureIDvalue = featureID;
   var updateBody = `
       <wfs:Transaction service="WFS" version="1.1.0"
@@ -3028,189 +3005,6 @@ function updatePropertyID(featureID) {
       console.error("Error updating property ID:", error);
     });
 }
-
-//CREATE STYLE
-// const createStaticStyle = document.getElementById("createStyles");
-// createStaticStyle.addEventListener("click", () => {
-//   // Step 1: Create the new style with a POST request
-//   fetch("http://localhost:8082/geoserver/rest/styles", {
-//     method: "POST",
-//     headers: {
-//       "Content-Type": "application/xml",
-//       Authorization: "Basic " + btoa("admin:geoserver"), // Replace with your credentials
-//     },
-//     body: `
-//       <style>
-//         <name>polygon_rest</name>
-//         <filename>polygon_rest.sld</filename>
-//         <workspace>finiq_ws</workspace>
-//       </style>
-//     `,
-//   })
-//     .then((response) => {
-//       if (response.ok) {
-//         console.log("Style metadata created successfully");
-//         // Step 2: Upload the SLD content for the newly created style
-//         return fetch(
-//           "http://localhost:8082/geoserver/rest/workspaces/finiq_ws/styles/polygon_rest.sld",
-//           {
-//             method: "PUT",
-//             headers: {
-//               "Content-Type": "application/vnd.ogc.sld+xml",
-//               Authorization: "Basic " + btoa("admin:geoserver"),
-//             },
-//             body: `<?xml version="1.1" encoding="UTF-8"?>
-// <StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:ogc="http://www.opengis.net/ogc" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.1.0" xmlns:se="http://www.opengis.net/se" xsi:schemaLocation="http://www.opengis.net/sld http://schemas.opengis.net/sld/1.1.0/StyledLayerDescriptor.xsd" xmlns:xlink="http://www.w3.org/1999/xlink">
-//   <NamedLayer>
-//     <se:Name>polygon</se:Name>
-//     <UserStyle>
-//       <se:Name>polygon</se:Name>
-//       <se:FeatureTypeStyle>
-//         <se:Rule>
-//           <se:Name>false</se:Name>
-//           <se:Description>
-//             <se:Title>false</se:Title>
-//           </se:Description>
-//           <ogc:Filter xmlns:ogc="http://www.opengis.net/ogc">
-//             <ogc:PropertyIsEqualTo>
-//               <ogc:PropertyName>polygon_column</ogc:PropertyName>
-//               <ogc:Literal>false</ogc:Literal>
-//             </ogc:PropertyIsEqualTo>
-//           </ogc:Filter>
-//           <se:PolygonSymbolizer>
-//             <se:Fill>
-//               <se:SvgParameter name="fill">#b8e35c</se:SvgParameter>
-//               <se:SvgParameter name="fill-opacity">0.7</se:SvgParameter>
-//             </se:Fill>
-//             <se:Stroke>
-//               <se:SvgParameter name="stroke">#232323</se:SvgParameter>
-//               <se:SvgParameter name="stroke-opacity">0.7</se:SvgParameter>
-//               <se:SvgParameter name="stroke-width">1</se:SvgParameter>
-//               <se:SvgParameter name="stroke-linejoin">bevel</se:SvgParameter>
-//             </se:Stroke>
-//           </se:PolygonSymbolizer>
-//         </se:Rule>
-//         <se:Rule>
-//           <se:Name>true</se:Name>
-//           <se:Description>
-//             <se:Title>true</se:Title>
-//           </se:Description>
-//           <ogc:Filter xmlns:ogc="http://www.opengis.net/ogc">
-//             <ogc:PropertyIsEqualTo>
-//               <ogc:PropertyName>polygon_column</ogc:PropertyName>
-//               <ogc:Literal>true</ogc:Literal>
-//             </ogc:PropertyIsEqualTo>
-//           </ogc:Filter>
-//           <se:PolygonSymbolizer>
-//             <se:Fill>
-//               <se:SvgParameter name="fill">#2da3d5</se:SvgParameter>
-//               <se:SvgParameter name="fill-opacity">0.7</se:SvgParameter>
-//             </se:Fill>
-//             <se:Stroke>
-//               <se:SvgParameter name="stroke">#232323</se:SvgParameter>
-//               <se:SvgParameter name="stroke-opacity">0.7</se:SvgParameter>
-//               <se:SvgParameter name="stroke-width">1</se:SvgParameter>
-//               <se:SvgParameter name="stroke-linejoin">bevel</se:SvgParameter>
-//             </se:Stroke>
-//           </se:PolygonSymbolizer>
-//         </se:Rule>
-//         <se:Rule>
-//           <se:Name></se:Name>
-//           <se:Description>
-//             <se:Title>polygon_column is ''</se:Title>
-//           </se:Description>
-//           <ogc:Filter xmlns:ogc="http://www.opengis.net/ogc">
-//             <ogc:Or>
-//               <ogc:PropertyIsEqualTo>
-//                 <ogc:PropertyName>polygon_column</ogc:PropertyName>
-//                 <ogc:Literal></ogc:Literal>
-//               </ogc:PropertyIsEqualTo>
-//               <ogc:PropertyIsNull>
-//                 <ogc:PropertyName>polygon_column</ogc:PropertyName>
-//               </ogc:PropertyIsNull>
-//             </ogc:Or>
-//           </ogc:Filter>
-//           <se:PolygonSymbolizer>
-//             <se:Fill>
-//               <se:SvgParameter name="fill">#ed63c1</se:SvgParameter>
-//             </se:Fill>
-//             <se:Stroke>
-//               <se:SvgParameter name="stroke">#232323</se:SvgParameter>
-//               <se:SvgParameter name="stroke-width">1</se:SvgParameter>
-//               <se:SvgParameter name="stroke-linejoin">bevel</se:SvgParameter>
-//             </se:Stroke>
-//           </se:PolygonSymbolizer>
-//         </se:Rule>
-//         <se:Rule>
-//           <se:TextSymbolizer>
-//             <se:Label>
-//               <ogc:PropertyName>id</ogc:PropertyName>
-//             </se:Label>
-//             <se:Font>
-//               <se:SvgParameter name="font-family">Open Sans</se:SvgParameter>
-//               <se:SvgParameter name="font-size">13</se:SvgParameter>
-//             </se:Font>
-//             <se:LabelPlacement>
-//               <se:PointPlacement>
-//                 <se:AnchorPoint>
-//                   <se:AnchorPointX>0</se:AnchorPointX>
-//                   <se:AnchorPointY>0.5</se:AnchorPointY>
-//                 </se:AnchorPoint>
-//               </se:PointPlacement>
-//             </se:LabelPlacement>
-//             <se:Fill>
-//               <se:SvgParameter name="fill">#323232</se:SvgParameter>
-//             </se:Fill>
-//             <se:VendorOption name="maxDisplacement">1</se:VendorOption>
-//           </se:TextSymbolizer>
-//         </se:Rule>
-//       </se:FeatureTypeStyle>
-//     </UserStyle>
-//   </NamedLayer>
-// </StyledLayerDescriptor>
-// `,
-//           }
-//         );
-//       } else {
-//         throw new Error("Failed to create style metadata");
-//       }
-//     })
-//     .then((response) => {
-//       if (response.ok) {
-//         console.log("SLD style uploaded successfully");
-//       } else {
-//         console.error("Failed to upload SLD style", response.statusText);
-//       }
-//     })
-//     .catch((error) => console.error("Error:", error));
-// });
-
-//APPLY STYLE
-// document.getElementById("applyStyle").addEventListener("click", () => {
-//   // Step 1: Apply the style to the specific layer 'polygon' in the workspace 'test'
-//   fetch("http://localhost:8082/geoserver/rest/layers/test:polygon", {
-//     method: "PUT",
-//     headers: {
-//       "Content-Type": "application/xml",
-//       Authorization: "Basic " + btoa("admin:geoserver"), // Replace with your credentials
-//     },
-//     body: `
-//       <layer>
-//         <defaultStyle>
-//           <name>polygon_rest</name>
-//         </defaultStyle>
-//       </layer>
-//     `,
-//   })
-//     .then((response) => {
-//       if (response.ok) {
-//         console.log("Style applied to layer 'polygon' successfully");
-//       } else {
-//         console.error("Failed to apply style to layer", response.statusText);
-//       }
-//     })
-//     .catch((error) => console.error("Error:", error));
-// });
 
 //SELECT RECORD FROM FEATURE ON MAP
 // Add a click listener to the map to handle feature selection
