@@ -2938,6 +2938,73 @@ saveFeatureButton.addEventListener("click", () => {
     });
 });
 
+function updateGeoServerBoundingBox({
+  layerName = "aoi_wildfire_3857",
+  workspace = "roles_test",
+  datastore = "postgres",
+  username = "admin",
+  password = "geoserver",
+  nativeBoundingBox,
+}) {
+  if (!nativeBoundingBox) {
+    console.error("❌ nativeBoundingBox is required.");
+    return;
+  }
+
+  // EPSG:3857 to EPSG:4326 transform
+  const bottomLeft4326 = proj4("EPSG:3857", "EPSG:4326", [
+    nativeBoundingBox.minx,
+    nativeBoundingBox.miny,
+  ]);
+  const topRight4326 = proj4("EPSG:3857", "EPSG:4326", [
+    nativeBoundingBox.maxx,
+    nativeBoundingBox.maxy,
+  ]);
+
+  const latLonBoundingBox = {
+    minx: bottomLeft4326[0],
+    miny: bottomLeft4326[1],
+    maxx: topRight4326[0],
+    maxy: topRight4326[1],
+    crs: "EPSG:4326",
+  };
+
+  const payload = {
+    featureType: {
+      nativeBoundingBox: {
+        ...nativeBoundingBox,
+        crs: "EPSG:3857",
+      },
+      latLonBoundingBox: latLonBoundingBox,
+    },
+  };
+
+  const url = `http://localhost:8080/geoserver/rest/workspaces/${workspace}/datastores/${datastore}/featuretypes/${layerName}`;
+
+  fetch(url, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Basic " + btoa(`${username}:${password}`),
+    },
+    body: JSON.stringify(payload),
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(
+          `Failed to update bounding box: ${response.statusText}`
+        );
+      }
+      return response.text();
+    })
+    .then(() => {
+      console.log(`✅ Bounding box updated for layer: ${layerName}`);
+    })
+    .catch((error) => {
+      console.error(`❌ Error updating bounding box:`, error);
+    });
+}
+
 function saveFeaturesToLayer() {
   const allFeatures = source.getFeatures();
   if (!allFeatures) {
@@ -2961,6 +3028,15 @@ function saveFeaturesToLayer() {
       updatePropertyID(numberPart);
     }
   });
+  updateGeoServerBoundingBox({
+    nativeBoundingBox: {
+      minx: 2173354.0471615903,
+      miny: 5061460.209498903,
+      maxx: 2205317.360259642,
+      maxy: 5092544.745249638,
+    },
+  });
+
   source.refresh();
   map.removeInteraction(draw);
 }
@@ -3588,15 +3664,6 @@ map.on("singleclick", function (evt) {
       .catch((error) => console.error("Error fetching feature info:", error));
   }
 });
-
-// OPTIONAL: Add a button to deactivate 'Select Feature' mode
-// const deactivateSelectFeature = document.getElementById(
-//   "deactivateSelectFeature"
-// );
-// deactivateSelectFeature.addEventListener("click", (e) => {
-//   isSelectFeatureActive = false; // Reset flag when deactivating select feature
-//   map.removeInteraction(selectSingleClick); // Remove the select interaction
-// });
 
 function selectTableRow(featureData) {
   const tableHeaders = Array.from(
