@@ -62,7 +62,6 @@ import ol_control_FeatureList from "ol-ext/control/FeatureList";
 import ol_control_SearchCoordinates from "ol-ext/control/SearchCoordinates";
 import ol_control_Select from "ol-ext/control/Select";
 import WMSCapabilities from "ol/format/WMSCapabilities";
-import { transformExtent } from "ol/proj";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -422,7 +421,7 @@ const albBorders = new Tile({
       VERSION: "1.1.0",
     },
   }),
-  visible: true,
+  visible: false,
   title: "Kufi Shteteror",
   information: "Kufiri i tokësor i republikës së Shqipërisë",
   displayInLayerSwitcher: true,
@@ -436,7 +435,7 @@ const albRegions = new Tile({
       VERSION: "1.1.0",
     },
   }),
-  visible: true,
+  visible: false,
   title: "Qark",
   information: "Kufiri i tokësor i republikës së Shqipërisë",
   displayInLayerSwitcher: true,
@@ -1975,6 +1974,8 @@ const selectControl = new ol_control_Select({
 layerSwitcher.on("select", (e) => {
   map.removeInteraction(draw);
   selectedLayer = e.layer;
+  //Share WMS Layer URL
+  console.log(selectedLayer.getSource().getUrl());
   if (selectedLayer instanceof LayerGroup) {
     //do nothing
   } else if (selectedLayer instanceof ImageLayer) {
@@ -3028,14 +3029,14 @@ function saveFeaturesToLayer() {
       updatePropertyID(numberPart);
     }
   });
-  updateGeoServerBoundingBox({
-    nativeBoundingBox: {
-      minx: 2173354.0471615903,
-      miny: 5061460.209498903,
-      maxx: 2205317.360259642,
-      maxy: 5092544.745249638,
-    },
-  });
+  // updateGeoServerBoundingBox({
+  //   nativeBoundingBox: {
+  //     minx: 2173354.0471615903,
+  //     miny: 5061460.209498903,
+  //     maxx: 2205317.360259642,
+  //     maxy: 5092544.745249638,
+  //   },
+  // });
 
   source.refresh();
   map.removeInteraction(draw);
@@ -3710,3 +3711,78 @@ function selectTableRow(featureData) {
     }
   });
 }
+
+//ADD NEW WMS LAYER ON MAP
+async function logWmsLayerNamesFlat(wmsCapUrl) {
+  const resp = await fetch(wmsCapUrl);
+  const text = await resp.text();
+  const caps = new WMSCapabilities().read(text);
+  caps.Capability.Layer.Layer.forEach((l) => console.log(l.Name));
+}
+
+logWmsLayerNamesFlat(
+  "https://geoportal.asig.gov.al/service/adresar/wms?request=GetCapabilities"
+);
+
+const newWMSLayer = new Tile({
+  source: new TileWMS({
+    url: "https://geoportal.asig.gov.al/service/qttb/wms?request=GetCapabilities",
+    params: {
+      LAYERS: "perdorimi_tokes_zone_2020",
+      VERSION: "1.1.0",
+    },
+  }),
+  visible: true,
+  title: "perdorimi_tokes_zone_2020",
+  information: "Duhet automatizuar",
+  displayInLayerSwitcher: true,
+});
+
+map.addLayer(newWMSLayer);
+
+//ADD NEW WMTS LAYER ON MAP
+fetch("https://geoportal.asig.gov.al/service/wmts?request=getCapabilities")
+  .then(function (response) {
+    return response.text();
+  })
+  .then(function (text) {
+    var result = wmts_parser.read(text);
+    result.Contents.Layer.forEach((layer) => {
+      return layer.Identifier;
+    });
+
+    var newWMTSLayer = optionsFromCapabilities(result, {
+      layer: "akpt_plane_kombetare:Infrastruktura_e_energjise",
+      matrixSet: "EPSG:6870",
+    });
+
+    const selectedWMTS = new Tile({
+      name: "Ortofoto 2015 20cm",
+      shortName: "2015 20cm",
+      visible: false,
+      source: new WMTS(newWMTSLayer),
+      baseLayer: false,
+      displayInLayerSwitcher: true,
+    });
+
+    map.addLayer(selectedWMTS);
+  })
+
+  .catch(function (error) {
+    // Handle errors if necessary
+  });
+
+async function getWmtsLayerList(wmtsCapUrl) {
+  const resp = await fetch(wmtsCapUrl);
+  const text = await resp.text();
+  const caps = new WMTSCapabilities().read(text);
+  // caps.Contents.Layer is an array of layer objects
+
+  caps.Contents.Layer.forEach((layer) => {
+    return layer.Identifier;
+  });
+}
+
+getWmtsLayerList(
+  "https://geoportal.asig.gov.al/service/wmts?request=getCapabilities"
+);
