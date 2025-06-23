@@ -1497,46 +1497,97 @@ getXYCoordsBtn.addEventListener("click", function () {
   map.on("click", getXYClickListener);
 });
 
-function calculateScale() {
-  const view = map.getView();
+//EXACT SCALE VALUES
 
-  const mmPerInch = 25.4; // 1 inch = 25.4 mm
-  const mmPerPixel = 0.2645833333; // 1 pixel = 0.2645833333 mm (96 DPI)
-  const inchesPerMeter = 39.37007874015748;
-  const dpi = mmPerInch / mmPerPixel;
+// function calculateScale() {
+//   const view = map.getView();
+
+//   const mmPerInch = 25.4; // 1 inch = 25.4 mm
+//   const mmPerPixel = 0.2645833333; // 1 pixel = 0.2645833333 mm (96 DPI)
+//   const inchesPerMeter = 39.37007874015748;
+//   const dpi = mmPerInch / mmPerPixel;
+//   const metersPerUnit = view.getProjection().getMetersPerUnit();
+//   const resolution = view.getResolution();
+//   const center = view.getCenter();
+//   const projection = view.getProjection();
+//   const meterPerMapUnit = projection.getMetersPerUnit();
+//   const mapWidth = map.getTargetElement().clientWidth;
+//   const mapWidthMeters = resolution * mapWidth * meterPerMapUnit;
+//   const scale = resolution * meterPerMapUnit * inchesPerMeter * dpi;
+//   const scaleInput = document.getElementById("scaleInput");
+//   scaleInput.value = "1:" + scale.toFixed(0);
+// }
+
+// function setMapScale() {
+//   const inputElement = document.getElementById("scaleInput");
+//   const scaleValue = inputElement.value.trim();
+
+//   const scaleRegex = /^1:(\d+)$/;
+//   const scaleMatch = scaleValue.match(scaleRegex);
+
+//   if (scaleMatch) {
+//     const scaleNumber = parseInt(scaleMatch[1]);
+//     const projection = map.getView().getProjection();
+//     const meterPerMapUnit = projection.getMetersPerUnit();
+//     const view = map.getView();
+//     const mmPerInch = 25.4; // 1 inch = 25.4 mm
+//     const mmPerPixel = 0.2645833333; // 1 pixel = 0.2645833333 mm (96 DPI)
+//     const inchesPerMeter = 39.37007874015748;
+//     const dpi = mmPerInch / mmPerPixel;
+//     const resolution = scaleNumber / (inchesPerMeter * dpi * meterPerMapUnit);
+//     view.setResolution(resolution);
+//   } else {
+//     console.error("Invalid scale format. Please use the format '1:xxxxx'.");
+//   }
+// }
+
+//GEOSERVER VALUES
+
+// —————————————————————————————————————————————————————————————
+// Converts an OL resolution → GeoServer scale‐denominator
+function resolutionToGeoServerScale(resolution, view) {
+  const mmPerInch = 25.4; // mm in an inch
+  const mmPerPixel = 0.28; // GeoServer: 0.28 mm per pixel
+  const dpi = mmPerInch / mmPerPixel; // ≈ 90.714 dpi
+  const inchesPerMeter = 39.37007874015748; // inches in a meter
   const metersPerUnit = view.getProjection().getMetersPerUnit();
-  const resolution = view.getResolution();
-  const center = view.getCenter();
-  const projection = view.getProjection();
-  const meterPerMapUnit = projection.getMetersPerUnit();
-  const mapWidth = map.getTargetElement().clientWidth;
-  const mapWidthMeters = resolution * mapWidth * meterPerMapUnit;
-  const scale = resolution * meterPerMapUnit * inchesPerMeter * dpi;
-  const scaleInput = document.getElementById("scaleInput");
-  scaleInput.value = "1:" + scale.toFixed(0);
+
+  return resolution * metersPerUnit * inchesPerMeter * dpi;
 }
 
+// Converts a GeoServer scale‐denominator → OL resolution
+function geoServerScaleToResolution(scaleDenominator, view) {
+  const mmPerInch = 25.4;
+  const mmPerPixel = 0.28;
+  const dpi = mmPerInch / mmPerPixel;
+  const inchesPerMeter = 39.37007874015748;
+  const metersPerUnit = view.getProjection().getMetersPerUnit();
+
+  return scaleDenominator / (metersPerUnit * inchesPerMeter * dpi);
+}
+
+// —————————————————————————————————————————————————————————————
+// Write the current GeoServer‐aligned scale into the input
+function calculateScale() {
+  const view = map.getView();
+  const resolution = view.getResolution();
+  const scaleDen = resolutionToGeoServerScale(resolution, view);
+  document.getElementById("scaleInput").value = "1:" + Math.round(scaleDen);
+}
+
+// Read “1:xxxxx” and set the view to the exact GeoServer resolution
 function setMapScale() {
-  const inputElement = document.getElementById("scaleInput");
-  const scaleValue = inputElement.value.trim();
-
-  const scaleRegex = /^1:(\d+)$/;
-  const scaleMatch = scaleValue.match(scaleRegex);
-
-  if (scaleMatch) {
-    const scaleNumber = parseInt(scaleMatch[1]);
-    const projection = map.getView().getProjection();
-    const meterPerMapUnit = projection.getMetersPerUnit();
-    const view = map.getView();
-    const mmPerInch = 25.4; // 1 inch = 25.4 mm
-    const mmPerPixel = 0.2645833333; // 1 pixel = 0.2645833333 mm (96 DPI)
-    const inchesPerMeter = 39.37007874015748;
-    const dpi = mmPerInch / mmPerPixel;
-    const resolution = scaleNumber / (inchesPerMeter * dpi * meterPerMapUnit);
-    view.setResolution(resolution);
-  } else {
-    console.error("Invalid scale format. Please use the format '1:xxxxx'.");
+  const raw = document.getElementById("scaleInput").value.trim();
+  const m = raw.match(/^1:(\d+(?:\.\d+)?)$/);
+  if (!m) {
+    console.error("Invalid scale format. Use 1:12345");
+    return;
   }
+
+  const scaleDen = parseFloat(m[1]);
+  const view = map.getView();
+  const res = geoServerScaleToResolution(scaleDen, view);
+  view.setResolution(res);
 }
 
 // Add event listener to the input field to set the map scale
@@ -3792,9 +3843,75 @@ getWmtsLayerList(
 
 // Given a scale denominator (e.g. 50000 for 1:50000),
 // return the OL resolution in map‐units/pixel.
+// function scaleToResolution(scaleDenominator, view) {
+//   const mmPerInch = 25.4; // 1 inch = 25.4 mm
+//   const mmPerPixel = 0.2645833333; // 1 pixel = 0.2645833333 mm (96 DPI)
+//   const inchesPerMeter = 39.37007874015748;
+//   const dpi = mmPerInch / mmPerPixel;
+//   const metersPerUnit = view.getProjection().getMetersPerUnit();
+//   console.log(
+//     "Dpi:",
+//     dpi,
+//     "Meters per unit:",
+//     metersPerUnit * inchesPerMeter * dpi
+//   );
+
+//   return scaleDenominator / (metersPerUnit * inchesPerMeter * dpi);
+// }
+
+// const view2 = map.getView();
+// console.log(view2);
+
+// const pixelSize = 0.0002645833333; // 1 pixel = 0.0002645833333 m (assuming 96 DPI, 1 pixel = 0.2645833333 mm)
+
+// // your desired range
+// const maxScaleDen = 500000; // 1:500k  = furthest out → largest resolution
+// const minScaleDen = 50000; // 1:50k   = closest in  → smallest resolution
+
+// const maxRes = scaleToResolution(maxScaleDen, view2); // the value is each pixel is X meter on the ground
+// const minRes = scaleToResolution(minScaleDen, view2); // the value is each pixel is X meter on the ground
+
+// const testWMSZoom = new ImageLayer({
+//   source: new ImageWMS({
+//     url: `http://${host}:${port}/geoserver/roles_test/wms`,
+//     params: {
+//       LAYERS: "roles_test:aoi_wildfire_3857",
+//       VERSION: "1.1.1",
+//     },
+//     ratio: 1,
+//     serverType: "geoserver",
+//     crossOrigin: "anonymous",
+//   }),
+//   visible: true,
+//   title: "aoi_wildfire_3857",
+//   maxResolution: maxRes,
+//   minResolution: minRes,
+//   information: "Kufiri i tokësor i republikës së Shqipërisë",
+//   displayInLayerSwitcher: true,
+// });
+
+// console.log(testWMSZoom);
+
+// // map.addLayer(testWMSZoom);
+
+// map.getView().on("change:resolution", () => {
+//   const res = view.getResolution(); // m/px
+//   console.log("Current resolution:", res);
+
+//   const scale = res / pixelSize; // unitless denom
+//   console.log("Current scale:", scale);
+
+//   const isOn = res >= minRes && res <= maxRes;
+//   console.log(
+//     `Resolution: ${res.toFixed(2)} m/px`,
+//     `Scale: 1:${Math.round(scale)}`,
+//     `Visible: ${isOn}`
+//   );
+// });
+
 function scaleToResolution(scaleDenominator, view) {
   const mmPerInch = 25.4; // 1 inch = 25.4 mm
-  const mmPerPixel = 0.2645833333; // 1 pixel = 0.2645833333 mm (96 DPI)
+  const mmPerPixel = 0.28; // 1 pixel = 0.2645833333 mm (96 DPI)
   const inchesPerMeter = 39.37007874015748;
   const dpi = mmPerInch / mmPerPixel;
   const metersPerUnit = view.getProjection().getMetersPerUnit();
@@ -3811,7 +3928,7 @@ function scaleToResolution(scaleDenominator, view) {
 const view2 = map.getView();
 console.log(view2);
 
-const pixelSize = 0.0002645833333; // 1 pixel = 0.0002645833333 m (assuming 96 DPI, 1 pixel = 0.2645833333 mm)
+const pixelSize = 0.00028; // 1 pixel = 0.0002645833333 m (assuming 96 DPI, 1 pixel = 0.2645833333 mm)
 
 // your desired range
 const maxScaleDen = 500000; // 1:500k  = furthest out → largest resolution
