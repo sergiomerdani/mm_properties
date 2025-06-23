@@ -226,13 +226,11 @@ fetch(apiUrl, {
           });
         })
         .catch((error) => {
-          // Handle errors
           console.error("There was a problem with the fetch operation:", error);
         });
     });
   })
   .catch((error) => {
-    // Handle errors
     console.error("There was a problem with the fetch operation:", error);
   });
 
@@ -3717,7 +3715,7 @@ async function logWmsLayerNamesFlat(wmsCapUrl) {
   const resp = await fetch(wmsCapUrl);
   const text = await resp.text();
   const caps = new WMSCapabilities().read(text);
-  caps.Capability.Layer.Layer.forEach((l) => console.log(l.Name));
+  caps.Capability.Layer.Layer.forEach((l) => l.Name);
 }
 
 logWmsLayerNamesFlat(
@@ -3732,7 +3730,7 @@ const newWMSLayer = new Tile({
       VERSION: "1.1.0",
     },
   }),
-  visible: true,
+  visible: false,
   title: "perdorimi_tokes_zone_2020",
   information: "Duhet automatizuar",
   displayInLayerSwitcher: true,
@@ -3757,7 +3755,7 @@ fetch("https://geoportal.asig.gov.al/service/wmts?request=getCapabilities")
     });
 
     const selectedWMTS = new Tile({
-      name: "Ortofoto 2015 20cm",
+      name: "akpt_plane_kombetare:Infrastruktura_e_energjise",
       shortName: "2015 20cm",
       visible: false,
       source: new WMTS(newWMTSLayer),
@@ -3786,3 +3784,59 @@ async function getWmtsLayerList(wmtsCapUrl) {
 getWmtsLayerList(
   "https://geoportal.asig.gov.al/service/wmts?request=getCapabilities"
 );
+
+//GET LAYER VISIBILITY AT CURRENT SCALE (TEMPORARILY)
+
+// Given a scale denominator (e.g. 50000 for 1:50000),
+// return the OL resolution in map‐units/pixel.
+function scaleToResolution(scaleDenominator, view) {
+  const dpi = 25.4 / 0.28; // 0.28 mm per pixel
+  const metersPerUnit = view.getProjection().getMetersPerUnit();
+  const inchesPerMeter = 39.3701;
+  return scaleDenominator / (metersPerUnit * inchesPerMeter * dpi);
+}
+
+const view2 = map.getView();
+const pixelSize = 0.000265;
+
+// your desired range
+const maxScaleDen = 500000; // 1:250k  = furthest out → largest resolution
+const minScaleDen = 50000; // 1:50k   = closest in  → smallest resolution
+
+const maxRes = scaleToResolution(maxScaleDen, view2);
+const minRes = scaleToResolution(minScaleDen, view2);
+
+const testWMSZoom = new ImageLayer({
+  source: new ImageWMS({
+    url: `http://${host}:${port}/geoserver/roles_test/wms`,
+    params: {
+      LAYERS: "roles_test:aoi_wildfire_3857",
+      VERSION: "1.1.1",
+    },
+    ratio: 1,
+    serverType: "geoserver",
+    crossOrigin: "anonymous",
+  }),
+  visible: true,
+  title: "aoi_wildfire_3857",
+  maxResolution: maxRes,
+  minResolution: minRes,
+  information: "Kufiri i tokësor i republikës së Shqipërisë",
+  displayInLayerSwitcher: true,
+});
+
+console.log(testWMSZoom);
+
+map.addLayer(testWMSZoom);
+
+map.getView().on("change:resolution", () => {
+  const res = view.getResolution(); // m/px
+  const scale = res / pixelSize; // unitless denom
+  const isOn = res >= minRes && res <= maxRes;
+
+  console.log(
+    `Resolution: ${res.toFixed(2)} m/px`,
+    `Scale: 1:${Math.round(scale)}`,
+    `Visible: ${isOn}`
+  );
+});
