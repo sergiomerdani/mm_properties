@@ -1500,17 +1500,18 @@ getXYCoordsBtn.addEventListener("click", function () {
 function calculateScale() {
   const view = map.getView();
 
+  const mmPerInch = 25.4; // 1 inch = 25.4 mm
+  const mmPerPixel = 0.2645833333; // 1 pixel = 0.2645833333 mm (96 DPI)
+  const inchesPerMeter = 39.37007874015748;
+  const dpi = mmPerInch / mmPerPixel;
+  const metersPerUnit = view.getProjection().getMetersPerUnit();
   const resolution = view.getResolution();
   const center = view.getCenter();
   const projection = view.getProjection();
   const meterPerMapUnit = projection.getMetersPerUnit();
   const mapWidth = map.getTargetElement().clientWidth;
   const mapWidthMeters = resolution * mapWidth * meterPerMapUnit;
-
-  const dpi = 96;
-  const inchesPerMeter = 39.3701;
   const scale = resolution * meterPerMapUnit * inchesPerMeter * dpi;
-
   const scaleInput = document.getElementById("scaleInput");
   scaleInput.value = "1:" + scale.toFixed(0);
 }
@@ -1527,8 +1528,10 @@ function setMapScale() {
     const projection = map.getView().getProjection();
     const meterPerMapUnit = projection.getMetersPerUnit();
     const view = map.getView();
-    const inchesPerMeter = 39.3701;
-    const dpi = 96;
+    const mmPerInch = 25.4; // 1 inch = 25.4 mm
+    const mmPerPixel = 0.2645833333; // 1 pixel = 0.2645833333 mm (96 DPI)
+    const inchesPerMeter = 39.37007874015748;
+    const dpi = mmPerInch / mmPerPixel;
     const resolution = scaleNumber / (inchesPerMeter * dpi * meterPerMapUnit);
     view.setResolution(resolution);
   } else {
@@ -3792,10 +3795,15 @@ getWmtsLayerList(
 function scaleToResolution(scaleDenominator, view) {
   const mmPerInch = 25.4; // 1 inch = 25.4 mm
   const mmPerPixel = 0.2645833333; // 1 pixel = 0.2645833333 mm (96 DPI)
-  const inchesPerMeter = 39.3701;
+  const inchesPerMeter = 39.37007874015748;
   const dpi = mmPerInch / mmPerPixel;
   const metersPerUnit = view.getProjection().getMetersPerUnit();
-  console.log(metersPerUnit * inchesPerMeter * dpi);
+  console.log(
+    "Dpi:",
+    dpi,
+    "Meters per unit:",
+    metersPerUnit * inchesPerMeter * dpi
+  );
 
   return scaleDenominator / (metersPerUnit * inchesPerMeter * dpi);
 }
@@ -3833,7 +3841,7 @@ const testWMSZoom = new ImageLayer({
 
 console.log(testWMSZoom);
 
-map.addLayer(testWMSZoom);
+// map.addLayer(testWMSZoom);
 
 map.getView().on("change:resolution", () => {
   const res = view.getResolution(); // m/px
