@@ -3790,21 +3790,27 @@ getWmtsLayerList(
 // Given a scale denominator (e.g. 50000 for 1:50000),
 // return the OL resolution in map‐units/pixel.
 function scaleToResolution(scaleDenominator, view) {
-  const dpi = 25.4 / 0.28; // 0.28 mm per pixel
-  const metersPerUnit = view.getProjection().getMetersPerUnit();
+  const mmPerInch = 25.4; // 1 inch = 25.4 mm
+  const mmPerPixel = 0.2645833333; // 1 pixel = 0.2645833333 mm (96 DPI)
   const inchesPerMeter = 39.3701;
+  const dpi = mmPerInch / mmPerPixel;
+  const metersPerUnit = view.getProjection().getMetersPerUnit();
+  console.log(metersPerUnit * inchesPerMeter * dpi);
+
   return scaleDenominator / (metersPerUnit * inchesPerMeter * dpi);
 }
 
 const view2 = map.getView();
-const pixelSize = 0.000265;
+console.log(view2);
+
+const pixelSize = 0.0002645833333; // 1 pixel = 0.0002645833333 m (assuming 96 DPI, 1 pixel = 0.2645833333 mm)
 
 // your desired range
-const maxScaleDen = 500000; // 1:250k  = furthest out → largest resolution
+const maxScaleDen = 500000; // 1:500k  = furthest out → largest resolution
 const minScaleDen = 50000; // 1:50k   = closest in  → smallest resolution
 
-const maxRes = scaleToResolution(maxScaleDen, view2);
-const minRes = scaleToResolution(minScaleDen, view2);
+const maxRes = scaleToResolution(maxScaleDen, view2); // the value is each pixel is X meter on the ground
+const minRes = scaleToResolution(minScaleDen, view2); // the value is each pixel is X meter on the ground
 
 const testWMSZoom = new ImageLayer({
   source: new ImageWMS({
@@ -3831,9 +3837,12 @@ map.addLayer(testWMSZoom);
 
 map.getView().on("change:resolution", () => {
   const res = view.getResolution(); // m/px
-  const scale = res / pixelSize; // unitless denom
-  const isOn = res >= minRes && res <= maxRes;
+  console.log("Current resolution:", res);
 
+  const scale = res / pixelSize; // unitless denom
+  console.log("Current scale:", scale);
+
+  const isOn = res >= minRes && res <= maxRes;
   console.log(
     `Resolution: ${res.toFixed(2)} m/px`,
     `Scale: 1:${Math.round(scale)}`,
