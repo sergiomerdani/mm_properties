@@ -1444,32 +1444,29 @@ function decimalToDMS(decimal) {
 }
 
 function getXY(event) {
-  const krgjshCoords = event.coordinate;
-  // Convert the clicked coordinate to the desired projection (e.g., EPSG:4326)
-  const wgs84 = "EPSG:4326";
-  const utm34N = "EPSG:32634";
+  const mapCoords = event.coordinate;
+  const mapProj = map.getView().getProjection();
 
-  const transformedCoordinate = transform(
-    krgjshCoords,
-    map.getView().getProjection(),
-    wgs84
-  );
-  const latitudeDMS = decimalToDMS(transformedCoordinate[0]);
-  const longitudeDMS = decimalToDMS(transformedCoordinate[1]);
-  const transformedCoordinate2 = transform(
-    krgjshCoords,
-    map.getView().getProjection(),
-    utm34N
-  );
+  const krgjshCoords = transform(mapCoords, mapProj, "EPSG:6870");
+  const utm34NCoords = transform(mapCoords, mapProj, "EPSG:32634");
+  const wgs84Coords = transform(mapCoords, mapProj, "EPSG:4326");
 
+  //WGS84 Decimal
+  const [decimalLon, decimalLat] = wgs84Coords;
+  //DSM
+  const latitudeDMS = decimalToDMS(wgs84Coords[0]);
+  const longitudeDMS = decimalToDMS(wgs84Coords[1]);
+  //UTM Zone 34N
+
+  // Write out all four representations:
+  document.getElementById("decimalLon").textContent = decimalLon.toFixed(6);
+  document.getElementById("decimalLat").textContent = decimalLat.toFixed(6);
   document.getElementById("easting").textContent = krgjshCoords[0].toFixed(2);
   document.getElementById("northing").textContent = krgjshCoords[1].toFixed(2);
   document.getElementById("easting1").textContent = latitudeDMS;
   document.getElementById("northing1").textContent = longitudeDMS;
-  document.getElementById("easting2").textContent =
-    transformedCoordinate2[0].toFixed(2);
-  document.getElementById("northing2").textContent =
-    transformedCoordinate2[1].toFixed(2);
+  document.getElementById("easting2").textContent = utm34NCoords[0].toFixed(2);
+  document.getElementById("northing2").textContent = utm34NCoords[1].toFixed(2);
   // Show the modal
   coordsModal.style.display = "block";
   // });
@@ -3204,8 +3201,8 @@ function parseDMSPair(input) {
   return [lon, lat];
 }
 
-const testLat = "41°19′36.94″N";
-const testLon = "19°49′7.60″E";
+const testLat = "41°19′39.05″N";
+const testLon = "19°49′1.99″E";
 const testPair = `${testLat}, ${testLon}`;
 console.log("parseDMSPair(testPair):", parseDMSPair(testPair));
 
@@ -3218,10 +3215,8 @@ const searchCoordinates = new ol_control_SearchCoordinates({
   minLength: 4, // Minimum input length before triggering search
   placeholder: "Enter coordinates...", // Customize the placeholder text
 });
-
 // Add control to the map
 map.addControl(searchCoordinates);
-
 // Style for the point feature
 const pointStyle = new Style({
   image: new CircleStyle({
@@ -3237,10 +3232,8 @@ const gpsLayer = new VectorLayer({
   source: gpsSource,
   style: pointStyle,
 });
-
 // Add the vector layer to the map
 map.addLayer(gpsLayer);
-
 // Add an event listener for the "select" event
 searchCoordinates.on("select", function (event) {
   const coord = event.search.gps;
@@ -3257,15 +3250,11 @@ searchCoordinates.on("select", function (event) {
     geometry: new Point(transformedCoord),
   });
 
-  // Clear any existing features and add the new point to the vector source
   gpsSource.clear(); // Clear previous points
   gpsSource.addFeature(pointFeature); // Add the new point
-
   // Zoom to the coordinates
   map.getView().setCenter(transformedCoord);
   map.getView().setZoom(20); // Set a zoom level for the focused view
-
-  console.log("Zooming to coordinates:", transformedCoord); // Optional logging
 });
 
 // _______________________________________________________________________________
