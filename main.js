@@ -2027,7 +2027,7 @@ layerSwitcher.on("select", (e) => {
   map.removeInteraction(draw);
   selectedLayer = e.layer;
   //Share WMS Layer URL
-  console.log(selectedLayer.getSource().getUrl());
+  // console.log(selectedLayer.getSource().getUrl());
   if (selectedLayer instanceof LayerGroup) {
     //do nothing
   } else if (selectedLayer instanceof ImageLayer) {
@@ -3178,12 +3178,42 @@ function highlightFeature(feature) {
     }
   });
 }
+// _________________________________________________________________________________________________
+/**
+ * Parse a single DMS coordinate (e.g. "79°58′36″W") to signed decimal degrees.
+ */
+
+function parseDMS(dms) {
+  // Allow zero or more spaces between the parts:
+  const parts = dms.match(/(\d+)[°\s]*([0-9]+)[′']\s*([\d.]+)[″"]\s*([NSEW])/i);
+  if (!parts) throw new Error(`Invalid DMS: ${dms}`);
+  let [, deg, min, sec, dir] = parts;
+  let dd = Number(deg) + Number(min) / 60 + Number(sec) / 3600;
+  if (/[SW]/i.test(dir)) dd = -dd;
+  return dd;
+}
+
+/**
+ * Parse a full "lat lon" DMS string into [lon, lat].
+ * Expects something like "40°26′47″N, 79°58′36″W"
+ */
+function parseDMSPair(input) {
+  const [latStr, lonStr] = input.split(/\s*,\s*/);
+  const lat = parseDMS(latStr);
+  const lon = parseDMS(lonStr);
+  return [lon, lat];
+}
+
+const testLat = "41°19′36.94″N";
+const testLon = "19°49′7.60″E";
+const testPair = `${testLat}, ${testLon}`;
+console.log("parseDMSPair(testPair):", parseDMSPair(testPair));
 
 //OL-EXT SEARCH COORDINATES
 // Initialize the search control with custom options
 const searchCoordinates = new ol_control_SearchCoordinates({
   zoom: 14, // Set the default zoom level when coordinates are found
-  projection: proj32634, // Set your desired projection (e.g., EPSG:4326 for lat/long)
+  projection: wgs84Proj, // Set your desired projection (e.g., EPSG:4326 for lat/long)
   label: "Search Coordinates", // Optional: customize the label if needed
   minLength: 4, // Minimum input length before triggering search
   placeholder: "Enter coordinates...", // Customize the placeholder text
@@ -3220,7 +3250,7 @@ searchCoordinates.on("select", function (event) {
   const mapProjection = map.getView().getProjection();
   console.log(mapProjection);
 
-  const transformedCoord = transform(coord, proj32634, mapProjection); // Change EPSG:4326 to your desired input projection
+  const transformedCoord = transform(coord, wgs84Proj, mapProjection); // Change EPSG:4326 to your desired input projection
   console.log(transformedCoord);
 
   const pointFeature = new Feature({
@@ -3912,21 +3942,21 @@ getWmtsLayerList(
 function scaleToResolution(scaleDenominator, view) {
   const mmPerInch = 25.4; // 1 inch = 25.4 mm
   const mmPerPixel = 0.28; // 1 pixel = 0.2645833333 mm (96 DPI)
-  const inchesPerMeter = 39.37007874015748;
+  // const inchesPerMeter = 39.37007874015748;
+  const inchesPerMeter = 39.3701;
   const dpi = mmPerInch / mmPerPixel;
   const metersPerUnit = view.getProjection().getMetersPerUnit();
-  console.log(
-    "Dpi:",
-    dpi,
-    "Meters per unit:",
-    metersPerUnit * inchesPerMeter * dpi
-  );
+  // console.log(
+  //   "Dpi:",
+  //   dpi,
+  //   "Meters per unit:",
+  //   metersPerUnit * inchesPerMeter * dpi
+  // );
 
   return scaleDenominator / (metersPerUnit * inchesPerMeter * dpi);
 }
 
 const view2 = map.getView();
-console.log(view2);
 
 const pixelSize = 0.00028; // 1 pixel = 0.0002645833333 m (assuming 96 DPI, 1 pixel = 0.2645833333 mm)
 
@@ -3956,21 +3986,26 @@ const testWMSZoom = new ImageLayer({
   displayInLayerSwitcher: true,
 });
 
-console.log(testWMSZoom);
+// console.log(testWMSZoom);
 
 // map.addLayer(testWMSZoom);
 
 map.getView().on("change:resolution", () => {
   const res = view.getResolution(); // m/px
-  console.log("Current resolution:", res);
+  // console.log("Current resolution:", res);
 
   const scale = res / pixelSize; // unitless denom
-  console.log("Current scale:", scale);
+  // console.log("Current scale:", scale);
 
   const isOn = res >= minRes && res <= maxRes;
-  console.log(
-    `Resolution: ${res.toFixed(2)} m/px`,
-    `Scale: 1:${Math.round(scale)}`,
-    `Visible: ${isOn}`
-  );
+
+  // (140-40) (55) -> on
+  // (140-40) (32) -> off
+  // (140-40) (156) -> off
+
+  // console.log(
+  //   `Resolution: ${res.toFixed(2)} m/px`,
+  //   `Scale: 1:${Math.round(scale)}`,
+  //   `Visible: ${isOn}`
+  // );
 });
