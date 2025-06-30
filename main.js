@@ -1211,137 +1211,226 @@ layerSwitcherElement.style.right = "10px";
 //_____________________________________________________________________________________________
 // Display data from WMS Layer
 // identify button
-const getInfoBtn = document.getElementById("identify");
+// ——————————————————————————————
+//  CONFIG & DOM HOOKS
+// ——————————————————————————————
+const identifyBtn = document.getElementById("identify");
+const identifyModeSelect = document.getElementById("identifyMode");
+const container = document.querySelector(".form-container");
+const maxProperties = 10;
 
-// max number of properties to show per feature
-const maxPropertiesToShow = 10;
+// keep track of current mode ("all" or "top")
+let currentMode = null;
 
-// click → identify
-function getInfo(event) {
-  // 1) compute click coordinate
-  const coordinate = map.getCoordinateFromPixel(event.pixel);
-
-  // 2) gather all visible layers (starting from layerGroupsArray[2] on)
-  const visibleLayers = [];
-  for (let i = 2; i < layerGroupsArray.length; i++) {
-    const grp = layerGroupsArray[i];
-    const layers = grp
-      .getLayers()
-      .getArray()
-      .filter((l) => l.getVisible())
-      .reverse();
-    visibleLayers.push(...layers);
-  }
-  if (visibleLayers.length === 0) {
-    document.querySelector(".form-container").style.display = "none";
-    return;
-  }
-
-  // 3) clear the form container once
-  const container = document.querySelector(".form-container");
+// when you switch off identify, you may want to clear the form
+function clearResults() {
   container.innerHTML = "";
-
-  // 4) build an array of fetch-promises, one per layer
-  const requests = visibleLayers.map((layer) => {
-    const url = layer
-      .getSource()
-      .getFeatureInfoUrl(
-        coordinate,
-        map.getView().getResolution(),
-        map.getView().getProjection(),
-        { INFO_FORMAT: "application/json" }
-      );
-    if (!url) {
-      return Promise.resolve({ layer, features: [] });
-    }
-    return fetch(url)
-      .then((resp) => resp.json())
-      .then((json) => ({ layer, features: json.features || [] }))
-      .catch(() => ({ layer, features: [] }));
-  });
-
-  // 5) when *all* responses are back, flatten and render
-  Promise.all(requests).then((results) => {
-    // flatten into [{layer, feature}, …]
-    const hits = results.flatMap(({ layer, features }) =>
-      features.map((f) => ({ layer, feature: f }))
-    );
-
-    if (hits.length === 0) {
-      container.style.display = "none";
-      return;
-    }
-
-    // build one form-block per feature
-    hits.forEach(({ layer, feature }) => {
-      const props = feature.properties || {};
-
-      // outer wrapper
-      const formEl = document.createElement("div");
-      formEl.className = "form-container-el";
-
-      // header
-      const hdr = document.createElement("div");
-      hdr.className = "form-header";
-      hdr.innerHTML = `Layer: <b>${
-        layer.get("title") || layer.get("name")
-      }</b>`;
-      formEl.appendChild(hdr);
-      formEl.appendChild(document.createElement("hr"));
-
-      // properties grid
-      const labels = document.createElement("div");
-      const inputs = document.createElement("div");
-      labels.style.display = inputs.style.display = "flex";
-      labels.style.flexDirection = inputs.style.flexDirection = "column";
-
-      Object.keys(props)
-        .slice(0, maxPropertiesToShow)
-        .forEach((key) => {
-          const lbl = document.createElement("label");
-          lbl.textContent = key;
-          labels.appendChild(lbl);
-
-          const inp = document.createElement("input");
-          inp.readOnly = true;
-          inp.value = props[key];
-          inputs.appendChild(inp);
-        });
-
-      const wrapper = document.createElement("div");
-      wrapper.style.display = "flex";
-      wrapper.appendChild(labels);
-      wrapper.appendChild(inputs);
-      formEl.appendChild(wrapper);
-
-      container.appendChild(formEl);
-    });
-
-    container.style.display = "block";
-  });
+  container.style.display = "none";
 }
 
-// click listeners
-function getInfoClickListener(evt) {
-  getInfo(evt);
-}
-function getXYClickListener(evt) {
-  getXY(evt);
-} // assuming you already have getXY defined
+// ——————————————————————————————
+//  MODE SELECTION & MAP LISTENERS
+// ——————————————————————————————
 
-// wire up the identify button
-getInfoBtn.addEventListener("click", () => {
-  // disable any existing XY listener
+// 1) clicking the button toggles the dropdown
+identifyBtn.addEventListener("click", () => {
+  // hide any old form-results
+  clearResults();
+
+  // show/hide the select
+  identifyModeSelect.style.display =
+    identifyModeSelect.style.display === "block" ? "none" : "block";
+});
+
+// 2) when the user picks a mode…
+identifyModeSelect.addEventListener("change", () => {
+  currentMode = identifyModeSelect.value; // "all" or "top"
+  identifyModeSelect.style.display = "none"; // hide dropdown
+
+  // tear down any other map click handlers you had
   map.un("click", getXYClickListener);
-  // enable our identify listener
-  map.on("click", getInfoClickListener);
 
-  // remove any draw interactions or layers
+  // remove any drawing interactions or layers
   map.removeInteraction(drawPoly);
   map.removeInteraction(drawLine);
   map.removeLayer(drawnLineLayer);
   map.removeLayer(drawnPolygonLayer);
+
+  // attach our identify handler
+  map.on("click", getInfoClickListener);
 });
+
+// ——————————————————————————————
+//  IDENTIFY HANDLER
+// ——————————————————————————————
+
+function getInfoClickListener(evt) {
+  getInfo(evt);
+}
+
+let lastClickCoord = null;
+
+async function getInfo(evt) {
+  lastClickCoord = map.getCoordinateFromPixel(evt.pixel);
+
+  // build list of visible layers (starting at group index 2)
+  const visibleLayers = [];
+  for (let i = 2; i < layerGroupsArray.length; i++) {
+    visibleLayers.push(
+      ...layerGroupsArray[i]
+        .getLayers()
+        .getArray()
+        .filter((l) => l.getVisible())
+        .reverse()
+    );
+  }
+
+  if (!visibleLayers.length) {
+    clearResults();
+    return;
+  }
+
+  if (currentMode === "top") {
+    for (const layer of visibleLayers) {
+      const url = layer
+        .getSource()
+        .getFeatureInfoUrl(
+          lastClickCoord,
+          map.getView().getResolution(),
+          map.getView().getProjection(),
+          { INFO_FORMAT: "application/json" }
+        );
+      if (!url) continue;
+      try {
+        const json = await fetch(url).then((r) => r.json());
+        const feats = json.features || [];
+        if (feats.length > 0) {
+          // found the topmost layer that has features here:
+          container.innerHTML = "";
+          feats.forEach((f) => renderFeatureBlock({ layer, feature: f }));
+          container.style.display = "block";
+          return; // stop scanning further
+        }
+      } catch (_) {
+        // on error, just move to the next layer
+      }
+    }
+    // if we get here, no layers had features
+    clearResults();
+  } else {
+    // "all" mode: fire *all* requests in parallel
+    const promises = visibleLayers.map((layer) => {
+      const url = layer
+        .getSource()
+        .getFeatureInfoUrl(
+          lastClickCoord,
+          map.getView().getResolution(),
+          map.getView().getProjection(),
+          { INFO_FORMAT: "application/json" }
+        );
+      if (!url) return Promise.resolve({ layer, features: [] });
+      return fetch(url)
+        .then((r) => r.json())
+        .then((json) => ({ layer, features: json.features || [] }))
+        .catch(() => ({ layer, features: [] }));
+    });
+
+    // when *all* are done...
+    Promise.all(promises).then((results) => {
+      const hits = results.flatMap(({ layer, features }) =>
+        features.map((f) => ({ layer, feature: f }))
+      );
+
+      if (!hits.length) {
+        clearResults();
+        return;
+      }
+
+      // render all hits
+      container.innerHTML = "";
+      hits.forEach(renderFeatureBlock);
+      container.style.display = "block";
+    });
+  }
+}
+
+// helper to query one layer (for top-only mode)
+function queryLayer(layer) {
+  const coordinate =
+    lastClickCoord || map.getEventCoordinate(evt.originalEvent);
+  const url = layer
+    .getSource()
+    .getFeatureInfoUrl(
+      coordinate,
+      map.getView().getResolution(),
+      map.getView().getProjection(),
+      { INFO_FORMAT: "application/json" }
+    );
+  if (!url) {
+    clearResults();
+    return;
+  }
+  fetch(url)
+    .then((r) => r.json())
+    .then((json) => {
+      const feats = json.features || [];
+      if (!feats.length) {
+        clearResults();
+        return;
+      }
+      container.innerHTML = "";
+      feats.forEach((f) => renderFeatureBlock({ layer, feature: f }));
+      container.style.display = "block";
+    })
+    .catch(() => clearResults());
+}
+
+// builds one “form‐block” for a layer/feature
+function renderFeatureBlock({ layer, feature }) {
+  const props = feature.properties || {};
+
+  const formEl = document.createElement("div");
+  formEl.className = "form-container-el";
+
+  // header
+  const hdr = document.createElement("div");
+  hdr.className = "form-header";
+  hdr.innerHTML = `Layer: <b>${layer.get("title") || layer.get("name")}</b>`;
+  formEl.appendChild(hdr);
+  formEl.appendChild(document.createElement("hr"));
+
+  // properties
+  const labels = document.createElement("div");
+  const inputs = document.createElement("div");
+  labels.style.display = inputs.style.display = "flex";
+  labels.style.flexDirection = inputs.style.flexDirection = "column";
+
+  Object.keys(props)
+    .slice(0, maxProperties)
+    .forEach((key) => {
+      const lbl = document.createElement("label");
+      lbl.textContent = key;
+      labels.appendChild(lbl);
+
+      const inp = document.createElement("input");
+      inp.readOnly = true;
+      inp.value = props[key];
+      inputs.appendChild(inp);
+    });
+
+  const wrapper = document.createElement("div");
+  wrapper.style.display = "flex";
+  wrapper.append(labels, inputs);
+  formEl.appendChild(wrapper);
+
+  container.appendChild(formEl);
+}
+
+// assume you still have getXYClickListener defined elsewhere
+function getXYClickListener(evt) {
+  getXY(evt);
+}
+
 //_______________________________________________________________
 //MORE RIGHT/LEFT BUTTONS
 const rightBtn = document.getElementById("move-right");
