@@ -1210,53 +1210,39 @@ layerSwitcherElement.style.right = "10px";
 
 //_____________________________________________________________________________________________
 // Display data from WMS Layer
+// identify button
 const getInfoBtn = document.getElementById("identify");
 
+// max number of properties to show per feature
+const maxPropertiesToShow = 10;
+
+// click → identify
 function getInfo(event) {
-  // Get the clicked coordinate
-  const pixel = event.pixel;
-  var coordinate = map.getCoordinateFromPixel(pixel);
+  // 1) compute click coordinate
+  const coordinate = map.getCoordinateFromPixel(event.pixel);
 
-  // let visibleLayers;
-
-  // Function to read visible layers in the "Local Data" group
-  function readGroupLayers(grouplayers) {
-    // Get the layers of the "Local Data" layer group
-    const layers = grouplayers.getLayers().getArray();
-    const vlay = layers.filter((layer) => layer.getVisible()).reverse();
-    // Return an array of visible layers in reverse order (uppermost layer first)
-    return layers.filter((layer) => layer.getVisible()).reverse();
-  }
-
-  const maxPropertiesToShow = 10;
-
+  // 2) gather all visible layers (starting from layerGroupsArray[2] on)
   const visibleLayers = [];
-
-  // Iterate over layer groups starting from index 2
   for (let i = 2; i < layerGroupsArray.length; i++) {
-    // Read layers of the current group
-    const currentLayerGroup = readGroupLayers(layerGroupsArray[i]);
-
-    // Add layers to visibleLayers array
-    visibleLayers.push(...currentLayerGroup);
+    const grp = layerGroupsArray[i];
+    const layers = grp
+      .getLayers()
+      .getArray()
+      .filter((l) => l.getVisible())
+      .reverse();
+    visibleLayers.push(...layers);
   }
-
-  if (visibleLayers.length < 1) {
-    const formContainer = document.querySelector(".form-container");
-    formContainer.style.display = "none";
+  if (visibleLayers.length === 0) {
+    document.querySelector(".form-container").style.display = "none";
     return;
   }
 
-  // Function to get the title of a layer
-  function getLayerTitle(layer) {
-    // Get the title of the layer if it exists, otherwise return an empty string
-    return layer.get("title") || "";
-  }
+  // 3) clear the form container once
+  const container = document.querySelector(".form-container");
+  container.innerHTML = "";
 
-  // Helper function to get the features of a layer and show the form if features exist
-  // Assuming you have an array with image filenames
-
-  function getLayerFeatures(layer) {
+  // 4) build an array of fetch-promises, one per layer
+  const requests = visibleLayers.map((layer) => {
     const url = layer
       .getSource()
       .getFeatureInfoUrl(
@@ -1265,119 +1251,98 @@ function getInfo(event) {
         map.getView().getProjection(),
         { INFO_FORMAT: "application/json" }
       );
-    console.log(url);
-    if (url) {
-      fetch(url)
-        .then(function (response) {
-          return response.json();
-        })
-        .then(function (data) {
-          var features = data.features;
-
-          if (features && features.length > 0) {
-            features.forEach((feature, index) => {
-              var properties = feature.properties;
-
-              var formContainer = document.createElement("div");
-              formContainer.classList.add("form-container-el");
-
-              var headerElement = document.createElement("div");
-              headerElement.classList.add("form-header");
-              const layerTitle = getLayerTitle(layer);
-              if (layerTitle) {
-                headerElement.innerHTML = `Layer name: <b>${layerTitle}</b>`;
-              }
-              formContainer.appendChild(headerElement);
-
-              var hrElement = document.createElement("hr");
-              formContainer.appendChild(hrElement);
-
-              var propertiesToShow = Object.keys(properties).slice(
-                0,
-                maxPropertiesToShow
-              );
-
-              const contentWrapper = document.createElement("div");
-
-              const labelWrapper = document.createElement("div");
-              const inputWrapper = document.createElement("div");
-
-              propertiesToShow.forEach(function (prop) {
-                var labelElement = document.createElement("label");
-                labelElement.textContent = prop;
-                labelElement.style.paddingBottom = "7px";
-                labelElement.style.width = "auto";
-
-                var inputElement = document.createElement("input");
-                inputElement.setAttribute("readonly", "readonly");
-                inputElement.value = properties[prop];
-                inputElement.style.width = "auto";
-
-                var createBr = document.createElement("br");
-                labelWrapper.appendChild(labelElement);
-                inputWrapper.appendChild(inputElement);
-              });
-
-              contentWrapper.style.display = "flex";
-              labelWrapper.style.display = "flex";
-              labelWrapper.style.flexDirection = "column";
-              inputWrapper.style.display = "flex";
-              inputWrapper.style.flexDirection = "column";
-
-              contentWrapper.appendChild(labelWrapper);
-              contentWrapper.appendChild(inputWrapper);
-              // Check if the layer title is "shkshInstitucionet"
-
-              formContainer.appendChild(contentWrapper);
-
-              // Display images at the end only for "shkshInstitucionet" layer
-
-              const existingFormContainer =
-                document.querySelector(".form-container");
-              existingFormContainer.innerHTML = "";
-              existingFormContainer.appendChild(formContainer);
-              formContainer.style.display = "block";
-              existingFormContainer.style.display = "block";
-            });
-          } else {
-            const nextLayerIndex = visibleLayers.indexOf(layer) + 1;
-            if (nextLayerIndex < visibleLayers.length) {
-              getLayerFeatures(visibleLayers[nextLayerIndex]);
-            } else {
-              const formContainer = document.querySelector(".form-container");
-              formContainer.style.display = "none";
-            }
-          }
-        })
-        .catch(function (error) {
-          console.error("Error:", error);
-        });
+    if (!url) {
+      return Promise.resolve({ layer, features: [] });
     }
-  }
+    return fetch(url)
+      .then((resp) => resp.json())
+      .then((json) => ({ layer, features: json.features || [] }))
+      .catch(() => ({ layer, features: [] }));
+  });
 
-  // Process feature information for the uppermost layer if there are multiple visible layers
-  if (visibleLayers.length > 0) {
-    // Start by checking the uppermost layer for features
-    getLayerFeatures(visibleLayers[0]);
-  }
+  // 5) when *all* responses are back, flatten and render
+  Promise.all(requests).then((results) => {
+    // flatten into [{layer, feature}, …]
+    const hits = results.flatMap(({ layer, features }) =>
+      features.map((f) => ({ layer, feature: f }))
+    );
+
+    if (hits.length === 0) {
+      container.style.display = "none";
+      return;
+    }
+
+    // build one form-block per feature
+    hits.forEach(({ layer, feature }) => {
+      const props = feature.properties || {};
+
+      // outer wrapper
+      const formEl = document.createElement("div");
+      formEl.className = "form-container-el";
+
+      // header
+      const hdr = document.createElement("div");
+      hdr.className = "form-header";
+      hdr.innerHTML = `Layer: <b>${
+        layer.get("title") || layer.get("name")
+      }</b>`;
+      formEl.appendChild(hdr);
+      formEl.appendChild(document.createElement("hr"));
+
+      // properties grid
+      const labels = document.createElement("div");
+      const inputs = document.createElement("div");
+      labels.style.display = inputs.style.display = "flex";
+      labels.style.flexDirection = inputs.style.flexDirection = "column";
+
+      Object.keys(props)
+        .slice(0, maxPropertiesToShow)
+        .forEach((key) => {
+          const lbl = document.createElement("label");
+          lbl.textContent = key;
+          labels.appendChild(lbl);
+
+          const inp = document.createElement("input");
+          inp.readOnly = true;
+          inp.value = props[key];
+          inputs.appendChild(inp);
+        });
+
+      const wrapper = document.createElement("div");
+      wrapper.style.display = "flex";
+      wrapper.appendChild(labels);
+      wrapper.appendChild(inputs);
+      formEl.appendChild(wrapper);
+
+      container.appendChild(formEl);
+    });
+
+    container.style.display = "block";
+  });
 }
 
-function getInfoClickListener(event) {
-  getInfo(event);
+// click listeners
+function getInfoClickListener(evt) {
+  getInfo(evt);
 }
+function getXYClickListener(evt) {
+  getXY(evt);
+} // assuming you already have getXY defined
 
-function getXYClickListener(event) {
-  getXY(event);
-}
-getInfoBtn.addEventListener("click", function () {
+// wire up the identify button
+getInfoBtn.addEventListener("click", () => {
+  // disable any existing XY listener
   map.un("click", getXYClickListener);
+  // enable our identify listener
   map.on("click", getInfoClickListener);
+
+  // remove any draw interactions or layers
   map.removeInteraction(drawPoly);
   map.removeInteraction(drawLine);
   map.removeLayer(drawnLineLayer);
   map.removeLayer(drawnPolygonLayer);
 });
-
+//_______________________________________________________________
 //MORE RIGHT/LEFT BUTTONS
 const rightBtn = document.getElementById("move-right");
 const leftBtn = document.getElementById("move-left");
