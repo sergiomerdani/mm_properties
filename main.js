@@ -1319,6 +1319,11 @@ async function getInfo(evt) {
     clearResults();
   } else {
     // "all" mode: fire *all* requests in parallel
+    const params = {
+      INFO_FORMAT: "application/json",
+      FEATURE_COUNT: 10, // ← ask GeoServer to return up to 10 features
+    };
+    const featureCount = 10;
     const promises = visibleLayers.map((layer) => {
       const url = layer
         .getSource()
@@ -1326,7 +1331,7 @@ async function getInfo(evt) {
           lastClickCoord,
           map.getView().getResolution(),
           map.getView().getProjection(),
-          { INFO_FORMAT: "application/json" }
+          params
         );
       if (!url) return Promise.resolve({ layer, features: [] });
       return fetch(url)
