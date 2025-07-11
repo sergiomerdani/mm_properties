@@ -7,6 +7,10 @@
       type="image/x-icon"
       href="https://openlayers.org/favicon.ico"
     />
+    <link
+      rel="stylesheet"
+      href="/node_modules/bootstrap/dist/css/bootstrap.min.css"
+    />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script
       src="https://kit.fontawesome.com/ddf386aee4.js"
@@ -187,6 +191,58 @@
         </div>
       </div>
 
+      <!-- modal markup (paste anywhere in your page) -->
+      <div class="modal fade" id="uploadModal" tabindex="-1">
+        <div class="modal-dialog">
+          <form id="uploadForm" class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Upload Shapefile</h5>
+              <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="modal"
+              ></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label for="shpFile" class="form-label"
+                  >Zipped .shp/.shx/.dbf</label
+                >
+                <input
+                  class="form-control"
+                  type="file"
+                  id="shpFile"
+                  accept=".zip"
+                  required
+                />
+              </div>
+              <div class="mb-3">
+                <label for="layerName" class="form-label">Layer Name</label>
+                <input
+                  class="form-control"
+                  type="text"
+                  id="layerName"
+                  placeholder="my_new_layer"
+                  required
+                />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="submit" class="btn btn-primary">
+                Upload & Publish
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                data-bs-dismiss="modal"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
       <div id="attribute-table-container" hidden>
         <div id="layer-selector-container">
           <label for="attribute-layer-select">Select Layer:</label>
@@ -299,6 +355,7 @@
         </table>
       </div>
     </div>
+    <script src="/node_modules/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script type="module" src="./main.js"></script>
     <script src="node_modules/shpjs/dist/shp.min.js"></script>
   </body>

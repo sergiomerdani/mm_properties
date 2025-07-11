@@ -1,4 +1,6 @@
 import "./style.css";
+import "bootstrap/dist/css/bootstrap.min.css";
+import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import { Map, View } from "ol";
 import TileLayer from "ol/layer/Tile";
 import { OSM, BingMaps, Vector as VectorSource, XYZ } from "ol/source";
@@ -295,16 +297,16 @@ const mapControls = [
 ];
 
 // Bing Maps Basemap Layer
-const bingMaps = new TileLayer({
-  source: new BingMaps({
-    key: "AvHGkUYsgRR4sQJ1WmqJ879mN7gP-a59ExxkaD9KXDie-8nyYX4W9oSnG4ozmDXB",
-    imagerySet: "AerialWithLabelsOnDemand", //'Aerial','RoadOnDemand','CanvasGray','AerialWithLabelsOnDemand','Aerial','Birdseye','BirdseyeV2WithLabels','CanvasDark','Road','CanvasGray'
-  }),
-  visible: false,
-  title: "BingMaps",
-  baseLayer: true,
-  displayInLayerSwitcher: true,
-});
+// const bingMaps = new TileLayer({
+//   source: new BingMaps({
+//     key: "AvHGkUYsgRR4sQJ1WmqJ879mN7gP-a59ExxkaD9KXDie-8nyYX4W9oSnG4ozmDXB",
+//     imagerySet: "AerialWithLabelsOnDemand", //'Aerial','RoadOnDemand','CanvasGray','AerialWithLabelsOnDemand','Aerial','Birdseye','BirdseyeV2WithLabels','CanvasDark','Road','CanvasGray'
+//   }),
+//   visible: false,
+//   title: "BingMaps",
+//   baseLayer: true,
+//   displayInLayerSwitcher: true,
+// });
 
 const osmMap = new TileLayer({
   source: new OSM(),
@@ -504,7 +506,7 @@ let wfsVectorLayer, wfsVectorSource;
 
 //LAYER GROUPS
 baseLayerGroup = new LayerGroup({
-  layers: [cartoDBBaseLayer, bingMaps, osmMap],
+  layers: [cartoDBBaseLayer, osmMap],
   title: "Base Layers",
   information:
     "Këto shtresa shtresat bazë të hartës të cilat mund të aktivizohen veç e veç",
@@ -668,7 +670,7 @@ toggleButton.addEventListener("click", function () {
       step: 10, // Distance between lines in degrees (longitude/latitude)
       stepCoord: 2, // Step for coordinates
       spacing: 120,
-      projection: proj32634, // Set the projection (default is the map's projection)
+      projection: krgjshProjection, // Set the projection (default is the map's projection)
       style: graticuleStyle,
       showLabel: true, // Show latitude/longitude labels
     });
@@ -2150,9 +2152,16 @@ layerSwitcher.on("select", (e) => {
               geometryType === "MultiPointPropertyType"
             ) {
               layerType = "Point";
-            } else if (geometryType === "GeometryPropertyType") {
+            } else if (
+              geometryType === "GeometryPropertyType" ||
+              geometryType === "MultiPolygonPropertyType" ||
+              geometryType === "SurfacePropertyType"
+            ) {
               layerType = "Polygon";
-            } else if (geometryType === "MultiLineStringPropertyType") {
+            } else if (
+              geometryType === "MultiLineStringPropertyType" ||
+              geometryType === "LineStringPropertyType"
+            ) {
               layerType = "LineString";
             }
             console.log("Layer Param: ", layerParam);
@@ -2871,38 +2880,42 @@ saveFeatureButton.addEventListener("click", () => {
     </wfs:Insert>
     </wfs:Transaction>`;
     } else if (layerType === "Polygon") {
-      const formattedData = coordinates.map((set) =>
-        set
-          .map((coord) => coord.join(","))
-          .slice(0, -1)
-          .join(" ")
-      );
-      // Join the formatted data by newline
-      formattedCoordinates = formattedData.join("\n");
-      console.log("Polygon Coordinates:", formattedCoordinates);
-      body = `<wfs:Transaction service="WFS" version="1.1.0"
-    xmlns:wfs="http://www.opengis.net/wfs"
-    xmlns:roles_test="http://www.openplans.org/roles_test"
-    xmlns:gml="http://www.opengis.net/gml"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd http://www.openplans.org http://${host}:${port}/geoserver/wfs/DescribeFeatureType?typename=roles_test:line">
-    <wfs:Insert>
-      <${layerName}>
-        <${workspace}:geom>
-          <gml:MultiLineString srsName="http://www.opengis.net/gml/srs/epsg.xml#3857">
-            <gml:lineStringMember>
-              <gml:LineString>
-                <gml:coordinates decimal="." cs="," ts=" ">
-                ${formattedCoordinates}
-                </gml:coordinates>
-              </gml:LineString>
-            </gml:lineStringMember>
-          </gml:MultiLineString>
-        </${workspace}:geom>
-        <${workspace}:TYPE>alley</${workspace}:TYPE>
-      </${layerName}>
-    </wfs:Insert>
-    </wfs:Transaction>`;
+      // 1) close the ring
+      const outer = coordinates[0].slice();
+      const [x1, y1] = outer[0];
+      const [xN, yN] = outer[outer.length - 1];
+      if (x1 !== xN || y1 !== yN) outer.push([x1, y1]);
+      const posList = outer.map((pt) => pt.join(" ")).join(" ");
+      body = `
+      <wfs:Transaction service="WFS" version="1.1.0"
+      xmlns:wfs="http://www.opengis.net/wfs"
+      xmlns:${workspace}="http://www.openplans.org/${workspace}"
+      xmlns:gml="http://www.opengis.net/gml"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.opengis.net/wfs 
+        http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd
+        http://www.openplans.org/${workspace} 
+        http://${host}:${port}/geoserver/wfs/DescribeFeatureType?typename=${workspace}:${layerName}">
+        <wfs:Insert>
+          <${layerName}>
+            <${workspace}:geom>
+              <gml:MultiPolygon srsName="EPSG:3857">
+                <gml:polygonMember>
+                  <gml:Polygon>
+                    <gml:exterior>
+                      <gml:LinearRing>
+                        <gml:posList>${posList}</gml:posList>
+                      </gml:LinearRing>
+                    </gml:exterior>
+                  </gml:Polygon>
+                </gml:polygonMember>
+              </gml:MultiPolygon>
+            </${workspace}:geom>
+            <${workspace}:TYPE>alley</${workspace}:TYPE>
+          </${layerName}>
+        </wfs:Insert>
+      </wfs:Transaction>`;
     } else if (layerType === "Point") {
       formattedCoordinates = [coordinates[0], coordinates[1]].join(",");
       console.log("Point Coordinates:", formattedCoordinates);
@@ -3033,7 +3046,8 @@ saveFeatureButton.addEventListener("click", () => {
   })
     .then((response) => response.text())
     .then((data) => {
-      console.log("Changes saved successfully:", data);
+      console.log("Check DATA:", data);
+
       alert("Changes saved successfully.");
       source.refresh();
       // Call saveFeaturesToLayer after successful save
@@ -3046,73 +3060,6 @@ saveFeatureButton.addEventListener("click", () => {
       alert("Error saving changes.");
     });
 });
-
-function updateGeoServerBoundingBox({
-  layerName = "aoi_wildfire_3857",
-  workspace = "roles_test",
-  datastore = "postgres",
-  username = "admin",
-  password = "geoserver",
-  nativeBoundingBox,
-}) {
-  if (!nativeBoundingBox) {
-    console.error("❌ nativeBoundingBox is required.");
-    return;
-  }
-
-  // EPSG:3857 to EPSG:4326 transform
-  const bottomLeft4326 = proj4("EPSG:3857", "EPSG:4326", [
-    nativeBoundingBox.minx,
-    nativeBoundingBox.miny,
-  ]);
-  const topRight4326 = proj4("EPSG:3857", "EPSG:4326", [
-    nativeBoundingBox.maxx,
-    nativeBoundingBox.maxy,
-  ]);
-
-  const latLonBoundingBox = {
-    minx: bottomLeft4326[0],
-    miny: bottomLeft4326[1],
-    maxx: topRight4326[0],
-    maxy: topRight4326[1],
-    crs: "EPSG:4326",
-  };
-
-  const payload = {
-    featureType: {
-      nativeBoundingBox: {
-        ...nativeBoundingBox,
-        crs: "EPSG:3857",
-      },
-      latLonBoundingBox: latLonBoundingBox,
-    },
-  };
-
-  const url = `http://localhost:8080/geoserver/rest/workspaces/${workspace}/datastores/${datastore}/featuretypes/${layerName}`;
-
-  fetch(url, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: "Basic " + btoa(`${username}:${password}`),
-    },
-    body: JSON.stringify(payload),
-  })
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error(
-          `Failed to update bounding box: ${response.statusText}`
-        );
-      }
-      return response.text();
-    })
-    .then(() => {
-      console.log(`✅ Bounding box updated for layer: ${layerName}`);
-    })
-    .catch((error) => {
-      console.error(`❌ Error updating bounding box:`, error);
-    });
-}
 
 function saveFeaturesToLayer() {
   const allFeatures = source.getFeatures();
@@ -3133,18 +3080,9 @@ function saveFeaturesToLayer() {
       } else {
         numberPart = drawnFeatureIds; // Use the entire ID as the number part
       }
-
       updatePropertyID(numberPart);
     }
   });
-  // updateGeoServerBoundingBox({
-  //   nativeBoundingBox: {
-  //     minx: 2173354.0471615903,
-  //     miny: 5061460.209498903,
-  //     maxx: 2205317.360259642,
-  //     maxy: 5092544.745249638,
-  //   },
-  // });
 
   source.refresh();
   map.removeInteraction(draw);
@@ -3263,7 +3201,7 @@ function parseDMSPair(input) {
 const testLat = "41°19′39.05″N";
 const testLon = "19°49′1.99″E";
 const testPair = `${testLat}, ${testLon}`;
-console.log("parseDMSPair(testPair):", parseDMSPair(testPair));
+// console.log("parseDMSPair(testPair):", parseDMSPair(testPair));
 
 //OL-EXT SEARCH COORDINATES
 // Initialize the search control with custom options
@@ -3546,7 +3484,7 @@ function populateAttributeSelect(selectElement) {
 // __________________________________________________________________________________________
 
 //FEATURE LIST BY ME
-let ft;
+let ft, featuresInView;
 
 const attributeLayerSelect = document.getElementById("attribute-layer-select");
 
@@ -3618,6 +3556,13 @@ function getSelectedLayerTable(selectedLayer) {
           features: features,
         });
         ft = vectorSource2.getFeatures();
+
+        const view = map.getView();
+        const size = map.getSize();
+        const extent = view.calculateExtent(size);
+
+        // 5. Filter
+        featuresInView = vectorSource2.getFeaturesInExtent(extent);
       }
 
       populateAttributeTable(ft);
@@ -4005,12 +3950,13 @@ function scaleToResolution(scaleDenominator, view) {
 }
 
 const view2 = map.getView();
+const actualProjection = view2.getProjection();
 
 const pixelSize = 0.00028; // 1 pixel = 0.0002645833333 m (assuming 96 DPI, 1 pixel = 0.2645833333 mm)
 
 // your desired range
-const maxScaleDen = 500000; // 1:500k  = furthest out → largest resolution
-const minScaleDen = 50000; // 1:50k   = closest in  → smallest resolution
+const maxScaleDen = 10000; // 1:500k  = furthest out → largest resolution
+const minScaleDen = 500; // 1:50k   = closest in  → smallest resolution
 
 const maxRes = scaleToResolution(maxScaleDen, view2); // the value is each pixel is X meter on the ground
 const minRes = scaleToResolution(minScaleDen, view2); // the value is each pixel is X meter on the ground
@@ -4019,7 +3965,7 @@ const testWMSZoom = new ImageLayer({
   source: new ImageWMS({
     url: `http://${host}:${port}/geoserver/roles_test/wms`,
     params: {
-      LAYERS: "roles_test:aoi_wildfire_3857",
+      LAYERS: "roles_test:ndertesa_durres_3857",
       VERSION: "1.1.1",
     },
     ratio: 1,
@@ -4027,16 +3973,60 @@ const testWMSZoom = new ImageLayer({
     crossOrigin: "anonymous",
   }),
   visible: true,
-  title: "aoi_wildfire_3857",
-  maxResolution: maxRes,
-  minResolution: minRes,
+  title: "ndertesa_durres_3857",
+
   information: "Kufiri i tokësor i republikës së Shqipërisë",
   displayInLayerSwitcher: true,
 });
 
+const testWFSZoom = `http://${host}:${port}/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${workspaceName}:my_polygon_layer_3857&outputFormat=json`;
 // console.log(testWMSZoom);
 
+const wfsSource = new VectorSource({
+  url: testWFSZoom,
+  format: new GeoJSON(),
+});
+const wfsLayer = new VectorLayer({
+  source: wfsSource,
+  // optional: style your features
+  // style: feature => new Style({ … })
+});
+
 // map.addLayer(testWMSZoom);
+
+async function fetchAndLogFeaturesInExtent() {
+  try {
+    // 1. Fetch GeoJSON from WFS
+    const resp = await fetch(testWFSZoom);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const geojson = await resp.json();
+
+    // 2. Convert to OL Features
+    const format = new GeoJSON();
+    const olFeatures = format.readFeatures(geojson, {
+      dataProjection: "EPSG:3857",
+      featureProjection: map.getView().getProjection(),
+    });
+
+    // 3. Create a VectorSource just to use its getFeaturesInExtent()
+    const vectorSource = new VectorSource({
+      features: olFeatures,
+    });
+
+    // 4. Compute current view extent
+    const view = map.getView();
+    const size = map.getSize();
+    const extent = view.calculateExtent(size);
+
+    // 5. Filter
+    const featuresInView = vectorSource.getFeaturesInExtent(extent);
+
+    // 6. Log results
+    // console.log("Features within current extent:", featuresInView);
+  } catch (err) {
+    console.error("Error fetching or filtering WFS data:", err);
+  }
+}
 
 map.getView().on("change:resolution", () => {
   const res = view.getResolution(); // m/px
@@ -4047,6 +4037,10 @@ map.getView().on("change:resolution", () => {
 
   const isOn = res >= minRes && res <= maxRes;
 
+  // OR if you’ve just called getFeatures() already:
+  // const features = wfsSource.getFeatures()
+  //    .filter(f => f.getGeometry().intersectsExtent(extent));
+
   // (140-40) (55) -> on
   // (140-40) (32) -> off
   // (140-40) (156) -> off
@@ -4056,4 +4050,51 @@ map.getView().on("change:resolution", () => {
   //   `Scale: 1:${Math.round(scale)}`,
   //   `Visible: ${isOn}`
   // );
+});
+
+// instead of:
+// map.getView().on('change:resolution', fetchAndLogFeaturesInExtent);
+
+// do this:
+// map.on("moveend", () => {
+//   fetchAndLogFeaturesInExtent();
+// });
+
+//ADD/UPLOAD DATA
+// show the modal when the button is clicked
+document.getElementById("add-data").addEventListener("click", () => {
+  new bootstrap.Modal(document.getElementById("uploadModal")).show();
+});
+
+const uploadForm = document.getElementById("uploadForm");
+uploadForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const fileInput = document.getElementById("shpFile");
+  const layerName = document.getElementById("layerName").value.trim();
+  if (!fileInput.files.length || !layerName) return;
+
+  const formData = new FormData();
+  formData.append("shp_zip", fileInput.files[0]);
+  formData.append("layer_name", layerName);
+
+  try {
+    const res = await fetch("http://localhost:8000/api/upload-shapefile/", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      // pull back the raw text so you can see Django’s error page if it isn’t JSON
+      const txt = await res.text();
+      console.error("Upload failed:", res.status, txt);
+      alert("Upload error: " + res.status);
+      return;
+    }
+
+    const json = await res.json();
+    console.log("Success:", json);
+    // …do something with json…
+  } catch (err) {
+    console.error("Network or parse error:", err);
+  }
 });

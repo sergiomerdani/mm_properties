@@ -59,7 +59,7 @@ header {
 .grid-container {
   display: grid;
   /* grid-template-columns: 100%; */
-  grid-template-rows: 5% 95%;
+  grid-template-rows: 10% 90%;
   height: 100vh;
 }
 
@@ -397,4 +397,15 @@ button {
 /* Style for the highlighted row */
 .highlighted-row {
   background-color: #d3d3d3;
+}
+
+button.fa-button {
+  all: unset; /* remove all UA + bootstrap defaults */
+  display: inline-flex; /* restore flex/container if you need it */
+  align-items: center;
+  justify-content: center;
+  padding: 0; /* whatever padding you want */
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
 }
