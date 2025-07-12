@@ -2085,7 +2085,16 @@ layerSwitcher.on("select", (e) => {
   map.removeInteraction(draw);
   selectedLayer = e.layer;
   //Share WMS Layer URL
-  // console.log(selectedLayer.getSource().getUrl());
+  console.log(selectedLayer);
+  console.log(selectedLayer.getSource().getUrl());
+  const opacity = selectedLayer.getOpacity();
+  console.log("Layer opacity:", opacity);
+  console.log(selectedLayer.getSource().loaderProjection_.code_);
+  console.log(selectedLayer.getSource().getLegendUrl());
+  const params = selectedLayer.getSource().getParams().LAYERS;
+  const parts = params.split(":");
+  const namePart = parts[1];
+  logWMSLayerExtent(namePart);
   if (selectedLayer instanceof LayerGroup) {
     //do nothing
   } else if (selectedLayer instanceof ImageLayer) {
@@ -4098,3 +4107,5 @@ uploadForm.addEventListener("submit", async (e) => {
     console.error("Network or parse error:", err);
   }
 });
+
+// SHARE WMS SERVICE
