@@ -65,7 +65,7 @@ import ol_control_SearchCoordinates from "ol-ext/control/SearchCoordinates";
 import ol_control_Select from "ol-ext/control/Select";
 import WMSCapabilities from "ol/format/WMSCapabilities";
 import Cluster from "ol/source/Cluster";
-import { bbox as bboxStrategy } from "ol/loadingstrategy";
+import { bbox, bbox as bboxStrategy } from "ol/loadingstrategy";
 import VectorTileLayer from "ol/layer/VectorTile";
 import VectorTileSource from "ol/source/VectorTile";
 import MVT from "ol/format/MVT";
@@ -2079,8 +2079,9 @@ let layerType,
   selectedLayer,
   layerGroup,
   layerParam,
-  features;
-
+  features,
+  workspacePart,
+  namePart;
 const selectControl = new ol_control_Select({
   source: null, // Set initially to null
   className: "ol-select",
@@ -2089,21 +2090,27 @@ const selectControl = new ol_control_Select({
 layerSwitcher.on("select", (e) => {
   map.removeInteraction(draw);
   selectedLayer = e.layer;
-  //Share WMS Layer URL
-  // console.log(selectedLayer);
-  // console.log(selectedLayer.getSource().getUrl());
-  // const opacity = selectedLayer.getOpacity();
-  // console.log("Layer opacity:", opacity);
-  // console.log(selectedLayer.getSource().loaderProjection_.code_);
-  // console.log(selectedLayer.getSource().getLegendUrl());
-  // const params = selectedLayer.getSource().getParams().LAYERS;
-  // const parts = params.split(":");
-  // const namePart = parts[1];
+
   // logWMSLayerExtent(namePart);
   if (selectedLayer instanceof LayerGroup) {
     //do nothing
   } else if (selectedLayer instanceof ImageLayer) {
+    //Share WMS Layer URL
+    // console.log(selectedLayer);
+    // console.log(selectedLayer.getSource().getUrl());
+    // const opacity = selectedLayer.getOpacity();
+    // console.log("Layer opacity:", opacity);
+    // console.log(selectedLayer.getSource().loaderProjection_.code_);
+    // console.log(selectedLayer.getSource().getLegendUrl());
+    const params = selectedLayer.getSource().getParams().LAYERS;
+    const parts = params.split(":");
+    namePart = parts[1];
+    workspacePart = parts[0];
+    console.log(namePart, workspacePart);
+
     layerTitle = selectedLayer.get("title");
+    console.log("Selected Image Layer:", layerTitle);
+
     layerParam = selectedLayer.getSource().getParams().LAYERS;
     function getLayerGroup(layer) {
       map.getLayers().forEach(function (groupLayer) {
@@ -2618,26 +2625,36 @@ map.on("pointermove", function (evt) {
 map.on("click", function (evt) {
   displayFeatureInfo(evt.pixel);
 });
+let extentBbox;
 
 //EDIT LAYER
 const editLayerButton = document.getElementById("editButton");
 
 editLayerButton.addEventListener("click", (e) => {
+  const intExtent = extentBbox.map((c) => Math.trunc(c));
+
+  // join into your “minX,minY,maxX,maxY” string
+  const bboxParam = intExtent.join(",");
+
+  console.log(bboxParam);
   if (!selectedLayer) {
     alert("Please select a layer!");
     return;
   }
   //WFS Layer
   wfsVectorSource = new VectorSource({
-    url: wfsLayerUrl + layerParam + wfsLayerUrlEnd,
+    // url: wfsLayerUrl + layerParam + wfsLayerUrlEnd ,
+    url: `http://localhost:8080/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParam}&outputFormat=application/json&maxFeatures=500&bbox=${bboxParam},EPSG:3857`,
     format: new GeoJSON(),
-    attributions: "@geoserver",
+    strategy: bboxStrategy,
   });
+  console.log(wfsVectorSource.getUrl());
+  console.log(wfsLayerUrl + layerParam + wfsLayerUrlEnd);
 
   wfsVectorLayer = new VectorLayer({
     source: wfsVectorSource,
     title: layerTitle,
-    crossOrigin: "anonymous",
+    // crossOrigin: "anonymous",
     // opacity: 0,
     visible: true,
     displayInLayerSwitcher: true,
@@ -4073,9 +4090,10 @@ map.getView().on("change:resolution", () => {
 // map.getView().on('change:resolution', fetchAndLogFeaturesInExtent);
 
 // do this:
-// map.on("moveend", () => {
-//   fetchAndLogFeaturesInExtent();
-// });
+map.on("moveend", () => {
+  // fetchAndLogFeaturesInExtent();
+  extentBbox = map.getView().calculateExtent(map.getSize());
+});
 
 //ADD/UPLOAD DATA
 // show the modal when the button is clicked
@@ -4228,4 +4246,4 @@ const mvtLayer = new VectorTileLayer({
   minResolution: 0.14,
 });
 
-map.addLayer(mvtLayer);
+// map.addLayer(mvtLayer);
