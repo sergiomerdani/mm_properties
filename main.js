@@ -64,6 +64,11 @@ import ol_control_FeatureList from "ol-ext/control/FeatureList";
 import ol_control_SearchCoordinates from "ol-ext/control/SearchCoordinates";
 import ol_control_Select from "ol-ext/control/Select";
 import WMSCapabilities from "ol/format/WMSCapabilities";
+import Cluster from "ol/source/Cluster";
+import { bbox as bboxStrategy } from "ol/loadingstrategy";
+import VectorTileLayer from "ol/layer/VectorTile";
+import VectorTileSource from "ol/source/VectorTile";
+import MVT from "ol/format/MVT";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -2085,16 +2090,16 @@ layerSwitcher.on("select", (e) => {
   map.removeInteraction(draw);
   selectedLayer = e.layer;
   //Share WMS Layer URL
-  console.log(selectedLayer);
-  console.log(selectedLayer.getSource().getUrl());
-  const opacity = selectedLayer.getOpacity();
-  console.log("Layer opacity:", opacity);
-  console.log(selectedLayer.getSource().loaderProjection_.code_);
-  console.log(selectedLayer.getSource().getLegendUrl());
-  const params = selectedLayer.getSource().getParams().LAYERS;
-  const parts = params.split(":");
-  const namePart = parts[1];
-  logWMSLayerExtent(namePart);
+  // console.log(selectedLayer);
+  // console.log(selectedLayer.getSource().getUrl());
+  // const opacity = selectedLayer.getOpacity();
+  // console.log("Layer opacity:", opacity);
+  // console.log(selectedLayer.getSource().loaderProjection_.code_);
+  // console.log(selectedLayer.getSource().getLegendUrl());
+  // const params = selectedLayer.getSource().getParams().LAYERS;
+  // const parts = params.split(":");
+  // const namePart = parts[1];
+  // logWMSLayerExtent(namePart);
   if (selectedLayer instanceof LayerGroup) {
     //do nothing
   } else if (selectedLayer instanceof ImageLayer) {
@@ -3974,7 +3979,7 @@ const testWMSZoom = new ImageLayer({
   source: new ImageWMS({
     url: `http://${host}:${port}/geoserver/roles_test/wms`,
     params: {
-      LAYERS: "roles_test:ndertesa_durres_3857",
+      LAYERS: "roles_test:created_point",
       VERSION: "1.1.1",
     },
     ratio: 1,
@@ -3982,13 +3987,18 @@ const testWMSZoom = new ImageLayer({
     crossOrigin: "anonymous",
   }),
   visible: true,
-  title: "ndertesa_durres_3857",
+  title: "cluster",
 
   information: "Kufiri i tokësor i republikës së Shqipërisë",
   displayInLayerSwitcher: true,
 });
 
-const testWFSZoom = `http://${host}:${port}/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${workspaceName}:my_polygon_layer_3857&outputFormat=json`;
+const clusterVSource = new VectorSource({
+  url: testWMSZoom,
+  format: new GeoJSON(),
+});
+
+const testWFSZoom = `http://${host}:${port}/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${workspaceName}:created_point&outputFormat=json`;
 // console.log(testWMSZoom);
 
 const wfsSource = new VectorSource({
@@ -4000,8 +4010,6 @@ const wfsLayer = new VectorLayer({
   // optional: style your features
   // style: feature => new Style({ … })
 });
-
-// map.addLayer(testWMSZoom);
 
 async function fetchAndLogFeaturesInExtent() {
   try {
@@ -4108,4 +4116,116 @@ uploadForm.addEventListener("submit", async (e) => {
   }
 });
 
-// SHARE WMS SERVICE
+// ________________________________________________________________________
+// CLUSTER
+
+const clusterSource = new Cluster({
+  distance: 40, // pixel radius for clustering
+  source: wfsSource,
+});
+
+// 4. Style cache so we only create one style per cluster size
+const styleCache = {};
+
+// 5. Cluster layer with styling function
+const clusters = new VectorLayer({
+  source: clusterSource,
+  style: (feature) => {
+    const features = feature.get("features");
+    const size = features.length;
+    let style = styleCache[size];
+    if (!style) {
+      style = new Style({
+        image: new CircleStyle({
+          radius: 10 + Math.min(size, 20), // scale radius by count
+          stroke: new Stroke({ color: "#fff", width: 2 }),
+          fill: new Fill({ color: "#3399CC" }),
+        }),
+        text: new Text({
+          text: size.toString(),
+          font: "12px sans-serif",
+          fill: new Fill({ color: "#fff" }),
+        }),
+      });
+      styleCache[size] = style;
+    }
+    return style;
+  },
+});
+
+// map.addLayer(clusters);
+
+const myStaticStyle = new Style({
+  fill: new Fill({
+    color: "rgba(0, 150, 136, 0.3)",
+  }),
+  stroke: new Stroke({
+    color: "#009688",
+    width: 1,
+  }),
+});
+
+const styleFunctionMVT = (feature, resolution) => {
+  const props = feature.getProperties();
+  const geomType = feature.getGeometry().getType(); // e.g. 'Polygon', 'LineString', 'Point'
+  const styles = [];
+
+  // 1) color polygons differently by some property
+  if (geomType === "Polygon") {
+    const category = props.category; // e.g. 'residential' | 'industrial'
+    let fillColor = "rgba(100,100,100,0.3)";
+    if (category === "residential") fillColor = "rgba(0,150,136,0.3)";
+    if (category === "industrial") fillColor = "rgba(244, 67, 54,0.3)";
+
+    styles.push(
+      new Style({
+        fill: new Fill({ color: fillColor }),
+        stroke: new Stroke({ color: "#333", width: 1 }),
+      })
+    );
+  }
+
+  // 2) draw lines with weight based on a property
+  if (geomType === "LineString") {
+    const width = props.road_rank ? props.road_rank * 2 : 1;
+    styles.push(
+      new Style({
+        stroke: new Stroke({ color: "#607d8b", width }),
+      })
+    );
+  }
+
+  // 3) add a text label for points (or centroids)
+  if (geomType === "Point") {
+    styles.push(
+      new Style({
+        image: new CircleStyle({ radius: 5 }),
+        text: new Text({
+          text: props.name || "",
+          font: "12px sans-serif",
+          fill: new Fill({ color: "#000" }),
+          stroke: new Stroke({ color: "#fff", width: 2 }),
+          offsetY: -10,
+        }),
+      })
+    );
+  }
+
+  // return an array (or a single Style)
+  return styles;
+};
+
+const mvtLayer = new VectorTileLayer({
+  source: new VectorTileSource({
+    format: new MVT(),
+    url: "http://localhost:8080/geoserver/gwc/service/tms/1.0.0/roles_test:ndertesa_durres_3857@EPSG:900913@pbf/{z}/{x}/{-y}.pbf",
+  }),
+  style: styleFunctionMVT,
+  displayInLayerSwitcher: true,
+  visible: true,
+  title: "Nd_Durres_3857 MVT",
+  maxResolution: 2.8,
+  minResolution: 0.14,
+});
+
+map.addLayer(mvtLayer);
