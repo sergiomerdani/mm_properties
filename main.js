@@ -2825,7 +2825,7 @@ deleteFeature.addEventListener("click", (e) => {
   }
 
   selectedFeaturesArray.forEach((feature) => {
-    const selectedFeatureValueID = feature.get("id");
+    const selectedFeatureValueID = feature.get("fid");
 
     // Mark feature for deletion by adding it to the featuresToDelete array
     featuresToDelete.push({
@@ -2865,7 +2865,7 @@ saveFeatureButton.addEventListener("click", () => {
                   <wfs:Delete typeName="${layerName}">
                     <ogc:Filter>
                       <ogc:PropertyIsEqualTo>
-                        <ogc:PropertyName>id</ogc:PropertyName>
+                        <ogc:PropertyName>fid</ogc:PropertyName>
                         <ogc:Literal>${featureID}</ogc:Literal>
                       </ogc:PropertyIsEqualTo>
                     </ogc:Filter>
@@ -3081,84 +3081,12 @@ saveFeatureButton.addEventListener("click", () => {
 
       alert("Changes saved successfully.");
       source.refresh();
-      // Call saveFeaturesToLayer after successful save
-      setTimeout(() => {
-        saveFeaturesToLayer();
-      }, 1000); // 1000ms = 1 second
     })
     .catch((error) => {
       console.error("Error saving changes:", error);
       alert("Error saving changes.");
     });
 });
-
-function saveFeaturesToLayer() {
-  const allFeatures = source.getFeatures();
-  if (!allFeatures) {
-    return;
-  }
-  allFeatures.forEach((feature) => {
-    const drawnFeatureIds = feature.getId();
-    console.log(feature, drawnFeatureIds);
-
-    if (drawnFeatureIds) {
-      let numberPart;
-
-      // Check if the ID contains a dot
-      if (drawnFeatureIds.includes(".")) {
-        const idParts = drawnFeatureIds.split(".");
-        numberPart = idParts[1]; // Extract the part after the dot
-      } else {
-        numberPart = drawnFeatureIds; // Use the entire ID as the number part
-      }
-      updatePropertyID(numberPart);
-    }
-  });
-
-  source.refresh();
-  map.removeInteraction(draw);
-}
-
-function updatePropertyID(featureID) {
-  url = `http://${host}:${port}/geoserver/roles_test/ows`;
-  featureIDvalue = featureID;
-  var updateBody = `
-      <wfs:Transaction service="WFS" version="1.1.0"
-      xmlns:topp="http://www.openplans.org/topp"
-      xmlns:ogc="http://www.opengis.net/ogc"
-      xmlns:wfs="http://www.opengis.net/wfs">
-      <wfs:Update typeName="${layerName}">
-      <wfs:Property>
-      <wfs:Name>id</wfs:Name>
-      <wfs:Value>${featureID}</wfs:Value>
-      </wfs:Property>
-        <ogc:Filter>
-          <ogc:FeatureId fid="${featureID}"/>
-        </ogc:Filter>
-      </wfs:Update>
-      </wfs:Transaction>
-    `;
-  const updateOptions = {
-    method: "POST",
-    headers: {
-      "Content-Type": "text/xml",
-    },
-    body: updateBody,
-  };
-  fetch(url, updateOptions)
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error("Network response was not ok");
-      }
-      return response.text();
-    })
-    .then((data) => {
-      console.log("Property ID updated successfully:", data);
-    })
-    .catch((error) => {
-      console.error("Error updating property ID:", error);
-    });
-}
 
 //SELECT RECORD FROM FEATURE ON MAP
 // Add a click listener to the map to handle feature selection
