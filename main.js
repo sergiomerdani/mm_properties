@@ -3662,6 +3662,10 @@ function applyFilter(features) {
 //SELECT ATTRIBUTE ROW FROM FEATURE ON THE MAP
 
 map.on("singleclick", function (evt) {
+  if (!selectedLayer2) {
+    console.log("No layer selected; skipping GetFeatureInfo.");
+    return;
+  }
   if (isSelectFeatureActive) {
     console.log("Single-click disabled while 'Select Feature' is active.");
     return; // Exit early if select feature mode is active
