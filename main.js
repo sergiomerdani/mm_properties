@@ -69,6 +69,7 @@ import { bbox, bbox as bboxStrategy } from "ol/loadingstrategy";
 import VectorTileLayer from "ol/layer/VectorTile";
 import VectorTileSource from "ol/source/VectorTile";
 import MVT from "ol/format/MVT";
+import WFS from "ol/format/WFS";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -675,7 +676,7 @@ toggleButton.addEventListener("click", function () {
       step: 10, // Distance between lines in degrees (longitude/latitude)
       stepCoord: 2, // Step for coordinates
       spacing: 120,
-      projection: krgjshProjection, // Set the projection (default is the map's projection)
+      projection: proj32634, // Set the projection (default is the map's projection)
       style: graticuleStyle,
       showLabel: true, // Show latitude/longitude labels
     });
@@ -2628,6 +2629,11 @@ map.on("click", function (evt) {
 let extentBbox;
 
 //EDIT LAYER
+
+let inserts = [];
+let deletes = [];
+let updates = [];
+
 const editLayerButton = document.getElementById("editButton");
 
 editLayerButton.addEventListener("click", (e) => {
@@ -2671,28 +2677,43 @@ editLayerButton.addEventListener("click", (e) => {
 const modifyFeature = document.getElementById("modifyFeature");
 
 //MODIFY INTERACTION
-let modifiedFeatureData = null;
+let modifyInteraction = null;
 
 modifyFeature.addEventListener("click", (e) => {
   if (!vectorLayer) {
     alert("Please select a layer first.");
     return;
   }
-  map.removeInteraction(draw);
-  const modify = new Modify({ source: source });
-  map.addInteraction(modify);
 
-  // Handle geometry modification without saving yet
-  modify.on("modifyend", function (event) {
-    // Get the modified feature
-    const modifiedFeature = event.features.item(0);
-    // Store the modified feature and layer type for later
-    modifiedFeatureData = {
-      feature: modifiedFeature,
-      geometry: modifiedFeature.getGeometry().getCoordinates(),
-      layerType: layerType, // Store current layer type
-    };
-    console.log("Feature modified. Click 'Save' to apply changes.");
+  // Remove any existing interactions
+  if (modifyInteraction) {
+    map.removeInteraction(modifyInteraction);
+  }
+  if (draw) {
+    map.removeInteraction(draw);
+  }
+
+  // Create new modify interaction
+  modifyInteraction = new Modify({
+    source: source,
+  });
+
+  map.addInteraction(modifyInteraction);
+
+  // Handle modification end
+  modifyInteraction.on("modifyend", function (event) {
+    console.log(event);
+
+    event.features.forEach((feature) => {
+      const geom = feature.getGeometry().clone();
+      // feature.set("geom", geom);
+      // Add to updates array
+
+      updates.push(feature);
+
+      console.log("Feature queued for update:", feature.getId());
+      console.log("Current updates:", updates);
+    });
   });
 });
 
@@ -2768,15 +2789,18 @@ let isAddingFeature = false,
 
 //ADD NEW FEATURE
 const addNewFeature = document.getElementById("addNewFeature");
-
 // Draw Feature Event Listener
 addNewFeature.addEventListener("click", (e) => {
   if (!layerName) {
     alert("Please select a layer first.");
     return;
   }
-  // Set to "add" mode
+
   isAddingFeature = true;
+
+  if (draw) {
+    map.removeInteraction(draw);
+  }
 
   draw = new Draw({
     source: source,
@@ -2787,310 +2811,117 @@ addNewFeature.addEventListener("click", (e) => {
 
   draw.on("drawend", function (event) {
     const feature = event.feature;
-    // feature.setId(generateIncrementalId().toString());
-    // Set the ID attribute to the feature
-    const coordinates = feature.getGeometry().getCoordinates();
-    // Store new feature data
+    const geom = feature.getGeometry().clone();
+
+    feature.set("geom", geom);
+
+    newFeatureData = { feature };
+
+    if (!geom) {
+      alert("Error: No geometry was created!");
+      return;
+    }
+
+    inserts.push(feature);
     newFeatureData = {
-      feature: feature,
-      geometry: coordinates,
+      feature: event.feature,
       layerType: layerType,
+      geometry: geom,
     };
     console.log("New feature drawn. Click 'Save' to apply.");
-    map.removeInteraction(draw); // Remove draw interaction after drawing
   });
 });
 
-// DELETE WFS Event Listener
+// Save Feature Function using writeTransaction
+function saveFeature() {
+  if (inserts.length === 0 && deletes.length === 0 && updates.length === 0) {
+    alert("No features to save!");
+    return;
+  }
+
+  // Create WFS format instance
+  const wfsFormat = new WFS();
+
+  const deleteFeatures = deletes.map((item) => item.feature);
+  const updateFeatures = updates.map((item) => item);
+  console.log(updateFeatures);
+
+  // Prepare the transaction
+  const transaction = wfsFormat.writeTransaction(
+    inserts,
+    updateFeatures,
+    deleteFeatures,
+    {
+      featureNS: `${workspace}@org`,
+      featurePrefix: workspace,
+      featureType: layerName,
+      srsName: "EPSG:3857",
+    }
+  );
+
+  // Serialize to XML
+  const serializer = new XMLSerializer();
+  var wfsPayload = serializer.serializeToString(transaction);
+  wfsPayload = wfsPayload.replace("geometry", "geom"); // Replace 'geometry' with 'geom'
+
+  // Send to server
+  fetch(`http://${host}:${port}/geoserver/${workspace}/ows`, {
+    method: "POST",
+    body: wfsPayload,
+    headers: {
+      "Content-Type": "text/xml",
+    },
+  })
+    .then((response) => response.text())
+    .then((responseText) => {
+      console.log("Transaction successful:", responseText);
+      source.refresh();
+      isAddingFeature = false;
+      inserts = [];
+      updates = [];
+      deletes = [];
+    })
+    .catch((error) => {
+      console.error("Transaction failed:", error);
+      alert("Failed to save feature");
+    });
+}
+
+// DELETE Feature Listener (improved)
 const deleteFeature = document.getElementById("deleteFeature");
-
-let featuresToDelete = []; // Array to store features marked for deletion
-
 deleteFeature.addEventListener("click", (e) => {
   if (!vectorLayer) {
     alert("Please select a layer first.");
     return;
   }
-  if (!selectSingleClick) {
-    alert("Please select a feature first.");
-    return;
-  }
 
   const selectedFeatures = selectSingleClick.getFeatures();
-  const selectedFeaturesArray = selectedFeatures.getArray();
-
-  if (selectedFeaturesArray.length === 0) {
+  if (selectedFeatures.getLength() === 0) {
     alert("No features selected for deletion.");
     return;
   }
 
-  selectedFeaturesArray.forEach((feature) => {
-    const selectedFeatureValueID = feature.get("fid");
-
-    // Mark feature for deletion by adding it to the featuresToDelete array
-    featuresToDelete.push({
-      feature: feature,
-      featureID: selectedFeatureValueID,
-    });
-
-    console.log("Marked for deletion:", selectedFeatureValueID);
+  // Add to deletion queue with visual feedback
+  selectedFeatures.forEach((feature) => {
+    // Skip if already queued
+    if (!inserts.some((f) => f.featureID === feature.get("fid"))) {
+      deletes.push({
+        feature: feature,
+        featureID: feature.get("fid"),
+      });
+      console.log("Feature queued for deletion:", feature.get("fid"));
+    }
   });
-
-  // Provide feedback to the user
-  alert("Feature(s) marked for deletion. Click 'Save' to confirm.");
+  console.log(`Queued ${selectedFeatures.getLength()} features for deletion`);
 });
 
 // SAVE FEATURE EVENT
 const saveFeatureButton = document.getElementById("saveFeature");
 saveFeatureButton.addEventListener("click", () => {
-  if (
-    !newFeatureData &&
-    !modifiedFeatureData &&
-    featuresToDelete.length === 0 &&
-    !selectSingleClick.getFeatures().getLength()
-  ) {
-    alert("No modifications or deletions to save.");
-    return;
-  }
-  let body = "",
-    formattedCoordinates;
-  // Handle feature deletion
-  // Handle feature deletion if any are marked for deletion
-  if (featuresToDelete.length > 0) {
-    featuresToDelete.forEach(({ feature, featureID }) => {
-      console.log("Deleting feature with ID:", featureID);
-      body += `<wfs:Transaction service="WFS" version="1.0.0"
-                  xmlns:ogc="http://www.opengis.net/ogc"
-                  xmlns:wfs="http://www.opengis.net/wfs">
-                  <wfs:Delete typeName="${layerName}">
-                    <ogc:Filter>
-                      <ogc:PropertyIsEqualTo>
-                        <ogc:PropertyName>fid</ogc:PropertyName>
-                        <ogc:Literal>${featureID}</ogc:Literal>
-                      </ogc:PropertyIsEqualTo>
-                    </ogc:Filter>
-                  </wfs:Delete>
-                </wfs:Transaction>`;
-      source.removeFeature(feature); // Remove feature from map
-    });
-
-    // Clear the featuresToDelete array after deletion
-    featuresToDelete = [];
-  }
-  // If a new feature is being added
-  if (isAddingFeature && newFeatureData) {
-    const { feature, geometry, layerType } = newFeatureData;
-    const coordinates = feature.getGeometry().getCoordinates();
-    if (layerType === "LineString") {
-      // Map over the array and join each pair of coordinates with a space
-      formattedCoordinates = coordinates
-        .map((pair) => pair.join(","))
-        .join(" ");
-      console.log("Line Coordinates:", formattedCoordinates);
-      body = `<wfs:Transaction service="WFS" version="1.1.0"
-    xmlns:wfs="http://www.opengis.net/wfs"
-    xmlns:roles_test="http://www.openplans.org/roles_test"
-    xmlns:gml="http://www.opengis.net/gml"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd http://www.openplans.org http://${host}:${port}/geoserver/wfs/DescribeFeatureType?typename=roles_test:line">
-    <wfs:Insert>
-      <${layerName}>
-        <${workspace}:geom>
-          <gml:MultiLineString srsName="http://www.opengis.net/gml/srs/epsg.xml#3857">
-            <gml:lineStringMember>
-              <gml:LineString>
-                <gml:coordinates decimal="." cs="," ts=" ">
-                ${formattedCoordinates}
-                </gml:coordinates>
-              </gml:LineString>
-            </gml:lineStringMember>
-          </gml:MultiLineString>
-        </${workspace}:geom>
-        <${workspace}:TYPE>alley</${workspace}:TYPE>
-      </${layerName}>
-    </wfs:Insert>
-    </wfs:Transaction>`;
-    } else if (layerType === "Polygon") {
-      // 1) close the ring
-      const outer = coordinates[0].slice();
-      const [x1, y1] = outer[0];
-      const [xN, yN] = outer[outer.length - 1];
-      if (x1 !== xN || y1 !== yN) outer.push([x1, y1]);
-      const posList = outer.map((pt) => pt.join(" ")).join(" ");
-      body = `
-      <wfs:Transaction service="WFS" version="1.1.0"
-      xmlns:wfs="http://www.opengis.net/wfs"
-      xmlns:${workspace}="http://www.openplans.org/${workspace}"
-      xmlns:gml="http://www.opengis.net/gml"
-      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-      xsi:schemaLocation="
-        http://www.opengis.net/wfs 
-        http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd
-        http://www.openplans.org/${workspace} 
-        http://${host}:${port}/geoserver/wfs/DescribeFeatureType?typename=${workspace}:${layerName}">
-        <wfs:Insert>
-          <${layerName}>
-            <${workspace}:geom>
-              <gml:MultiPolygon srsName="EPSG:3857">
-                <gml:polygonMember>
-                  <gml:Polygon>
-                    <gml:exterior>
-                      <gml:LinearRing>
-                        <gml:posList>${posList}</gml:posList>
-                      </gml:LinearRing>
-                    </gml:exterior>
-                  </gml:Polygon>
-                </gml:polygonMember>
-              </gml:MultiPolygon>
-            </${workspace}:geom>
-            <${workspace}:TYPE>alley</${workspace}:TYPE>
-          </${layerName}>
-        </wfs:Insert>
-      </wfs:Transaction>`;
-    } else if (layerType === "Point") {
-      formattedCoordinates = [coordinates[0], coordinates[1]].join(",");
-      console.log("Point Coordinates:", formattedCoordinates);
-      body = `<wfs:Transaction service="WFS" version="1.1.0"
-      xmlns:wfs="http://www.opengis.net/wfs"
-      xmlns:roles_test="http://www.openplans.org/roles_test"
-      xmlns:gml="http://www.opengis.net/gml"
-      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-      xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd http://www.openplans.org http://${host}:${port}/geoserver/wfs/DescribeFeatureType?typename=roles_test:line">
-      <wfs:Insert>
-        <${layerName}>
-          <${workspace}:geom>
-          <gml:Point srsDimension="2" srsName="urn:x-ogc:def:crs:EPSG:3857">
-          <gml:coordinates xmlns:gml="http://www.opengis.net/gml"
-          decimal="." cs="," ts=" ">${formattedCoordinates}</gml:coordinates>
-          </gml:Point>
-          </${workspace}:geom>
-          <${workspace}:TYPE>alley</${workspace}:TYPE>
-        </${layerName}>
-      </wfs:Insert>
-      </wfs:Transaction>`;
-    }
-    // Reset the flag and data after saving
-    isAddingFeature = false;
-    newFeatureData = null;
-  }
-
-  if (!isAddingFeature && modifiedFeatureData) {
-    const {
-      feature: modifiedFeature,
-      geometry: modifiedGeometry,
-      layerType,
-    } = modifiedFeatureData;
-    // Construct the WFS transaction request based on the layer type
-    if (layerType === "Polygon") {
-      formattedCoordinates = modifiedGeometry[0][0]
-        .map((coord) => `${coord[0]},${coord[1]}`)
-        .join(" ");
-      body = `<wfs:Transaction service="WFS" version="1.0.0"
-      xmlns:wfs="http://www.opengis.net/wfs"
-      xmlns:ogc="http://www.opengis.net/ogc"
-      xmlns:gml="http://www.opengis.net/gml"
-      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-      xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd">
-      <wfs:Update typeName="${layerName}">
-        <wfs:Property>
-          <wfs:Name>geom</wfs:Name>
-          <wfs:Value>
-            <gml:Polygon srsName="EPSG:3857">
-              <gml:outerBoundaryIs>
-                <gml:LinearRing>
-                  <gml:coordinates>${formattedCoordinates}</gml:coordinates>
-                </gml:LinearRing>
-              </gml:outerBoundaryIs>
-            </gml:Polygon>
-          </wfs:Value>
-        </wfs:Property>
-        <ogc:Filter>
-          <ogc:FeatureId fid="${modifiedFeature.getId()}"/>
-        </ogc:Filter>
-      </wfs:Update>
-    </wfs:Transaction>`;
-    } else if (layerType === "LineString") {
-      formattedCoordinates = modifiedGeometry
-        .map((pairArray) => pairArray.map((pair) => pair.join(",")).join(" "))
-        .join(" ");
-      body = `<wfs:Transaction service="WFS" version="1.0.0"
-        xmlns:topp="http://www.openplans.org/topp"
-        xmlns:ogc="http://www.opengis.net/ogc"
-        xmlns:wfs="http://www.opengis.net/wfs"
-        xmlns:gml="http://www.opengis.net/gml"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd">
-        <wfs:Update typeName="${layerName}">
-          <wfs:Property>
-            <wfs:Name>geom</wfs:Name>
-            <wfs:Value>
-              <gml:MultiLineString srsName="http://www.opengis.net/gml/srs/epsg.xml#3857">
-                <gml:lineStringMember>
-                  <gml:LineString>
-                    <gml:coordinates>${formattedCoordinates}</gml:coordinates>
-                  </gml:LineString>
-                </gml:lineStringMember>
-              </gml:MultiLineString>
-            </wfs:Value>
-          </wfs:Property>
-          <ogc:Filter>
-            <ogc:FeatureId fid="${modifiedFeature.getId()}"/>
-          </ogc:Filter>
-        </wfs:Update>
-      </wfs:Transaction>`;
-    } else if (layerType === "Point") {
-      formattedCoordinates = modifiedGeometry.join(",");
-      body = `<wfs:Transaction service="WFS" version="1.0.0"
-      xmlns:wfs="http://www.opengis.net/wfs"
-      xmlns:ogc="http://www.opengis.net/ogc"
-      xmlns:gml="http://www.opengis.net/gml"
-      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-      xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-transaction.xsd">
-      <wfs:Update typeName="${layerName}">
-        <wfs:Property>
-          <wfs:Name>geom</wfs:Name>
-          <wfs:Value>
-            <gml:Point srsName="EPSG:3857">
-              <gml:coordinates>${formattedCoordinates}</gml:coordinates>
-            </gml:Point>
-          </wfs:Value>
-        </wfs:Property>
-        <ogc:Filter>
-          <ogc:FeatureId fid="${modifiedFeature.getId()}"/>
-        </ogc:Filter>
-      </wfs:Update>
-    </wfs:Transaction>`;
-    }
-    modifiedFeatureData = null;
-  }
-
-  // Send the WFS Transaction request to update the geometry
-  const url = `http://${host}:${port}/geoserver/roles_test/ows`;
-
-  // Send the WFS Transaction request
-  fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "text/xml",
-    },
-    body: body,
-  })
-    .then((response) => response.text())
-    .then((data) => {
-      console.log("Check DATA:", data);
-
-      alert("Changes saved successfully.");
-      source.refresh();
-    })
-    .catch((error) => {
-      console.error("Error saving changes:", error);
-      alert("Error saving changes.");
-    });
+  saveFeature();
 });
 
 //SELECT RECORD FROM FEATURE ON MAP
-// Add a click listener to the map to handle feature selection
-// Function to highlight a feature
 function highlightFeature(feature) {
   const featureId = feature.getId();
   vectorLayer.getSource().forEachFeature((f) => {
