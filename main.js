@@ -2703,14 +2703,8 @@ modifyFeature.addEventListener("click", (e) => {
   // Handle modification end
   modifyInteraction.on("modifyend", function (event) {
     console.log(event);
-
     event.features.forEach((feature) => {
-      const geom = feature.getGeometry().clone();
-      // feature.set("geom", geom);
-      // Add to updates array
-
       updates.push(feature);
-
       console.log("Feature queued for update:", feature.getId());
       console.log("Current updates:", updates);
     });
@@ -2784,8 +2778,6 @@ selectFeature.addEventListener("click", (e) => {
 });
 
 // ________________________________________________________________________________
-let isAddingFeature = false,
-  newFeatureData = null;
 
 //ADD NEW FEATURE
 const addNewFeature = document.getElementById("addNewFeature");
@@ -2795,8 +2787,6 @@ addNewFeature.addEventListener("click", (e) => {
     alert("Please select a layer first.");
     return;
   }
-
-  isAddingFeature = true;
 
   if (draw) {
     map.removeInteraction(draw);
@@ -2815,19 +2805,8 @@ addNewFeature.addEventListener("click", (e) => {
 
     feature.set("geom", geom);
 
-    newFeatureData = { feature };
-
-    if (!geom) {
-      alert("Error: No geometry was created!");
-      return;
-    }
-
     inserts.push(feature);
-    newFeatureData = {
-      feature: event.feature,
-      layerType: layerType,
-      geometry: geom,
-    };
+
     console.log("New feature drawn. Click 'Save' to apply.");
   });
 });
@@ -2843,13 +2822,14 @@ function saveFeature() {
   const wfsFormat = new WFS();
 
   const deleteFeatures = deletes.map((item) => item.feature);
-  const updateFeatures = updates.map((item) => item);
-  console.log(updateFeatures);
+  updates.forEach((feature) => {
+    feature.setGeometryName("geom");
+  });
 
   // Prepare the transaction
   const transaction = wfsFormat.writeTransaction(
     inserts,
-    updateFeatures,
+    updates,
     deleteFeatures,
     {
       featureNS: `${workspace}@org`,
@@ -2862,7 +2842,6 @@ function saveFeature() {
   // Serialize to XML
   const serializer = new XMLSerializer();
   var wfsPayload = serializer.serializeToString(transaction);
-  wfsPayload = wfsPayload.replace("geometry", "geom"); // Replace 'geometry' with 'geom'
 
   // Send to server
   fetch(`http://${host}:${port}/geoserver/${workspace}/ows`, {
@@ -2876,7 +2855,6 @@ function saveFeature() {
     .then((responseText) => {
       console.log("Transaction successful:", responseText);
       source.refresh();
-      isAddingFeature = false;
       inserts = [];
       updates = [];
       deletes = [];
