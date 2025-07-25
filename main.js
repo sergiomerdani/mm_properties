@@ -70,6 +70,7 @@ import VectorTileLayer from "ol/layer/VectorTile";
 import VectorTileSource from "ol/source/VectorTile";
 import MVT from "ol/format/MVT";
 import WFS from "ol/format/WFS";
+import ol_style_Chart from "ol-ext/style/Chart";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -2684,7 +2685,6 @@ modifyFeature.addEventListener("click", (e) => {
     alert("Please select a layer first.");
     return;
   }
-
   // Remove any existing interactions
   if (modifyInteraction) {
     map.removeInteraction(modifyInteraction);
@@ -2692,7 +2692,6 @@ modifyFeature.addEventListener("click", (e) => {
   if (draw) {
     map.removeInteraction(draw);
   }
-
   // Create new modify interaction
   modifyInteraction = new Modify({
     source: source,
@@ -2817,15 +2816,12 @@ function saveFeature() {
     alert("No features to save!");
     return;
   }
-
   // Create WFS format instance
   const wfsFormat = new WFS();
-
   const deleteFeatures = deletes.map((item) => item.feature);
   updates.forEach((feature) => {
     feature.setGeometryName("geom");
   });
-
   // Prepare the transaction
   const transaction = wfsFormat.writeTransaction(
     inserts,
@@ -2838,11 +2834,9 @@ function saveFeature() {
       srsName: "EPSG:3857",
     }
   );
-
   // Serialize to XML
   const serializer = new XMLSerializer();
   var wfsPayload = serializer.serializeToString(transaction);
-
   // Send to server
   fetch(`http://${host}:${port}/geoserver/${workspace}/ows`, {
     method: "POST",
@@ -3324,6 +3318,7 @@ function getSelectedLayerTable(selectedLayer) {
           features: features,
         });
         ft = vectorSource2.getFeatures();
+        console.log(ft);
 
         const view = map.getView();
         const size = map.getSize();
@@ -3333,7 +3328,7 @@ function getSelectedLayerTable(selectedLayer) {
         featuresInView = vectorSource2.getFeaturesInExtent(extent);
       }
 
-      populateAttributeTable(ft);
+      populateAttributeTable(featuresInView);
 
       // You can now work with the data object
     } catch (error) {
@@ -3795,6 +3790,7 @@ async function fetchAndLogFeaturesInExtent() {
 
     // 5. Filter
     const featuresInView = vectorSource.getFeaturesInExtent(extent);
+    console.log(featuresInView);
 
     // 6. Log results
     // console.log("Features within current extent:", featuresInView);
@@ -3832,7 +3828,7 @@ map.getView().on("change:resolution", () => {
 
 // do this:
 map.on("moveend", () => {
-  // fetchAndLogFeaturesInExtent();
+  fetchAndLogFeaturesInExtent();
   extentBbox = map.getView().calculateExtent(map.getSize());
 });
 
@@ -3988,3 +3984,38 @@ const mvtLayer = new VectorTileLayer({
 });
 
 // map.addLayer(mvtLayer);
+
+//GRAPHICS IN OPENLAYERS
+
+const vectorLayerChart = new VectorLayer({
+  source: new VectorSource({
+    url:
+      "http://localhost:8080/geoserver/roles_test/ows?" +
+      "service=WFS&version=1.0.0&request=GetFeature&" +
+      "typeName=roles_test:ndarja_administrative_3857&" +
+      "outputFormat=application/json&srsName=EPSG:3857",
+    format: new GeoJSON(),
+  }),
+  style: function (feature) {
+    const katolik = parseFloat(feature.get("katolik"));
+    const ortodoks = parseFloat(feature.get("ortodoks"));
+    const musliman = parseFloat(feature.get("musliman"));
+
+    // 1. Pie chart style
+    const chart = new ol_style_Chart({
+      type: "pie",
+      radius: 20,
+      data: [katolik, ortodoks, musliman],
+      colors: ["blue", "pink", "green"],
+      stroke: new Stroke({ color: "#333", width: 1 }),
+      rotateWithView: false,
+    });
+
+    return new Style({
+      image: chart,
+      geometry: (f) => f.getGeometry().getInteriorPoint(),
+    });
+  },
+});
+vectorLayerChart.setZIndex(99);
+map.addLayer(vectorLayerChart);
