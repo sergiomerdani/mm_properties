@@ -3987,6 +3987,71 @@ const mvtLayer = new VectorTileLayer({
 
 //GRAPHICS IN OPENLAYERS
 
+function getFeatureStyle(feature, sel) {
+  const katolik = parseFloat(feature.get("katolik")) || 0;
+  const ortodoks = parseFloat(feature.get("ortodoks")) || 0;
+  const musliman = parseFloat(feature.get("musliman")) || 0;
+
+  const data = [katolik, ortodoks, musliman];
+  const sum = data.reduce((a, b) => a + b, 0);
+  const radius = 25;
+
+  const styleKey = `${data.join("-")}-${sel ? "sel" : "norm"}`;
+  if (styleCache[styleKey]) return styleCache[styleKey];
+
+  const styles = [];
+
+  // Pie chart
+  styles.push(
+    new Style({
+      image: new ol_style_Chart({
+        type: "pie",
+        radius: radius,
+        data: data,
+        colors: ["blue", "green", "pink"],
+        stroke: new Stroke({ color: "#fff", width: 2 }),
+        rotateWithView: true,
+      }),
+      geometry: feature.getGeometry().getInteriorPoint(),
+      zIndex: sel ? 1 : 0,
+    })
+  );
+
+  // Add percentage labels
+  if (sel && sum > 0) {
+    let s = 0;
+    for (let i = 0; i < data.length; i++) {
+      const d = data[i];
+      if (d <= 0) continue;
+
+      const angle = ((2 * s + d) / sum) * Math.PI - Math.PI / 2;
+      const percent = ((d / sum) * 100).toFixed(1) + "%";
+
+      styles.push(
+        new Style({
+          text: new Text({
+            text: percent,
+            offsetX: Math.cos(angle) * (radius + 10),
+            offsetY: Math.sin(angle) * (radius + 10),
+            textAlign: "center",
+            textBaseline: "middle",
+            fill: new Fill({ color: "#333" }),
+            stroke: new Stroke({ color: "#fff", width: 2 }),
+            font: "bold 12px sans-serif",
+          }),
+          geometry: feature.getGeometry().getInteriorPoint(),
+          zIndex: 10,
+        })
+      );
+
+      s += d;
+    }
+  }
+
+  styleCache[styleKey] = styles;
+  return styles;
+}
+
 const vectorLayerChart = new VectorLayer({
   source: new VectorSource({
     url:
@@ -3996,26 +4061,13 @@ const vectorLayerChart = new VectorLayer({
       "outputFormat=application/json&srsName=EPSG:3857",
     format: new GeoJSON(),
   }),
-  style: function (feature) {
-    const katolik = parseFloat(feature.get("katolik"));
-    const ortodoks = parseFloat(feature.get("ortodoks"));
-    const musliman = parseFloat(feature.get("musliman"));
-
-    // 1. Pie chart style
-    const chart = new ol_style_Chart({
-      type: "pie",
-      radius: 20,
-      data: [katolik, ortodoks, musliman],
-      colors: ["blue", "pink", "green"],
-      stroke: new Stroke({ color: "#333", width: 1 }),
-      rotateWithView: false,
-    });
-
-    return new Style({
-      image: chart,
-      geometry: (f) => f.getGeometry().getInteriorPoint(),
-    });
-  },
+  style: (feature) => getFeatureStyle(feature, false), // default style (no labels)
 });
 vectorLayerChart.setZIndex(99);
 map.addLayer(vectorLayerChart);
+
+const chartSelect = new Select({
+  layers: [vectorLayerChart],
+  style: (feature) => getFeatureStyle(feature, true), // show labels on select
+});
+map.addInteraction(chartSelect);
