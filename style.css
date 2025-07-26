@@ -409,3 +409,48 @@ button.fa-button {
   background: transparent;
   cursor: pointer;
 }
+
+/* __________________________________ */
+
+.chart-modal {
+  /* center in viewport */
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+
+  /* your existing styles */
+  width: 300px;
+  padding: 1em;
+  border: none;
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+/* === Only style the "1. Layer" and "3. Chart Type" labels === */
+.chart-modal > form > label,
+.chart-modal > form > fieldset > legend {
+  display: block;
+  font-weight: bold;
+  margin-top: 0.5em;
+}
+
+/* === Style the checkbox rows as flex items === */
+#fieldsContainer > div {
+  display: flex;
+  align-items: center;
+  margin: 0.2em 0;
+}
+
+/* give the box a little breathing room */
+#fieldsContainer input[type="checkbox"] {
+  margin-right: 0.5em;
+}
+
+/* Make the checkbox labels inline & normal weight */
+#fieldsContainer label {
+  display: inline-block; /* sit next to the checkbox */
+  font-weight: normal;
+  margin-top: 0; /* override the 0.5em above */
+}

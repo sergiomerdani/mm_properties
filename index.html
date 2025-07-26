@@ -185,6 +185,35 @@
         </div>
       </div>
 
+      <dialog id="chartModal" class="chart-modal">
+        <form id="chartForm" method="dialog">
+          <h3>Add a Chart</h3>
+
+          <label for="layerSelectInChart">1. Layer</label>
+          <select id="layerSelectInChart"></select>
+
+          <fieldset>
+            <legend>2. Fields (select one or more)</legend>
+            <div id="fieldsContainer">
+              <!-- checkboxes go here -->
+            </div>
+          </fieldset>
+
+          <label for="chartTypeSelect">3. Chart Type</label>
+          <select id="chartTypeSelect">
+            <option value="pie">Pie</option>
+            <option value="donut">Donut</option>
+            <option value="bar">Bar</option>
+          </select>
+
+          <menu>
+            <button id="cancelBtn" type="reset">Reset</button>
+            <button type="submit">Add Chart</button>
+            <button id="closeBtn" type="button">Close</button>
+          </menu>
+        </form>
+      </dialog>
+
       <!-- modal markup (paste anywhere in your page) -->
       <div class="modal fade" id="uploadModal" tabindex="-1">
         <div class="modal-dialog">

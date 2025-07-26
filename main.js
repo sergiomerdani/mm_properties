@@ -3267,6 +3267,7 @@ function getLayers2() {
   layersArray.forEach((wmsLayer, index) => {
     if (wmsLayer.getVisible()) {
       const layerToAdd = layersArray[index];
+      console.log(layerToAdd);
       const option = document.createElement("option");
       option.value = index;
       option.text = layerToAdd.get("title");
@@ -3287,9 +3288,7 @@ document
 
 attributeLayerSelect.addEventListener("change", (event) => {
   layerIndex = event.target.value;
-  console.log(layerIndex);
   selectedLayer2 = layersArray[layerIndex];
-  console.log(selectedLayer2);
   getSelectedLayerTable(selectedLayer2);
 });
 function getSelectedLayerTable(selectedLayer) {
@@ -3318,7 +3317,6 @@ function getSelectedLayerTable(selectedLayer) {
           features: features,
         });
         ft = vectorSource2.getFeatures();
-        console.log(ft);
 
         const view = map.getView();
         const size = map.getSize();
@@ -3790,7 +3788,6 @@ async function fetchAndLogFeaturesInExtent() {
 
     // 5. Filter
     const featuresInView = vectorSource.getFeaturesInExtent(extent);
-    console.log(featuresInView);
 
     // 6. Log results
     // console.log("Features within current extent:", featuresInView);
@@ -4061,13 +4058,109 @@ const vectorLayerChart = new VectorLayer({
       "outputFormat=application/json&srsName=EPSG:3857",
     format: new GeoJSON(),
   }),
-  style: (feature) => getFeatureStyle(feature, false), // default style (no labels)
+  style: (feature) => getFeatureStyle(feature, false),
 });
 vectorLayerChart.setZIndex(99);
 map.addLayer(vectorLayerChart);
 
 const chartSelect = new Select({
   layers: [vectorLayerChart],
-  style: (feature) => getFeatureStyle(feature, true), // show labels on select
+  style: (feature) => getFeatureStyle(feature, true),
 });
 map.addInteraction(chartSelect);
+
+// __________________________________________________________________________________________________
+
+// grab your chart‐modal’s layer picker
+const layerSelectInChart = document.getElementById("layerSelectInChart");
+const fieldsContainer = document.getElementById("fieldsContainer");
+
+// repurpose getLayers2 to fill *this* select
+function populateChartLayerSelect() {
+  layerSelectInChart.innerHTML = "";
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.text = "Select a layer...";
+  layerSelectInChart.appendChild(defaultOption);
+
+  layersArray.forEach((wmsLayer, index) => {
+    if (!wmsLayer.getVisible()) return;
+    const option = document.createElement("option");
+    option.value = index; // store the index
+    option.text = wmsLayer.get("title") || `Layer ${index}`;
+    layerSelectInChart.appendChild(option);
+  });
+}
+
+document.getElementById("add-chart").addEventListener("click", () => {
+  populateChartLayerSelect();
+  document.getElementById("chartModal").showModal();
+});
+
+// 2) When they pick a layer, build its WFS URL and fetch the fields:
+layerSelectInChart.addEventListener("change", async function () {
+  fieldsContainer.innerHTML = ""; // clear old
+  const idx = parseInt(this.value, 10);
+  if (isNaN(idx)) return;
+
+  // build the same URL you had in your main form…
+  const layer = layersArray[idx];
+  const layerParams = layer.getSource().getParams().LAYERS;
+  const wfsUrl =
+    `http://${host}:${port}/geoserver/${workspaceName}/ows?` +
+    `service=WFS&version=1.1.0&request=GetFeature` +
+    `&typeName=${layerParams}&outputFormat=json`;
+
+  // now pull the keys
+  const uniqueValuesMap = await fetchAndExtractKeys(wfsUrl);
+
+  // 3) render each key (≠ "geometry") as a checkbox
+  Object.keys(uniqueValuesMap)
+    .filter((k) => k !== "geometry")
+    .forEach((fieldName) => {
+      const wrapper = document.createElement("div");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.id = `chart-field-${fieldName}`;
+      cb.value = fieldName;
+
+      const lbl = document.createElement("label");
+      lbl.htmlFor = cb.id;
+      lbl.textContent = fieldName;
+
+      wrapper.append(cb, lbl);
+      fieldsContainer.append(wrapper);
+    });
+});
+
+document.getElementById("chartForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const idx = parseInt(layerSelectInChart.value, 10);
+  if (isNaN(idx)) {
+    alert("Select a layer!");
+    return;
+  }
+  const layer = layersArray[idx];
+  const fields = Array.from(
+    fieldsContainer.querySelectorAll("input:checked")
+  ).map((cb) => cb.value);
+  const type = document.getElementById("chartTypeSelect").value;
+  const layersParam = layer.getSource().getParams().LAYERS; // e.g. "myWorkspace:roads"
+  const [workspace, layerName] = layersParam.split(":");
+
+  console.log("Workspace:", workspace);
+  console.log("Layer name:", layerName);
+  console.log("Layer:", layer, "Fields:", fields, "Chart type:", type);
+  // → call your function to actually draw the chart on `layer`
+  document.getElementById("chartModal").close();
+});
+
+const closeBtn = document.getElementById("closeBtn");
+closeBtn.addEventListener("click", () => {
+  // Optional: clear dynamically added checkboxes
+  fieldsContainer.innerHTML = "";
+  // Optional: reset any selects/inputs
+  chartForm.reset();
+  // Close the dialog
+  chartModal.close();
+});
