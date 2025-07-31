@@ -114,7 +114,7 @@ const wgs84Center = [19.820709, 41.33042];
 let host = "localhost";
 let port = "8080";
 // let host = "localhost",
-let workspaceName = "roles_test";
+let workspaceName = "test";
 const asigWmsUrl =
   "https://geoportal.asig.gov.al/service/kufinjt_e_njesive_administrative/wms?request=GetCapabilities";
 
@@ -1145,7 +1145,7 @@ layerGroupsArray.forEach((layerGroup, index) => {
 
 function logWMSLayerExtent(layerName) {
   const getCapabilitiesUrl =
-    "http://localhost:8080/geoserver/roles_test/wms?SERVICE=WMS&REQUEST=GetCapabilities";
+    "http://localhost:8080/geoserver/test/wms?SERVICE=WMS&REQUEST=GetCapabilities";
 
   fetch(getCapabilitiesUrl)
     .then((response) => response.text())
@@ -3728,9 +3728,9 @@ const minRes = scaleToResolution(minScaleDen, view2); // the value is each pixel
 
 const testWMSZoom = new ImageLayer({
   source: new ImageWMS({
-    url: `http://${host}:${port}/geoserver/roles_test/wms`,
+    url: `http://${host}:${port}/geoserver/test/wms`,
     params: {
-      LAYERS: "roles_test:created_point",
+      LAYERS: "test:created_point",
       VERSION: "1.1.1",
     },
     ratio: 1,
@@ -3825,7 +3825,7 @@ map.getView().on("change:resolution", () => {
 
 // do this:
 map.on("moveend", () => {
-  fetchAndLogFeaturesInExtent();
+  // fetchAndLogFeaturesInExtent();
   extentBbox = map.getView().calculateExtent(map.getSize());
 });
 
@@ -3970,7 +3970,7 @@ const styleFunctionMVT = (feature, resolution) => {
 const mvtLayer = new VectorTileLayer({
   source: new VectorTileSource({
     format: new MVT(),
-    url: "http://localhost:8080/geoserver/gwc/service/tms/1.0.0/roles_test:ndertesa_durres_3857@EPSG:900913@pbf/{z}/{x}/{-y}.pbf",
+    url: "http://localhost:8080/geoserver/gwc/service/tms/1.0.0/test:ndertesa_durres_3857@EPSG:900913@pbf/{z}/{x}/{-y}.pbf",
   }),
   style: styleFunctionMVT,
   displayInLayerSwitcher: true,
