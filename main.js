@@ -1952,6 +1952,8 @@ const filterCQL = function () {
 
       params.CQL_FILTER = CQLFilter;
     }
+    console.log("CQL Filter:", params.CQL_FILTER);
+
     console.log(targetSource, selectedAttribute);
     targetSource.updateParams(params);
   }
@@ -4006,28 +4008,27 @@ const COLOR_PALETTE = [
  * @param {string}   chartType – "pie" | "donut" | "bar"
  * @param {string[]} colors    – same length as fields
  */
+
 function makeChartStyleFunction(fields, chartType, colors) {
   const cache = {};
-  return (feature, sel) => {
-    // 1) build your data array from the feature
+  return (feature) => {
     const data = fields.map((f) => parseFloat(feature.get(f)) || 0);
     const sum = data.reduce((a, b) => a + b, 0);
-    const radius = 25;
+    const radius = 15;
 
-    // 2) create a cache‐key so you don’t rebuild styles over and over
     const key =
       fields.join(",") +
       "|" +
       data.join(",") +
       "|" +
       chartType +
-      "|" +
-      (sel ? "s" : "n");
+      "|alwaysLabels";
+
     if (cache[key]) return cache[key];
 
     const styles = [];
 
-    // 3) the actual chart
+    // Chart itself
     styles.push(
       new Style({
         image: new ol_style_Chart({
@@ -4039,24 +4040,25 @@ function makeChartStyleFunction(fields, chartType, colors) {
           rotateWithView: true,
         }),
         geometry: feature.getGeometry().getInteriorPoint(),
-        zIndex: sel ? 1 : 0,
+        zIndex: 1,
       })
     );
 
-    // 4) optional: percentage labels when selected
-    if (sel && sum > 0) {
+    // ✅ Always show percentage labels (if sum > 0)
+    if (sum > 0) {
       let offsetAcc = 0;
       for (let i = 0; i < data.length; i++) {
         if (data[i] <= 0) continue;
         const angle = ((2 * offsetAcc + data[i]) / sum) * Math.PI - Math.PI / 2;
         const pct = ((data[i] / sum) * 100).toFixed(1) + "%";
+        const labelOffset = radius + 20;
 
         styles.push(
           new Style({
             text: new Text({
               text: pct,
-              offsetX: Math.cos(angle) * (radius + 10),
-              offsetY: Math.sin(angle) * (radius + 10),
+              offsetX: Math.cos(angle) * labelOffset,
+              offsetY: Math.sin(angle) * labelOffset,
               textAlign: "center",
               textBaseline: "middle",
               fill: new Fill({ color: "#333" }),
@@ -4114,12 +4116,14 @@ layerSelectInChart.addEventListener("change", async function () {
   // build the same URL you had in your main form…
   const layer = layersArray[idx];
   const layerParams = layer.getSource().getParams().LAYERS;
-  const wfsUrl =
+
+  let wfsUrl =
     `http://${host}:${port}/geoserver/${workspaceName}/ows?` +
     `service=WFS&version=1.1.0&request=GetFeature` +
     `&typeName=${layerParams}&outputFormat=json`;
 
-  // now pull the keys
+  console.log("Fetching WFS URL:", wfsUrl);
+
   const uniqueValuesMap = await fetchAndExtractKeys(wfsUrl);
 
   // 3) render each key (≠ "geometry") as a checkbox
@@ -4168,11 +4172,23 @@ document.getElementById("chartForm").addEventListener("submit", async (e) => {
   const layer = layersArray[idx];
   const layersArg = layer.getSource().getParams().LAYERS;
   const [workspace, layerName] = layersArg.split(":");
-  const wfsUrl =
+
+  const params = layer.getSource().getParams();
+  const cqlFilter = params.CQL_FILTER;
+  console.log(cqlFilter);
+  let wfsUrl;
+  const baseUrl =
     `http://${host}:${port}/geoserver/${workspace}/ows?` +
     `service=WFS&version=1.1.0&request=GetFeature` +
     `&typeName=${workspace}:${layerName}` +
     `&outputFormat=application/json&srsName=EPSG:3857`;
+
+  if (cqlFilter) {
+    const encoded = encodeURIComponent(cqlFilter);
+    wfsUrl = `${baseUrl}&CQL_FILTER=${encoded}`;
+  } else {
+    wfsUrl = baseUrl;
+  }
 
   console.log(fields, chartType, colors);
 
@@ -4196,50 +4212,19 @@ document.getElementById("chartForm").addEventListener("submit", async (e) => {
   window.vectorLayerChart.setZIndex(99);
   map.addLayer(window.vectorLayerChart);
 
-  // 7) Create & add the Select interaction to show percentages on hover/click
-  window.chartSelect = new Select({
-    layers: [window.vectorLayerChart],
-    style: (feature) => chartStyleFn(feature, true),
-  });
-  map.addInteraction(window.chartSelect);
-  window.chartSelect.on("select", (evt) => {
-    // evt.selected is an array of features that were just selected
-    evt.selected.forEach((feature) => {
-      // 1) grab an identifier
-      const id = feature.getId() || feature.get("id") || "unknown";
-
-      // 2) collect each field’s raw value
-      //    `fields` is the array you used when you built chartStyleFn
-      const featureData = Object.fromEntries(
-        fields.map((f) => [f, parseFloat(feature.get(f)) || 0])
-      );
-
-      // 3) log it
-      console.log(`Feature ${id}:`, featureData);
-    });
-  });
-
-  // 8) Finally close the modal
   chartModal.close();
 });
 
 const closeBtn = document.getElementById("closeBtn");
 closeBtn.addEventListener("click", () => {
-  // Optional: clear dynamically added checkboxes
   fieldsContainer.innerHTML = "";
-  // Optional: reset any selects/inputs
   chartForm.reset();
-  // Close the dialog
   chartModal.close();
 });
 
 const resetChart = document.getElementById("resetBtn");
 resetChart.addEventListener("click", () => {
-  // Optional: clear dynamically added checkboxes
   fieldsContainer.innerHTML = "";
-  // Optional: reset any selects/inputs
   chartForm.reset();
-  // Close the dialog
-  // chartModal.close();
   map.removeLayer(window.vectorLayerChart);
 });
