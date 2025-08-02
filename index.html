@@ -207,7 +207,7 @@
           </select>
 
           <menu>
-            <button id="resetBtn" type="reset">Reset</button>
+            <button id="resetBtnGraphics" type="reset">Reset</button>
             <button type="submit">Add Chart</button>
             <button id="closeBtn" type="button">Close</button>
           </menu>
@@ -343,6 +343,23 @@
           <span class="close-form">&times;</span>
         </div>
         <div id="feature-list"></div>
+        <!-- 📌 Chart Legend Box -->
+        <div
+          id="chartLegend"
+          style="
+            position: absolute;
+            bottom: 200px;
+            right: 10px;
+            background: white;
+            border: 1px solid #ccc;
+            padding: 10px;
+            max-width: 200px;
+            font-size: 14px;
+            z-index: 1000;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+            display: none;
+          "
+        ></div>
       </div>
     </div>
     <div id="myModal" class="modal">

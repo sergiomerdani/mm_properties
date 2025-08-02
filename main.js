@@ -4209,8 +4209,12 @@ document.getElementById("chartForm").addEventListener("submit", async (e) => {
     }),
     style: (feature) => chartStyleFn(feature, false),
   });
+
+  console.log(window.vectorLayerChart);
+
   window.vectorLayerChart.setZIndex(99);
   map.addLayer(window.vectorLayerChart);
+  generateChartLegend(fields, colors);
 
   chartModal.close();
 });
@@ -4222,9 +4226,45 @@ closeBtn.addEventListener("click", () => {
   chartModal.close();
 });
 
-const resetChart = document.getElementById("resetBtn");
+const resetChart = document.getElementById("resetBtnGraphics");
 resetChart.addEventListener("click", () => {
   fieldsContainer.innerHTML = "";
   chartForm.reset();
   map.removeLayer(window.vectorLayerChart);
+  document.getElementById("chartLegend").style.display = "none";
 });
+
+//GENERATE CHART LEGEND
+function generateChartLegend(fields, colors) {
+  const legendContainer = document.getElementById("chartLegend");
+  legendContainer.innerHTML = ""; // clear previous content
+
+  const title = document.createElement("div");
+  title.textContent = "Chart Legend";
+  title.style.fontWeight = "bold";
+  title.style.marginBottom = "6px";
+  legendContainer.appendChild(title);
+
+  fields.forEach((field, index) => {
+    const item = document.createElement("div");
+    item.style.display = "flex";
+    item.style.alignItems = "center";
+    item.style.marginBottom = "4px";
+
+    const swatch = document.createElement("div");
+    swatch.style.width = "16px";
+    swatch.style.height = "16px";
+    swatch.style.backgroundColor = colors[index];
+    swatch.style.border = "1px solid #333";
+    swatch.style.marginRight = "8px";
+
+    const label = document.createElement("span");
+    label.textContent = field;
+
+    item.appendChild(swatch);
+    item.appendChild(label);
+    legendContainer.appendChild(item);
+  });
+
+  legendContainer.style.display = "block";
+}
