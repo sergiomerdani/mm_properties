@@ -71,6 +71,7 @@ import VectorTileSource from "ol/source/VectorTile";
 import MVT from "ol/format/MVT";
 import WFS from "ol/format/WFS";
 import ol_style_Chart from "ol-ext/style/Chart";
+import TileArcGISRest from "ol/source/TileArcGISRest.js";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -3628,6 +3629,48 @@ async function getWmtsLayerList(wmtsCapUrl) {
 getWmtsLayerList(
   "https://geoportal.asig.gov.al/service/wmts?request=getCapabilities"
 );
+
+// Add ArcGIS Tile Layer with Filtered Layers
+
+async function getLayerIdsFromMapServer(mapServerUrl) {
+  const resp = await fetch(`${mapServerUrl}?f=pjson`);
+  const data = await resp.json();
+  console.log("Available layers:", data.layers);
+
+  return data.layers;
+}
+
+function filterLayerIds(layers, namesToInclude) {
+  return layers
+    .filter((layer) => namesToInclude.includes(layer.name))
+    .map((layer) => layer.id);
+}
+
+async function addArcgisTileLayer(map, mapServerUrl, includedNames) {
+  const allLayers = await getLayerIdsFromMapServer(mapServerUrl);
+  const selectedIds = filterLayerIds(allLayers, includedNames);
+
+  const arcgistileLayer = new TileLayer({
+    source: new TileArcGISRest({
+      url: mapServerUrl,
+      params: {
+        layers: `show:${selectedIds.join(",")}`,
+        FORMAT: "png32",
+        TRANSPARENT: true,
+      },
+    }),
+    title: "Filtered ArcGIS Layers",
+    visible: true,
+    showInLayerSwitcher: true,
+  });
+
+  // map.addLayer(arcgistileLayer);
+}
+
+const mapServerUrl =
+  "https://sampleserver6.arcgisonline.com/arcgis/rest/services/Census/MapServer";
+
+addArcgisTileLayer(map, mapServerUrl, ["states", "Detailed Counties"]);
 
 //GET LAYER VISIBILITY AT CURRENT SCALE (TEMPORARILY)
 
