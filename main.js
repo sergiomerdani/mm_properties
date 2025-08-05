@@ -4415,6 +4415,7 @@ document
       url: wfsUrl,
       format: new GeoJSON(),
     });
+    let minWeight, maxWeight;
 
     window.heatmapLayer = new Heatmap({
       source: vectorSource,
@@ -4423,7 +4424,11 @@ document
       weight: (f) => {
         if (!weightField) return 1; // uniform heatmap
         const raw = parseFloat(f.get(weightField));
-        return isNaN(raw) ? 0 : raw / 100; // normalize if needed
+        if (isNaN(raw)) return 0;
+        console.log(minWeight, maxWeight);
+
+        // Normalize between 0 and 1 based on actual dataset range
+        return (raw - minWeight) / (maxWeight - minWeight);
       },
       title: "Heatmap Layer",
     });
@@ -4437,8 +4442,6 @@ document
 
       const featuresHeatmap = vectorSource.getFeatures();
       if (!featuresHeatmap.length) return;
-
-      let minWeight, maxWeight;
 
       if (!weightField) {
         // Uniform weights (all 1)
