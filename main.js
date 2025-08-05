@@ -4395,40 +4395,74 @@ document
     layer.set("wfsUrl", wfsUrl); // store for later use
   });
 
-document.getElementById("heatmapForm").addEventListener("submit", function (e) {
-  e.preventDefault();
+document
+  .getElementById("heatmapForm")
+  .addEventListener("submit", async function (e) {
+    e.preventDefault();
 
-  const idx = parseInt(layerSelectInHeatmap.value, 10);
-  if (isNaN(idx)) return;
+    const idx = parseInt(layerSelectInHeatmap.value, 10);
+    if (isNaN(idx)) return;
 
-  const selectedLayer = layersArray[idx];
-  const wfsUrl = selectedLayer.get("wfsUrl");
-  const weightField = document.getElementById("weightFieldSelect").value;
-  const blur = parseInt(document.getElementById("blurRange").value, 10);
-  const radius = parseInt(document.getElementById("radiusRange").value, 10);
+    const selectedLayer = layersArray[idx];
+    const wfsUrl = selectedLayer.get("wfsUrl");
+    const weightField = document.getElementById("weightFieldSelect").value;
+    const blur = parseInt(document.getElementById("blurRange").value, 10);
+    const radius = parseInt(document.getElementById("radiusRange").value, 10);
 
-  if (window.heatmapLayer) map.removeLayer(window.heatmapLayer);
+    if (window.heatmapLayer) map.removeLayer(window.heatmapLayer);
 
-  window.heatmapLayer = new Heatmap({
-    source: new VectorSource({
+    const vectorSource = new VectorSource({
       url: wfsUrl,
       format: new GeoJSON(),
-    }),
-    blur: blur,
-    radius: radius,
-    weight: (f) => {
-      if (!weightField) return 1; // uniform intensity
-      const raw = parseFloat(f.get(weightField));
-      return isNaN(raw) ? 0 : raw / 1000; // normalize as needed
-    },
+    });
 
-    title: "Heatmap Layer",
+    window.heatmapLayer = new Heatmap({
+      source: vectorSource,
+      blur: blur,
+      radius: radius,
+      weight: (f) => {
+        if (!weightField) return 1; // uniform heatmap
+        const raw = parseFloat(f.get(weightField));
+        return isNaN(raw) ? 0 : raw / 100; // normalize if needed
+      },
+      title: "Heatmap Layer",
+    });
+
+    map.addLayer(window.heatmapLayer);
+    window.heatmapLayer.setZIndex(98);
+
+    // Wait until source loads features
+    vectorSource.on("change", () => {
+      if (vectorSource.getState() !== "ready") return;
+
+      const featuresHeatmap = vectorSource.getFeatures();
+      if (!featuresHeatmap.length) return;
+
+      let minWeight, maxWeight;
+
+      if (!weightField) {
+        // Uniform weights (all 1)
+        minWeight = 0;
+        maxWeight = 1;
+      } else {
+        const weights = featuresHeatmap.map(
+          (f) => parseFloat(f.get(weightField)) || 0
+        );
+        minWeight = Math.min(...weights);
+        maxWeight = Math.max(...weights);
+      }
+
+      const legendMinEl = document.getElementById("legendMin");
+      const legendMaxEl = document.getElementById("legendMax");
+      const heatmapLegend = document.getElementById("heatmapLegend");
+
+      legendMinEl.textContent = `Min: ${minWeight}`;
+      legendMaxEl.textContent = `Max: ${maxWeight}`;
+      heatmapLegend.style.display = "block";
+    });
+
+    heatmapModal.close();
   });
-
-  map.addLayer(window.heatmapLayer);
-  window.heatmapLayer.setZIndex(98);
-  heatmapModal.close();
-});
 
 document.getElementById("closeHeatmapBtn").addEventListener("click", () => {
   heatmapModal.close();
@@ -4440,4 +4474,5 @@ document.getElementById("resetHeatmapBtn").addEventListener("click", () => {
     window.heatmapLayer = null;
   }
   document.getElementById("heatmapForm").reset();
+  document.getElementById("heatmapLegend").style.display = "none";
 });

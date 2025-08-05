@@ -454,3 +454,35 @@ button.fa-button {
   font-weight: normal;
   margin-top: 0; /* override the 0.5em above */
 }
+
+#heatmapLegend {
+  position: absolute;
+  bottom: 50px;
+  right: 20px;
+  padding: 8px;
+  background: white;
+  border: 1px solid #ccc;
+  font-size: 12px;
+  z-index: 1000;
+  width: 120px;
+}
+.legend-title {
+  text-align: center;
+  margin-bottom: 5px;
+}
+.legend-gradient {
+  height: 15px;
+  background: linear-gradient(
+    to right,
+    rgba(0, 0, 255, 0),
+    rgba(0, 255, 255, 0.6),
+    rgba(0, 255, 0, 0.6),
+    rgba(255, 255, 0, 0.6),
+    rgba(255, 0, 0, 1)
+  );
+  margin-bottom: 4px;
+}
+.legend-labels {
+  display: flex;
+  justify-content: space-between;
+}
