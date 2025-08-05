@@ -72,6 +72,7 @@ import MVT from "ol/format/MVT";
 import WFS from "ol/format/WFS";
 import ol_style_Chart from "ol-ext/style/Chart";
 import TileArcGISRest from "ol/source/TileArcGISRest.js";
+import Heatmap from "ol/layer/Heatmap.js";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -4311,3 +4312,132 @@ function generateChartLegend(fields, colors) {
 
   legendContainer.style.display = "block";
 }
+
+//HEATMAP
+
+const heatmapBtn = document.getElementById("heatmap");
+const heatmapModal = document.getElementById("heatmapModal");
+const layerSelectInHeatmap = document.getElementById("layerSelectInHeatmap");
+
+heatmapBtn.addEventListener("click", () => {
+  populateHeatmapLayerSelect();
+  heatmapModal.showModal();
+});
+
+function populateHeatmapLayerSelect() {
+  layerSelectInHeatmap.innerHTML = "";
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.text = "Select a layer...";
+  layerSelectInHeatmap.appendChild(defaultOption);
+
+  layersArray.forEach((layer, index) => {
+    if (!layer.getVisible()) return;
+    const option = document.createElement("option");
+    option.value = index;
+    option.text = layer.get("title") || `Layer ${index}`;
+    layerSelectInHeatmap.appendChild(option);
+  });
+}
+
+document
+  .getElementById("layerSelectInHeatmap")
+  .addEventListener("change", async function () {
+    const weightFieldSelect = document.getElementById("weightFieldSelect");
+    weightFieldSelect.innerHTML = '<option value="">None (uniform)</option>';
+
+    const idx = parseInt(this.value, 10);
+    if (isNaN(idx)) return;
+
+    const layer = layersArray[idx];
+    const layerParams = layer.getSource().getParams().LAYERS;
+    const [workspace, layerName] = layerParams.split(":");
+
+    const params = layer.getSource().getParams();
+    const cqlFilter = params.CQL_FILTER;
+    console.log(cqlFilter);
+    let wfsUrl;
+    const baseUrl =
+      `http://${host}:${port}/geoserver/${workspace}/ows?` +
+      `service=WFS&version=1.1.0&request=GetFeature` +
+      `&typeName=${workspace}:${layerName}` +
+      `&outputFormat=application/json&srsName=EPSG:3857`;
+
+    if (cqlFilter) {
+      const encoded = encodeURIComponent(cqlFilter);
+      wfsUrl = `${baseUrl}&CQL_FILTER=${encoded}`;
+    } else {
+      wfsUrl = baseUrl;
+    }
+
+    async function fetchAndExtractKeys(wfsUrl) {
+      const response = await fetch(wfsUrl);
+      const data = await response.json();
+      const firstFeature = data.features?.[0];
+
+      if (!firstFeature) return {};
+
+      return firstFeature.properties;
+    }
+    const uniqueValuesMap = await fetchAndExtractKeys(wfsUrl);
+
+    console.log("Extracted attributes:", uniqueValuesMap);
+
+    Object.keys(uniqueValuesMap)
+      .filter((k) => k !== "geometry" && typeof uniqueValuesMap[k] === "number")
+      .forEach((field) => {
+        const option = document.createElement("option");
+        option.value = field;
+        option.textContent = field;
+        weightFieldSelect.appendChild(option);
+      });
+
+    layer.set("wfsUrl", wfsUrl); // store for later use
+  });
+
+document.getElementById("heatmapForm").addEventListener("submit", function (e) {
+  e.preventDefault();
+
+  const idx = parseInt(layerSelectInHeatmap.value, 10);
+  if (isNaN(idx)) return;
+
+  const selectedLayer = layersArray[idx];
+  const wfsUrl = selectedLayer.get("wfsUrl");
+  const weightField = document.getElementById("weightFieldSelect").value;
+  const blur = parseInt(document.getElementById("blurRange").value, 10);
+  const radius = parseInt(document.getElementById("radiusRange").value, 10);
+
+  if (window.heatmapLayer) map.removeLayer(window.heatmapLayer);
+
+  window.heatmapLayer = new Heatmap({
+    source: new VectorSource({
+      url: wfsUrl,
+      format: new GeoJSON(),
+    }),
+    blur: blur,
+    radius: radius,
+    weight: (f) => {
+      if (!weightField) return 1; // uniform intensity
+      const raw = parseFloat(f.get(weightField));
+      return isNaN(raw) ? 0 : raw / 1000; // normalize as needed
+    },
+
+    title: "Heatmap Layer",
+  });
+
+  map.addLayer(window.heatmapLayer);
+  window.heatmapLayer.setZIndex(98);
+  heatmapModal.close();
+});
+
+document.getElementById("closeHeatmapBtn").addEventListener("click", () => {
+  heatmapModal.close();
+});
+
+document.getElementById("resetHeatmapBtn").addEventListener("click", () => {
+  if (window.heatmapLayer) {
+    map.removeLayer(window.heatmapLayer);
+    window.heatmapLayer = null;
+  }
+  document.getElementById("heatmapForm").reset();
+});

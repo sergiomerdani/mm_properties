@@ -179,12 +179,44 @@
           <button class="fa-button" id="add-chart" title="Add Graphic">
             <i class="fa-solid fa-chart-simple"></i>
           </button>
+          <button class="fa-button" id="heatmap" title="Create Heatmap">
+            <i class="fa-solid fa-fire"></i>
+          </button>
           <button class="logout" id="logout" title="Logout">
             <img src="assets/icons/logout-solid.svg" width="13" height="13" />
           </button>
         </div>
       </div>
 
+      <!-- Generate Heatmap Modal -->
+
+      <dialog id="heatmapModal" class="chart-modal">
+        <form id="heatmapForm" method="dialog">
+          <h3>Create Heatmap</h3>
+
+          <label for="layerSelectInHeatmap">1. Layer</label>
+          <select id="layerSelectInHeatmap"></select>
+
+          <label for="weightFieldSelect">2. Weight Field</label>
+          <select id="weightFieldSelect">
+            <option value="">None (uniform)</option>
+          </select>
+
+          <label for="blurRange">3. Blur</label>
+          <input type="range" id="blurRange" min="0" max="50" value="15" />
+
+          <label for="radiusRange">4. Radius</label>
+          <input type="range" id="radiusRange" min="1" max="50" value="10" />
+
+          <menu>
+            <button id="resetHeatmapBtn" type="reset">Reset</button>
+            <button type="submit">Create Heatmap</button>
+            <button id="closeHeatmapBtn" type="button">Close</button>
+          </menu>
+        </form>
+      </dialog>
+
+      <!-- Generate Graphics Modal -->
       <dialog id="chartModal" class="chart-modal">
         <form id="chartForm" method="dialog">
           <h3>Add a Chart</h3>
