@@ -182,11 +182,44 @@
           <button class="fa-button" id="heatmap" title="Create Heatmap">
             <i class="fa-solid fa-fire"></i>
           </button>
+          <button id="reachabilityBtn" class="fa-button" title="Reachability">
+            <i class="fa-solid fa-map"></i>
+          </button>
           <button class="logout" id="logout" title="Logout">
             <img src="assets/icons/logout-solid.svg" width="13" height="13" />
           </button>
         </div>
       </div>
+
+      <!-- Reachability -->
+
+      <dialog id="reachabilityModal" class="chart-modal">
+        <form id="reachabilityForm" method="dialog">
+          <h3>Reachability Zones</h3>
+
+          <label for="travelMode">1. Mode</label>
+          <select id="travelMode">
+            <option value="foot-walking">🚶 Walking</option>
+            <option value="driving-car">🚗 Driving</option>
+            <option value="cycling-regular">🚴 Riding</option>
+          </select>
+
+          <label for="rangeType">Range Type</label>
+          <select id="rangeType">
+            <option value="time" selected>Time (minutes)</option>
+            <option value="distance">Distance (meters)</option>
+          </select>
+
+          <label for="rangeValues">Range Values</label>
+          <input type="text" id="rangeValues" value="5,10,15" />
+          <small>Comma-separated. Time in minutes or Distance in meters.</small>
+
+          <menu>
+            <button type="submit">Generate</button>
+            <button id="closeReachabilityBtn" type="button">Close</button>
+          </menu>
+        </form>
+      </dialog>
 
       <!-- Generate Heatmap Modal -->
 

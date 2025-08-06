@@ -73,6 +73,7 @@ import WFS from "ol/format/WFS";
 import ol_style_Chart from "ol-ext/style/Chart";
 import TileArcGISRest from "ol/source/TileArcGISRest.js";
 import Heatmap from "ol/layer/Heatmap.js";
+import { toLonLat } from "ol/proj";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -4478,4 +4479,103 @@ document.getElementById("resetHeatmapBtn").addEventListener("click", () => {
   }
   document.getElementById("heatmapForm").reset();
   document.getElementById("heatmapLegend").style.display = "none";
+});
+
+// REACHABILITY
+
+const reachabilityBtn = document.getElementById("reachabilityBtn");
+const reachabilityModal = document.getElementById("reachabilityModal");
+const closeReachabilityBtn = document.getElementById("closeReachabilityBtn");
+
+reachabilityBtn.addEventListener("click", () => {
+  reachabilityModal.showModal();
+});
+
+closeReachabilityBtn.addEventListener("click", () => {
+  reachabilityModal.close();
+});
+
+document
+  .getElementById("reachabilityForm")
+  .addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const travelMode = document.getElementById("travelMode").value;
+    const rangeType = document.getElementById("rangeType").value;
+    const rawInput = document.getElementById("rangeValues").value;
+
+    const rangeValues = rawInput
+      .split(",")
+      .map((v) => parseFloat(v.trim()))
+      .filter((n) => !isNaN(n));
+
+    // const durations = document
+    //   .getElementById("durations")
+    //   .value.split(",")
+    //   .map((v) => parseInt(v.trim(), 10))
+    //   .filter((n) => !isNaN(n));
+
+    if (!mapClickCoordinate) {
+      alert("Please click on the map to set a start point.");
+      return;
+    }
+
+    const url = "https://api.openrouteservice.org/v2/isochrones/" + travelMode;
+    const apiKey =
+      "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6Ijg2MGUyYWM0OGI3ZTRmNDBhZDgyMzY0MmExMWUwNWRlIiwiaCI6Im11cm11cjY0In0=";
+
+    const body = {
+      locations: [[mapClickCoordinate[0], mapClickCoordinate[1]]],
+      range:
+        rangeType === "time" ? rangeValues.map((v) => v * 60) : rangeValues,
+      range_type: rangeType, // "time" or "distance"
+    };
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    const geojson = await res.json();
+
+    if (window.reachabilityLayer) map.removeLayer(window.reachabilityLayer);
+
+    const reachabilitySource = new VectorSource({
+      features: new GeoJSON().readFeatures(geojson, {
+        dataProjection: "EPSG:4326",
+        featureProjection: map.getView().getProjection(),
+      }),
+    });
+
+    window.reachabilityLayer = new VectorLayer({
+      source: reachabilitySource,
+      style: (feature) =>
+        new Style({
+          fill: new Fill({
+            color: "rgba(255, 100, 50, 0.3)",
+          }),
+          stroke: new Stroke({
+            color: "#ff6432",
+            width: 2,
+          }),
+        }),
+    });
+
+    map.addLayer(window.reachabilityLayer);
+    map
+      .getView()
+      .fit(reachabilitySource.getExtent(), { padding: [50, 50, 50, 50] });
+
+    reachabilityModal.close();
+  });
+
+let mapClickCoordinate = null;
+
+map.on("click", function (evt) {
+  mapClickCoordinate = toLonLat(evt.coordinate); // EPSG:4326
+  console.log("Start location:", mapClickCoordinate);
 });
