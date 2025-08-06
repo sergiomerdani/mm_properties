@@ -486,3 +486,36 @@ button.fa-button {
   display: flex;
   justify-content: space-between;
 }
+
+#reachabilityLegend {
+  position: absolute;
+  bottom: 120px; /* offset to not overlap heatmap legend */
+  right: 20px;
+  background: white;
+  border: 1px solid #ccc;
+  padding: 8px;
+  z-index: 1000;
+  font-size: 12px;
+  width: 140px;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+}
+
+#reachabilityLegend h4 {
+  margin: 0 0 5px;
+  font-size: 13px;
+  text-align: center;
+}
+
+#reachabilityLegendList li {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+#reachabilityLegendList li span {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  border: 1px solid #999;
+}

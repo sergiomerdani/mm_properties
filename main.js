@@ -4507,7 +4507,10 @@ document
     const rangeValues = rawInput
       .split(",")
       .map((v) => parseFloat(v.trim()))
-      .filter((n) => !isNaN(n));
+      .filter((n) => !isNaN(n))
+      .sort((a, b) => b - a); // 🔁 sort from max to min
+
+    console.log(rawInput);
 
     if (!mapClickCoordinate) {
       alert("Please click on the map to set a start point.");
@@ -4522,7 +4525,7 @@ document
       locations: [[mapClickCoordinate[0], mapClickCoordinate[1]]],
       range:
         rangeType === "time" ? rangeValues.map((v) => v * 60) : rangeValues,
-      range_type: rangeType, // "time" or "distance"
+      range_type: rangeType,
     };
 
     const res = await fetch(url, {
@@ -4538,16 +4541,18 @@ document
 
     if (window.reachabilityLayer) map.removeLayer(window.reachabilityLayer);
 
+    const features = new GeoJSON().readFeatures(geojson, {
+      dataProjection: "EPSG:4326",
+      featureProjection: map.getView().getProjection(),
+    });
+
     const reachabilitySource = new VectorSource({
-      features: new GeoJSON().readFeatures(geojson, {
-        dataProjection: "EPSG:4326",
-        featureProjection: map.getView().getProjection(),
-      }),
+      features: features,
     });
 
     const colors = rangeValues.map((_, i) => {
       const hue = 240 - (i * 240) / rangeValues.length; // From blue to red
-      return `hsla(${hue}, 100%, 50%, 0.4)`; // Adjust opacity as needed
+      return `hsla(${hue}, 100%, 50%, 0.4 )`; // Adjust opacity as needed
     });
 
     window.reachabilityLayer = new VectorLayer({
@@ -4572,6 +4577,7 @@ document
             color: "#333",
             width: 1.5,
           }),
+          zIndex: 100 + userIndex,
         });
       },
     });
@@ -4581,12 +4587,42 @@ document
       .getView()
       .fit(reachabilitySource.getExtent(), { padding: [50, 50, 50, 50] });
 
+    // Clear previous legend
+    const legendBox = document.getElementById("reachabilityLegend");
+    const legendList = document.getElementById("reachabilityLegendList");
+    legendList.innerHTML = "";
+
+    const sortedForLegend = [...rangeValues].sort((a, b) => a - b);
+    // Build new legend entries
+    sortedForLegend.forEach((val, i) => {
+      const label = rangeType === "time" ? `${val} min` : `${val} m`;
+
+      const li = document.createElement("li");
+      li.style.display = "flex";
+      li.style.alignItems = "center";
+      li.style.marginBottom = "4px";
+
+      const swatch = document.createElement("span");
+      swatch.style.width = "16px";
+      swatch.style.height = "16px";
+      swatch.style.backgroundColor = colors[i];
+      swatch.style.display = "inline-block";
+      swatch.style.marginRight = "8px";
+      swatch.style.border = "1px solid #ccc";
+
+      li.appendChild(swatch);
+      li.appendChild(document.createTextNode(label));
+      legendList.appendChild(li);
+    });
+
+    legendBox.style.display = "block";
+
     reachabilityModal.close();
   });
 
 let mapClickCoordinate = null;
 
 map.on("click", function (evt) {
-  mapClickCoordinate = toLonLat(evt.coordinate); // EPSG:4326
+  mapClickCoordinate = toLonLat(evt.coordinate);
   console.log("Start location:", mapClickCoordinate);
 });
