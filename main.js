@@ -4509,12 +4509,6 @@ document
       .map((v) => parseFloat(v.trim()))
       .filter((n) => !isNaN(n));
 
-    // const durations = document
-    //   .getElementById("durations")
-    //   .value.split(",")
-    //   .map((v) => parseInt(v.trim(), 10))
-    //   .filter((n) => !isNaN(n));
-
     if (!mapClickCoordinate) {
       alert("Please click on the map to set a start point.");
       return;
@@ -4551,18 +4545,35 @@ document
       }),
     });
 
+    const colors = rangeValues.map((_, i) => {
+      const hue = 240 - (i * 240) / rangeValues.length; // From blue to red
+      return `hsla(${hue}, 100%, 50%, 0.4)`; // Adjust opacity as needed
+    });
+
     window.reachabilityLayer = new VectorLayer({
       source: reachabilitySource,
-      style: (feature) =>
-        new Style({
+      style: (feature) => {
+        const value = feature.get("value");
+
+        let userIndex;
+        if (rangeType === "time") {
+          // Convert seconds to minutes to match user input
+          userIndex = rangeValues.indexOf(value / 60);
+        } else {
+          // Distance in meters
+          userIndex = rangeValues.indexOf(value);
+        }
+
+        return new Style({
           fill: new Fill({
-            color: "rgba(255, 100, 50, 0.3)",
+            color: colors[userIndex] || "rgba(0,0,0,0.2)",
           }),
           stroke: new Stroke({
-            color: "#ff6432",
-            width: 2,
+            color: "#333",
+            width: 1.5,
           }),
-        }),
+        });
+      },
     });
 
     map.addLayer(window.reachabilityLayer);
