@@ -4588,13 +4588,26 @@ document
       .fit(reachabilitySource.getExtent(), { padding: [50, 50, 50, 50] });
 
     // Clear previous legend
-    const legendBox = document.getElementById("reachabilityLegend");
     const legendList = document.getElementById("reachabilityLegendList");
     legendList.innerHTML = "";
 
+    const legendBox = document.querySelector("#reachabilityLegend h4"); // Fix: use querySelector
+    const modeLabel = {
+      "foot-walking": "🚶 Walking",
+      "driving-car": "🚗 Driving",
+      "cycling-regular": "🚴 Riding",
+    };
+
+    // Set title with mode
+    legendBox.textContent = `Reachability - ${
+      modeLabel[travelMode] || travelMode
+    }`;
+
+    // Sort values from min to max for legend display
     const sortedForLegend = [...rangeValues].sort((a, b) => a - b);
-    // Build new legend entries
-    sortedForLegend.forEach((val, i) => {
+
+    // Build new legend entries (match original color by index)
+    sortedForLegend.forEach((val) => {
       const label = rangeType === "time" ? `${val} min` : `${val} m`;
 
       const li = document.createElement("li");
@@ -4605,18 +4618,23 @@ document
       const swatch = document.createElement("span");
       swatch.style.width = "16px";
       swatch.style.height = "16px";
-      swatch.style.backgroundColor = colors[i];
       swatch.style.display = "inline-block";
       swatch.style.marginRight = "8px";
       swatch.style.border = "1px solid #ccc";
+
+      // Match color from original unsorted index
+      const originalIndex = rangeValues.indexOf(val);
+      swatch.style.backgroundColor = colors[originalIndex];
 
       li.appendChild(swatch);
       li.appendChild(document.createTextNode(label));
       legendList.appendChild(li);
     });
 
-    legendBox.style.display = "block";
+    // Show legend
+    document.getElementById("reachabilityLegend").style.display = "block";
 
+    // Close modal
     reachabilityModal.close();
   });
 
