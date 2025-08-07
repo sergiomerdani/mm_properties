@@ -4729,7 +4729,16 @@ document
     // Clear coordinate display
     document.getElementById("clickCoordDisplay").textContent = "";
 
-    map.removeLayer(window.reachabilityLayer);
+    // Remove reachability layer from map if exists
+    if (window.reachabilityLayer) {
+      map.removeLayer(window.reachabilityLayer);
+      window.reachabilityLayer = null;
+    }
+
+    // Hide and clear the legend
+    const legendBox = document.getElementById("reachabilityLegend");
+    legendBox.style.display = "none";
+    document.getElementById("reachabilityLegendList").innerHTML = "";
 
     // Clear selected map point
     mapClickCoordinate = null;
