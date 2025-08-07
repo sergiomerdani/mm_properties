@@ -4525,6 +4525,7 @@ document
   .getElementById("reachabilityForm")
   .addEventListener("submit", async (e) => {
     e.preventDefault();
+    map.removeLayer(window.reachabilityLayer);
 
     const travelMode = document.getElementById("travelMode").value;
     const rangeType = document.getElementById("rangeType").value;
@@ -4641,9 +4642,9 @@ document
     });
 
     map.addLayer(window.reachabilityLayer);
-    // map
-    //   .getView()
-    //   .fit(reachabilitySource.getExtent(), { padding: [50, 50, 50, 50] });
+    map
+      .getView()
+      .fit(reachabilitySource.getExtent(), { padding: [50, 50, 50, 50] });
 
     // === Update Legend ===
     const legendList = document.getElementById("reachabilityLegendList");
@@ -4715,3 +4716,21 @@ inputModeSelect.addEventListener("change", () => {
   layerSelectContainer.style.display = showLayerMode ? "block" : "none";
   if (showLayerMode) populateReachabilityOriginLayers();
 });
+
+document
+  .getElementById("resetReachabilityBtn")
+  .addEventListener("click", () => {
+    // Reset all form fields
+    document.getElementById("reachabilityForm").reset();
+
+    // Hide layer selector again
+    document.getElementById("layerSelectContainer").style.display = "none";
+
+    // Clear coordinate display
+    document.getElementById("clickCoordDisplay").textContent = "";
+
+    map.removeLayer(window.reachabilityLayer);
+
+    // Clear selected map point
+    mapClickCoordinate = null;
+  });
