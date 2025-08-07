@@ -196,6 +196,17 @@
       <dialog id="reachabilityModal" class="chart-modal">
         <form id="reachabilityForm" method="dialog">
           <h3>Reachability Zones</h3>
+          <label for="inputMode">Start From</label>
+          <select id="inputMode">
+            <option value="" disabled selected>Select an option</option>
+            <option value="click">📍 Click on Map</option>
+            <option value="layer">📂 Select Layer</option>
+          </select>
+
+          <div id="layerSelectContainer" style="display: none">
+            <label for="originLayerSelect">Origin Layer</label>
+            <select id="originLayerSelect"></select>
+          </div>
 
           <label for="travelMode">1. Mode</label>
           <select id="travelMode">
@@ -206,14 +217,17 @@
 
           <label for="rangeType">Range Type</label>
           <select id="rangeType">
-            <option value="time" selected>Time (minutes)</option>
-            <option value="distance">Distance (meters)</option>
+            <option value="time" selected>⏱️ Time (minutes)</option>
+            <option value="distance">📏 Distance (meters)</option>
           </select>
 
           <label for="rangeValues">Range Values</label>
           <input type="text" id="rangeValues" value="5,10,15" />
           <small>Comma-separated. Time in minutes or Distance in meters.</small>
-
+          <p
+            id="clickCoordDisplay"
+            style="font-size: 0.9em; color: #444; margin-top: 6px"
+          ></p>
           <menu>
             <button type="submit">Generate</button>
             <button id="closeReachabilityBtn" type="button">Close</button>

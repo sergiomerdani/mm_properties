@@ -3637,8 +3637,7 @@ getWmtsLayerList(
 async function getLayerIdsFromMapServer(mapServerUrl) {
   const resp = await fetch(`${mapServerUrl}?f=pjson`);
   const data = await resp.json();
-  console.log("Available layers:", data.layers);
-
+  // console.log("Available layers:", data.layers);
   return data.layers;
 }
 
@@ -4382,8 +4381,6 @@ document
     }
     const uniqueValuesMap = await fetchAndExtractKeys(wfsUrl);
 
-    console.log("Extracted attributes:", uniqueValuesMap);
-
     Object.keys(uniqueValuesMap)
       .filter((k) => k !== "geometry" && typeof uniqueValuesMap[k] === "number")
       .forEach((field) => {
@@ -4495,6 +4492,35 @@ closeReachabilityBtn.addEventListener("click", () => {
   reachabilityModal.close();
 });
 
+const inputModeSelect = document.getElementById("inputMode");
+const layerSelectContainer = document.getElementById("layerSelectContainer");
+
+inputModeSelect.addEventListener("change", () => {
+  const isClickMode = inputModeSelect.value === "click";
+  layerSelectContainer.style.display = isClickMode ? "none" : "block";
+
+  if (isClickMode) {
+    reachabilityModal.close();
+  }
+});
+
+let mapClickCoordinate = null;
+
+map.on("click", function (evt) {
+  if (inputModeSelect.value === "click") {
+    // mapClickCoordinate = toLonLat(evt.coordinate);
+    mapClickCoordinate = evt.coordinate; // This stays in EPSG:3857
+    const [x, y] = mapClickCoordinate;
+
+    document.getElementById(
+      "clickCoordDisplay"
+    ).textContent = `Start Point: ${x.toFixed(5)}, ${y.toFixed(5)}`;
+
+    reachabilityModal.showModal();
+  }
+});
+
+// === Submit Handler ===
 document
   .getElementById("reachabilityForm")
   .addEventListener("submit", async (e) => {
@@ -4508,108 +4534,134 @@ document
       .split(",")
       .map((v) => parseFloat(v.trim()))
       .filter((n) => !isNaN(n))
-      .sort((a, b) => b - a); // 🔁 sort from max to min
+      .sort((a, b) => b - a); // max to min
 
-    console.log(rawInput);
+    let origins = [];
 
-    if (!mapClickCoordinate) {
-      alert("Please click on the map to set a start point.");
-      return;
+    if (inputModeSelect.value === "click") {
+      if (!mapClickCoordinate) {
+        alert("Please click on the map to set a start point.");
+        return;
+      }
+      origins = [mapClickCoordinate];
+    } else {
+      const layerIdx = parseInt(
+        document.getElementById("originLayerSelect").value,
+        10
+      );
+      const selectedLayer = layersArray[layerIdx];
+
+      const layerParams = selectedLayer.getSource().getParams().LAYERS;
+      const [workspace, layerName] = layerParams.split(":");
+      const cqlFilter = selectedLayer.getSource().getParams().CQL_FILTER;
+
+      let wfsUrl =
+        `http://${host}:${port}/geoserver/${workspace}/ows?` +
+        `service=WFS&version=1.1.0&request=GetFeature` +
+        `&typeName=${workspace}:${layerName}` +
+        `&outputFormat=application/json&srsName=EPSG:3857`;
+
+      if (cqlFilter) {
+        wfsUrl += `&CQL_FILTER=${encodeURIComponent(cqlFilter)}`;
+      }
+      console.log(wfsUrl);
+
+      const response = await fetch(wfsUrl);
+      const geojson = await response.json();
+
+      const features = new GeoJSON().readFeatures(geojson, {
+        dataProjection: "EPSG:3857",
+        featureProjection: map.getView().getProjection(),
+      });
+
+      if (!features.length) {
+        alert("No features found in the selected layer.");
+        return;
+      }
+      // Assuming these are points
+      origins = features.map((f) => f.getGeometry().getCoordinates());
     }
 
-    const url = "https://api.openrouteservice.org/v2/isochrones/" + travelMode;
+    const allFeatures = [];
+
+    const url = `https://api.openrouteservice.org/v2/isochrones/${travelMode}`;
     const apiKey =
       "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6Ijg2MGUyYWM0OGI3ZTRmNDBhZDgyMzY0MmExMWUwNWRlIiwiaCI6Im11cm11cjY0In0=";
 
-    const body = {
-      locations: [[mapClickCoordinate[0], mapClickCoordinate[1]]],
-      range:
-        rangeType === "time" ? rangeValues.map((v) => v * 60) : rangeValues,
-      range_type: rangeType,
-    };
+    for (const origin of origins) {
+      const location4326 = toLonLat(origin);
+      const body = {
+        locations: [location4326],
+        range:
+          rangeType === "time" ? rangeValues.map((v) => v * 60) : rangeValues,
+        range_type: rangeType,
+      };
 
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: apiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
 
-    const geojson = await res.json();
+      const geojson = await res.json();
+      const features = new GeoJSON().readFeatures(geojson, {
+        dataProjection: "EPSG:4326",
+        featureProjection: map.getView().getProjection(),
+      });
 
-    if (window.reachabilityLayer) map.removeLayer(window.reachabilityLayer);
-
-    const features = new GeoJSON().readFeatures(geojson, {
-      dataProjection: "EPSG:4326",
-      featureProjection: map.getView().getProjection(),
-    });
-
+      allFeatures.push(...features);
+    }
     const reachabilitySource = new VectorSource({
-      features: features,
+      features: allFeatures,
     });
 
     const colors = rangeValues.map((_, i) => {
-      const hue = 240 - (i * 240) / rangeValues.length; // From blue to red
-      return `hsla(${hue}, 100%, 50%, 0.4 )`; // Adjust opacity as needed
+      const hue = 240 - (i * 240) / rangeValues.length;
+      return `hsla(${hue}, 100%, 50%, 0.4)`;
     });
 
     window.reachabilityLayer = new VectorLayer({
       source: reachabilitySource,
       style: (feature) => {
         const value = feature.get("value");
-
-        let userIndex;
-        if (rangeType === "time") {
-          // Convert seconds to minutes to match user input
-          userIndex = rangeValues.indexOf(value / 60);
-        } else {
-          // Distance in meters
-          userIndex = rangeValues.indexOf(value);
-        }
+        const userIndex =
+          rangeType === "time"
+            ? rangeValues.indexOf(value / 60)
+            : rangeValues.indexOf(value);
 
         return new Style({
-          fill: new Fill({
-            color: colors[userIndex] || "rgba(0,0,0,0.2)",
-          }),
-          stroke: new Stroke({
-            color: "#333",
-            width: 1.5,
-          }),
+          fill: new Fill({ color: colors[userIndex] || "rgba(0,0,0,0.2)" }),
+          stroke: new Stroke({ color: "#333", width: 1.5 }),
           zIndex: 100 + userIndex,
         });
       },
     });
 
     map.addLayer(window.reachabilityLayer);
-    map
-      .getView()
-      .fit(reachabilitySource.getExtent(), { padding: [50, 50, 50, 50] });
+    // map
+    //   .getView()
+    //   .fit(reachabilitySource.getExtent(), { padding: [50, 50, 50, 50] });
 
-    // Clear previous legend
+    // === Update Legend ===
     const legendList = document.getElementById("reachabilityLegendList");
     legendList.innerHTML = "";
-
-    const legendBox = document.querySelector("#reachabilityLegend h4"); // Fix: use querySelector
+    const legendBox = document.querySelector("#reachabilityLegend h4");
     const modeLabel = {
       "foot-walking": "🚶 Walking",
       "driving-car": "🚗 Driving",
       "cycling-regular": "🚴 Riding",
     };
 
-    // Set title with mode
     legendBox.textContent = `Reachability - ${
       modeLabel[travelMode] || travelMode
     }`;
 
-    // Sort values from min to max for legend display
     const sortedForLegend = [...rangeValues].sort((a, b) => a - b);
-
-    // Build new legend entries (match original color by index)
     sortedForLegend.forEach((val) => {
-      const label = rangeType === "time" ? `${val} min` : `${val} m`;
-
+      const label = rangeType === "time" ? `${val} ⏱️ min` : `${val} 📏 m`;
       const li = document.createElement("li");
       li.style.display = "flex";
       li.style.alignItems = "center";
@@ -4618,29 +4670,48 @@ document
       const swatch = document.createElement("span");
       swatch.style.width = "16px";
       swatch.style.height = "16px";
-      swatch.style.display = "inline-block";
+      swatch.style.backgroundColor = colors[rangeValues.indexOf(val)];
       swatch.style.marginRight = "8px";
       swatch.style.border = "1px solid #ccc";
-
-      // Match color from original unsorted index
-      const originalIndex = rangeValues.indexOf(val);
-      swatch.style.backgroundColor = colors[originalIndex];
 
       li.appendChild(swatch);
       li.appendChild(document.createTextNode(label));
       legendList.appendChild(li);
     });
 
-    // Show legend
     document.getElementById("reachabilityLegend").style.display = "block";
-
-    // Close modal
     reachabilityModal.close();
   });
 
-let mapClickCoordinate = null;
+function populateReachabilityOriginLayers() {
+  const originSelect = document.getElementById("originLayerSelect");
+  originSelect.innerHTML = "";
 
-map.on("click", function (evt) {
-  mapClickCoordinate = toLonLat(evt.coordinate);
-  console.log("Start location:", mapClickCoordinate);
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.text = "Select a layer...";
+  originSelect.appendChild(defaultOption);
+
+  layersArray.forEach((layer, index) => {
+    if (!layer.getVisible()) return;
+
+    const source = layer.getSource?.();
+    const params = source?.getParams?.();
+    const url = source?.getUrl?.();
+
+    if (!params?.LAYERS || !url || !url.includes("/geoserver")) return;
+
+    const option = document.createElement("option");
+    option.value = index;
+    option.text = layer.get("title") || `Layer ${index}`;
+    option.setAttribute("data-layername", params.LAYERS);
+    option.setAttribute("data-wfsurl", url.replace("wms", "wfs"));
+    originSelect.appendChild(option);
+  });
+}
+
+inputModeSelect.addEventListener("change", () => {
+  const showLayerMode = inputModeSelect.value === "layer";
+  layerSelectContainer.style.display = showLayerMode ? "block" : "none";
+  if (showLayerMode) populateReachabilityOriginLayers();
 });
