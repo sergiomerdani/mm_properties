@@ -321,7 +321,7 @@ const mapControls = [
 const osmMap = new TileLayer({
   source: new OSM(),
   title: "OSM",
-  visible: true,
+  visible: false,
   baseLayer: true,
   displayInLayerSwitcher: true,
 });
@@ -332,7 +332,7 @@ const cartoDBBaseLayer = new TileLayer({
     url: "https://{1-4}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
     attributions: "© CARTO",
   }),
-  visible: false,
+  visible: true,
   title: "CartoDarkAll",
   baseLayer: true,
   displayInLayerSwitcher: true,
@@ -362,13 +362,9 @@ fetch("https://geoportal.asig.gov.al/service/wmts?request=getCapabilities")
     });
 
     baseLayerGroup.getLayers().push(ortho);
-    // Now you can use the 'ortho' variable outside the fetch scope
-    // For example, you can access it here or in any other part of your code
   })
 
-  .catch(function (error) {
-    // Handle errors if necessary
-  });
+  .catch(function (error) {});
 
 const country = new Style({
   stroke: new Stroke({
@@ -547,6 +543,8 @@ const addressSystem = new LayerGroup({
 
 const center_4326 = [19.80835, 41.310824];
 const center_3857 = [2206185.65, 5060810.15];
+const saranda_center = [2226806.503832, 4847588.560703];
+const tirana_center = [2226806.503832, 4847588.560703];
 
 const map = new Map({
   target: "map",
@@ -555,7 +553,7 @@ const map = new Map({
   view: new View({
     projection: "EPSG:3857",
     center: center_3857,
-    zoom: 8,
+    zoom: 14,
     maxZoom: 20,
   }),
 });
@@ -881,9 +879,9 @@ const segmentStyles = [segmentStyle];
 const formatLength = function (line) {
   // const transformedLine = line.clone().transform(wgs84Proj, "EPSG:3857");
   // const length = getLength(transformedLine);
-  const length = getLength(line);
+  const length = getLength(line, { projection: "EPSG:3857" });
   let output;
-  if (length > 100) {
+  if (length > 1000) {
     output = Math.round((length / 1000) * 100) / 100 + " km";
   } else {
     output = Math.round(length * 100) / 100 + " m";
@@ -4587,7 +4585,7 @@ document
 
     const url = `https://api.openrouteservice.org/v2/isochrones/${travelMode}`;
     const apiKey =
-      "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6Ijg2MGUyYWM0OGI3ZTRmNDBhZDgyMzY0MmExMWUwNWRlIiwiaCI6Im11cm11cjY0In0=";
+      "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImFhZjdlYThlODJiOWEyYmY5MTk4MzU1OTk5ODZiMGFhMTg2OTBkNmZiYTJmNzgxNGU1ZDlmODYwIiwiaCI6Im11cm11cjY0In0=";
 
     for (const origin of origins) {
       const location4326 = toLonLat(origin);
@@ -4743,3 +4741,142 @@ document
     // Clear selected map point
     mapClickCoordinate = null;
   });
+
+//Site Selection
+// Elements
+const siteSelectionBtn = document.getElementById("site-selection");
+const siteSelectionModal = document.getElementById("siteSelectionModal");
+
+const demandSelect = document.getElementById("demandLayerSelect");
+const facilitiesSelect = document.getElementById("existingLayerSelect");
+
+const candidateLayerType = document.getElementById("candidateLayerType");
+const candidateLayerNameWrapper = document.getElementById(
+  "candidateLayerNameWrapper"
+);
+const candidateLayerSelectWrapper = document.getElementById(
+  "candidateLayerSelectWrapper"
+);
+const candidateLayerSelect = document.getElementById("candidateLayerSelect");
+
+const closeModalBtn = document.getElementById("closeSiteSelection");
+const runBtn = document.getElementById("runSiteSelection");
+
+// Populate dropdowns with visible WMS layers
+function populateSiteSelectionLayers() {
+  demandSelect.innerHTML = "";
+  facilitiesSelect.innerHTML = "";
+  candidateLayerSelect.innerHTML = "";
+
+  const makeDefaultOption = (text) => {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.text = text;
+    return opt;
+  };
+
+  demandSelect.appendChild(makeDefaultOption("Select demand layer..."));
+  facilitiesSelect.appendChild(makeDefaultOption("Select facilities layer..."));
+  candidateLayerSelect.appendChild(
+    makeDefaultOption("Select candidate layer...")
+  );
+
+  layersArray.forEach((layer, index) => {
+    if (!layer.getVisible()) return;
+
+    const source = layer.getSource?.();
+    const params = source?.getParams?.();
+    const url = source?.getUrl?.();
+
+    // Only GeoServer WMS layers
+    if (!params?.LAYERS || !url || !url.includes("/geoserver")) return;
+
+    const title = layer.get("title") || `Layer ${index}`;
+
+    const optionDemand = document.createElement("option");
+    optionDemand.value = index;
+    optionDemand.text = title;
+    optionDemand.setAttribute("data-layername", params.LAYERS);
+    optionDemand.setAttribute("data-wfsurl", url.replace("wms", "wfs"));
+
+    const optionFacilities = optionDemand.cloneNode(true);
+    const optionCandidate = optionDemand.cloneNode(true);
+
+    demandSelect.appendChild(optionDemand);
+    facilitiesSelect.appendChild(optionFacilities);
+    candidateLayerSelect.appendChild(optionCandidate);
+  });
+}
+
+// Handle candidate layer type change
+candidateLayerType.addEventListener("change", () => {
+  if (candidateLayerType.value === "new") {
+    candidateLayerNameWrapper.style.display = "block";
+    candidateLayerSelectWrapper.style.display = "none";
+  } else {
+    candidateLayerNameWrapper.style.display = "none";
+    candidateLayerSelectWrapper.style.display = "block";
+    populateSiteSelectionLayers(); // Refresh options
+  }
+});
+
+// Open modal
+siteSelectionBtn.addEventListener("click", () => {
+  populateSiteSelectionLayers();
+  siteSelectionModal.style.display = "block";
+});
+
+// Close modal
+closeModalBtn.addEventListener("click", () => {
+  siteSelectionModal.style.display = "none";
+});
+
+// Run site selection
+runBtn.addEventListener("click", () => {
+  let candidateLayerName;
+  if (candidateLayerType.value === "new") {
+    candidateLayerName = document.getElementById("candidateLayerName").value;
+  } else {
+    candidateLayerName =
+      candidateLayerSelect.options[
+        candidateLayerSelect.selectedIndex
+      ].dataset.layername.split(":")[1];
+  }
+
+  const demandLayer =
+    demandSelect.options[demandSelect.selectedIndex].dataset.layername.split(
+      ":"
+    )[1];
+  const facilitiesLayer =
+    facilitiesSelect.options[
+      facilitiesSelect.selectedIndex
+    ].dataset.layername.split(":")[1];
+  const D = parseFloat(document.getElementById("paramD").value);
+  const minLib = parseFloat(document.getElementById("paramMinLib").value);
+  const grid = parseFloat(document.getElementById("paramGrid").value);
+  const K = parseInt(document.getElementById("paramK").value);
+
+  console.log("Candidate Layer Name:", candidateLayerName);
+  console.log("Demand Layer:", demandLayer);
+  console.log("Facilities Layer:", facilitiesLayer);
+  console.log("Parameters:", { D, minLib, grid, K });
+
+  fetch("http://localhost:8000/api/site-selection", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      candidateLayerName,
+      demandLayer,
+      facilitiesLayer,
+      D,
+      minLib,
+      grid,
+      K,
+    }),
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      console.log("Site selection completed", data);
+      siteSelectionModal.style.display = "none";
+    });
+});

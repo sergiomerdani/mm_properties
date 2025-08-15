@@ -185,9 +185,64 @@
           <button id="reachabilityBtn" class="fa-button" title="Reachability">
             <i class="fa-solid fa-map"></i>
           </button>
+          <button id="site-selection" class="fa-button" title="Site Selection">
+            <i class="fa-solid fa-map-location"></i>
+          </button>
           <button class="logout" id="logout" title="Logout">
             <img src="assets/icons/logout-solid.svg" width="13" height="13" />
           </button>
+        </div>
+      </div>
+
+      <!-- Site Selection Modal -->
+
+      <div id="siteSelectionModal">
+        <div id="siteSelectionModalContent">
+          <h4>📍 Site Selection</h4>
+          <label for="candidateLayerType">🆕 Candidate Layer:</label>
+          <select id="candidateLayerType">
+            <option value="new">➕ New Layer</option>
+            <option value="existing">📂 Existing Layer</option>
+          </select>
+
+          <!-- New layer name input -->
+          <div id="candidateLayerNameWrapper">
+            <input
+              type="text"
+              id="candidateLayerName"
+              placeholder="Enter new layer name"
+            />
+          </div>
+
+          <!-- Existing layer dropdown -->
+          <div id="candidateLayerSelectWrapper" style="display: none">
+            <select id="candidateLayerSelect"></select>
+          </div>
+
+          <label for="demandLayerSelect">🎯 Demand Layer:</label>
+          <select id="demandLayerSelect"></select>
+
+          <label for="existingLayerSelect">🏢 Existing Facilities Layer:</label>
+          <select id="existingLayerSelect"></select>
+
+          <label for="paramD">📏 Coverage Distance (m):</label>
+          <input type="number" id="paramD" value="500" />
+
+          <label for="paramMinLib"
+            >🚫 Min Distance from Existing Facilities (m):</label
+          >
+          <input type="number" id="paramMinLib" value="150" />
+
+          <label for="paramGrid">🔲 Grid Size (m):</label>
+          <input type="number" id="paramGrid" value="50" />
+
+          <label for="paramK">#️⃣ Max Candidates (K):</label>
+          <input type="number" id="paramK" value="15" />
+
+          <div id="siteSelectionModalActions">
+            <button id="runSiteSelection">🚀 Run</button>
+            <button id="closeSiteSelection">❌ Cancel</button>
+          </div>
         </div>
       </div>
 

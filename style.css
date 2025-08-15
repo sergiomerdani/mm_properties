@@ -519,3 +519,50 @@ button.fa-button {
   margin-right: 8px;
   border: 1px solid #999;
 }
+
+/* Site Selection */
+
+#siteSelectionModal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 10px;
+  width: 240px;
+  font-size: 12px;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  display: none; /* hidden by default */
+}
+
+#siteSelectionModal h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  text-align: center;
+}
+
+#siteSelectionModal label {
+  display: block;
+  margin-top: 6px;
+}
+
+#siteSelectionModal input,
+#siteSelectionModal select {
+  width: 100%;
+  padding: 3px;
+  font-size: 12px;
+}
+
+#siteSelectionModalActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+#siteSelectionModalActions button {
+  margin-left: 6px;
+  font-size: 12px;
+}
