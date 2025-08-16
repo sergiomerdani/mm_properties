@@ -4847,10 +4847,14 @@ runBtn.addEventListener("click", () => {
     demandSelect.options[demandSelect.selectedIndex].dataset.layername.split(
       ":"
     )[1];
-  const facilitiesLayer =
-    facilitiesSelect.options[
-      facilitiesSelect.selectedIndex
-    ].dataset.layername.split(":")[1];
+  const facilitiesLayer = facilitiesSelect?.options[
+    facilitiesSelect.selectedIndex
+  ]?.dataset?.layername
+    ? facilitiesSelect.options[
+        facilitiesSelect.selectedIndex
+      ].dataset.layername.split(":")[1]
+    : null;
+
   const D = parseFloat(document.getElementById("paramD").value);
   const minLib = parseFloat(document.getElementById("paramMinLib").value);
   const grid = parseFloat(document.getElementById("paramGrid").value);
