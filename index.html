@@ -403,8 +403,15 @@
 
       <div id="attribute-table-container" hidden>
         <div id="layer-selector-container">
-          <label for="attribute-layer-select">Select Layer:</label>
-          <select id="attribute-layer-select"></select>
+          <div class="left-controls">
+            <label for="attribute-layer-select">Select Layer:</label>
+            <select id="attribute-layer-select"></select>
+          </div>
+          <div class="right-controls">
+            <button id="zoom-btn" disabled>Zoom to Feature</button>
+            <button id="edit-btn">EDIT</button>
+            <button id="save-btn" disabled>SAVE</button>
+          </div>
         </div>
         <table id="attribute-table">
           <thead>

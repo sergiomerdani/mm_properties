@@ -3270,7 +3270,6 @@ function getLayers2() {
   layersArray.forEach((wmsLayer, index) => {
     if (wmsLayer.getVisible()) {
       const layerToAdd = layersArray[index];
-      console.log(layerToAdd);
       const option = document.createElement("option");
       option.value = index;
       option.text = layerToAdd.get("title");
@@ -3279,7 +3278,7 @@ function getLayers2() {
   });
 }
 
-let layerIndex, selectedLayer2;
+let layerIndex, selectedLayer2, tableLayerSelected;
 
 document
   .getElementById("attributeTable")
@@ -3295,8 +3294,8 @@ attributeLayerSelect.addEventListener("change", (event) => {
   getSelectedLayerTable(selectedLayer2);
 });
 function getSelectedLayerTable(selectedLayer) {
-  const layerParams = selectedLayer.getSource().getParams().LAYERS;
-  const layerWFS = `http://${host}:${port}/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParams}&outputFormat=json`;
+  tableLayerSelected = selectedLayer.getSource().getParams().LAYERS;
+  const layerWFS = `http://${host}:${port}/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${tableLayerSelected}&outputFormat=json`;
 
   async function fetchData() {
     try {
@@ -3392,17 +3391,32 @@ function populateAttributeTable(features) {
       const cell = row.insertCell();
       cell.textContent = feature.get(header) || "";
     });
-
+    // Single click = highlight row
     row.addEventListener("click", () => {
-      // Remove the highlight from the previously selected row
       if (highlightedRow) {
         highlightedRow.classList.remove("highlighted-row");
       }
-      // Highlight the clicked row
+      row.classList.add("highlighted-row");
+      highlightedRow = row;
+    });
+
+    const zoomBtn = document.getElementById("zoom-btn");
+
+    // When a row is selected, enable the button
+    row.addEventListener("click", () => {
+      if (highlightedRow) {
+        highlightedRow.classList.remove("highlighted-row");
+      }
       row.classList.add("highlighted-row");
       highlightedRow = row;
 
-      // Extract row data and log it to the console
+      zoomBtn.disabled = false; // enable zoom button
+    });
+
+    // When zoom button is clicked
+    zoomBtn.addEventListener("click", () => {
+      if (!highlightedRow) return;
+
       const rowData = {};
       headers.forEach((header) => {
         rowData[header] = feature.get(header);
@@ -3411,6 +3425,125 @@ function populateAttributeTable(features) {
     });
   });
 }
+
+const editBtn = document.getElementById("edit-btn");
+const saveBtn = document.getElementById("save-btn");
+
+editBtn.addEventListener("click", () => {
+  document.querySelectorAll("#attribute-table tbody td").forEach((td) => {
+    td.contentEditable = true;
+    td.style.backgroundColor = "#fffbe6";
+  });
+  saveBtn.disabled = false;
+});
+
+// 1. Get headers (field names)
+const headers = Array.from(
+  document.querySelectorAll("#attribute-table thead th")
+).map((th) => th.textContent.trim());
+
+saveBtn.addEventListener("click", () => {
+  const updatedFeatures = [];
+
+  const [workspace, layerName] = tableLayerSelected.split(":");
+
+  const wfsUrl = `http://localhost:8080/geoserver/${workspace}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=${tableLayerSelected}&maxFeatures=50`;
+
+  const vectorSource = new VectorSource({
+    format: new GeoJSON(),
+    url: wfsUrl,
+  });
+
+  vectorSource.once("featuresloadend", () => {
+    const features = vectorSource.getFeatures();
+    console.log("Features loaded:", features);
+
+    document
+      .querySelectorAll("#attribute-table tbody tr")
+      .forEach((row, rowIndex) => {
+        const feature = features[rowIndex];
+        if (!feature) return;
+
+        const updatedAttributes = {};
+        row.querySelectorAll("td").forEach((td, colIndex) => {
+          const fieldName = headers[colIndex];
+          const newValue = td.textContent.trim();
+          if (feature.get(fieldName) != newValue) {
+            updatedAttributes[fieldName] = newValue;
+          }
+        });
+
+        if (Object.keys(updatedAttributes).length > 0) {
+          feature.setProperties(updatedAttributes);
+          updatedFeatures.push(feature);
+        }
+      });
+
+    console.log("Updated features:", updatedFeatures);
+  });
+
+  document
+    .querySelectorAll("#attribute-table tbody tr")
+    .forEach((row, rowIndex) => {
+      const feature = features[rowIndex];
+
+      if (!feature) return;
+
+      const updatedAttributes = {};
+
+      row.querySelectorAll("td").forEach((td, colIndex) => {
+        const fieldName = headers[colIndex];
+        const newValue = td.textContent.trim();
+        console.log(`Field: ${fieldName}, New Value: ${newValue}`);
+
+        // Only include changed fields
+        if (feature.get(fieldName) != newValue) {
+          updatedAttributes[fieldName] = newValue;
+        }
+      });
+
+      // Only push if there is at least one updated field
+      if (Object.keys(updatedAttributes).length > 0) {
+        feature.setProperties(updatedAttributes); // update feature locally
+        updatedFeatures.push(feature);
+      }
+    });
+
+  if (updatedFeatures.length === 0) {
+    alert("No changes to save!");
+    return;
+  }
+
+  // 2. Create WFS Transaction
+  const formatWFS = new WFS();
+  const formatGML = new GML({
+    featureNS: workspace,
+    featureType: layer,
+    srsName: "EPSG:3857",
+  });
+
+  const transaction = formatWFS.writeTransaction(
+    updatedFeatures, // updated features
+    null, // no inserts
+    null, // no deletes
+    formatGML
+  );
+
+  // 3. Send via fetch
+  fetch(`http://${host}:${port}/geoserver/${workspace}/ows`, {
+    method: "POST",
+    body: new XMLSerializer().serializeToString(transaction),
+    headers: {
+      "Content-Type": "text/xml",
+    },
+  })
+    .then((res) => res.text())
+    .then((data) => {
+      console.log("WFS Transaction response:", data);
+      alert("Changes saved!");
+    })
+    .catch((err) => console.error(err));
+});
 
 // Function to zoom to a feature's extent
 function zoomToFeatureExtent(feature) {
