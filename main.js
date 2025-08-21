@@ -3430,7 +3430,6 @@ function populateAttributeTable(features) {
 // --- Globals shared by Edit + Save ---
 let loadedFeatures = [];
 
-const NAMESPACE_URI = "http://test"; // <-- your GeoServer Namespace URI (not the workspace name)
 const mapProj = map.getView().getProjection().getCode() || "EPSG:3857";
 
 // Extract headers once (column names must match attribute names)
@@ -3487,7 +3486,9 @@ editBtn.addEventListener("click", () => {
 });
 
 // ---- adjust these to your GeoServer setup ----
+// ---- adjust these to your GeoServer setup ----
 const GEOM_NAME = "geom"; // your geometry column name (geom/the_geom/wkb_geometry)
+const NAMESPACE_URI = "http://test"; // Namespace URI from GeoServer > Namespaces (NOT the workspace string)
 // ----------------------------------------------
 
 saveBtn.addEventListener("click", () => {
@@ -3545,8 +3546,6 @@ saveBtn.addEventListener("click", () => {
 
         cells.forEach((td, colIndex) => {
           const fieldName = td.dataset.field || headerFields[colIndex] || null;
-          console.log(fieldName, td.textContent);
-
           // skip unknown/missing field names and geometry columns
           if (!fieldName || fieldName === GEOM_NAME || fieldName === "geometry")
             return;
@@ -3568,7 +3567,7 @@ saveBtn.addEventListener("click", () => {
 
         if (Object.keys(updated).length) {
           feat.setProperties(updated);
-          feat.setGeometryName("geom");
+          feat.setGeometryName(GEOM_NAME);
           updatedFeatures.push(feat);
         }
       });
@@ -3610,6 +3609,12 @@ saveBtn.addEventListener("click", () => {
         return;
       }
       alert("Changes saved!");
+      // 🔽 Reset table UI
+      document.querySelectorAll("#attribute-table tbody td").forEach((td) => {
+        td.contentEditable = false;
+        td.style.backgroundColor = "";
+      });
+      saveBtn.disabled = true;
     })
     .catch((err) => {
       console.error("Save failed:", err);
