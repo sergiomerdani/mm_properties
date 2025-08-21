@@ -74,6 +74,7 @@ import ol_style_Chart from "ol-ext/style/Chart";
 import TileArcGISRest from "ol/source/TileArcGISRest.js";
 import Heatmap from "ol/layer/Heatmap.js";
 import { toLonLat } from "ol/proj";
+import { GML } from "ol/format";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -3426,123 +3427,194 @@ function populateAttributeTable(features) {
   });
 }
 
+// --- Globals shared by Edit + Save ---
+let loadedFeatures = [];
+
+const NAMESPACE_URI = "http://test"; // <-- your GeoServer Namespace URI (not the workspace name)
+const mapProj = map.getView().getProjection().getCode() || "EPSG:3857";
+
+// Extract headers once (column names must match attribute names)
+
+// Optional: skip columns that aren’t attributes (e.g., geometry/id columns)
+const SKIP_FIELDS = new Set(["geom", "the_geom", "gid", "id", ""]);
+
 const editBtn = document.getElementById("edit-btn");
 const saveBtn = document.getElementById("save-btn");
 
+// Start with Save disabled until features load
+saveBtn.disabled = true;
+
 editBtn.addEventListener("click", () => {
+  // Make table cells editable (UI only)
   document.querySelectorAll("#attribute-table tbody td").forEach((td) => {
     td.contentEditable = true;
     td.style.backgroundColor = "#fffbe6";
   });
-  saveBtn.disabled = false;
+
+  // Parse "workspace:layer" (e.g., "test:Shkolla")
+  [workspace, layerName] = tableLayerSelected.split(":");
+
+  // Build WFS GetFeature URL (GeoJSON output)
+  const wfsUrl =
+    `http://${host}:${port}/geoserver/${workspace}/ows` +
+    `?service=WFS&version=1.0.0&request=GetFeature` +
+    `&typeName=${tableLayerSelected}` +
+    `&maxFeatures=500` +
+    `&outputFormat=application/json`;
+
+  // Load features (manual fetch avoids OL loader event quirks)
+  fetch(wfsUrl)
+    .then((res) => {
+      if (!res.ok) throw new Error(`WFS HTTP ${res.status}`);
+      return res.json();
+    })
+    .then((json) => {
+      const fmt = new GeoJSON();
+      loadedFeatures = fmt.readFeatures(json, {
+        dataProjection: "EPSG:3857", // adapt if your data CRS differs
+        featureProjection: mapProj, // map/view projection
+      });
+      saveBtn.disabled = loadedFeatures.length === 0;
+      if (loadedFeatures.length === 0) {
+        alert("No features returned from WFS.");
+      }
+    })
+    .catch((err) => {
+      console.error("Failed to load features for editing:", err);
+      alert("Failed to load features for editing. Check console/network.");
+      saveBtn.disabled = true;
+    });
 });
 
-// 1. Get headers (field names)
-const headers = Array.from(
-  document.querySelectorAll("#attribute-table thead th")
-).map((th) => th.textContent.trim());
+// ---- adjust these to your GeoServer setup ----
+const GEOM_NAME = "geom"; // your geometry column name (geom/the_geom/wkb_geometry)
+// ----------------------------------------------
 
 saveBtn.addEventListener("click", () => {
-  const updatedFeatures = [];
-
   const [workspace, layerName] = tableLayerSelected.split(":");
 
-  const wfsUrl = `http://localhost:8080/geoserver/${workspace}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=${tableLayerSelected}&maxFeatures=50`;
+  // 1) Load features fresh from WFS (GeoJSON)
+  const wfsUrl =
+    `http://localhost:8080/geoserver/${workspace}/ows` +
+    `?service=WFS&version=1.0.0&request=GetFeature` +
+    `&typeName=${tableLayerSelected}` +
+    `&maxFeatures=1000&outputFormat=application/json`;
 
-  const vectorSource = new VectorSource({
-    format: new GeoJSON(),
-    url: wfsUrl,
-  });
+  fetch(wfsUrl)
+    .then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
+    .then((json) => {
+      const fmt = new GeoJSON();
+      const mapSrs =
+        map?.getView?.().getProjection?.().getCode?.() || "EPSG:3857";
+      const features = fmt.readFeatures(json, {
+        dataProjection: "EPSG:3857", // change if your data CRS differs
+        featureProjection: mapSrs,
+      });
 
-  vectorSource.once("featuresloadend", () => {
-    const features = vectorSource.getFeatures();
-    console.log("Features loaded:", features);
+      if (!features.length) {
+        alert("No features returned from WFS.");
+        return;
+      }
 
-    document
-      .querySelectorAll("#attribute-table tbody tr")
-      .forEach((row, rowIndex) => {
-        const feature = features[rowIndex];
-        if (!feature) return;
+      // Make sure OL uses your GeoServer geometry attribute name when writing WFS-T
+      features.forEach((f) => f.setGeometryName(GEOM_NAME));
 
-        const updatedAttributes = {};
-        row.querySelectorAll("td").forEach((td, colIndex) => {
-          const fieldName = headers[colIndex];
-          const newValue = td.textContent.trim();
-          if (feature.get(fieldName) != newValue) {
-            updatedAttributes[fieldName] = newValue;
+      // 2) Build a safe column→field mapping from the THEAD you already have
+      const ths = Array.from(
+        document.querySelectorAll("#attribute-table thead th")
+      );
+      const firstKeys = new Set(features[0].getKeys()); // real attribute names on the feature
+      const headerFields = ths.map((th) => {
+        const name = (th.dataset.field || th.textContent || "").trim();
+        return firstKeys.has(name) ? name : null; // null = ignore this column
+      });
+
+      // 3) Walk rows and compute diffs
+      const updatedFeatures = [];
+      const rows = document.querySelectorAll("#attribute-table tbody tr");
+
+      rows.forEach((tr, rowIndex) => {
+        const feat = features[rowIndex];
+        if (!feat) return;
+
+        const updated = {};
+        const cells = tr.querySelectorAll("td");
+
+        cells.forEach((td, colIndex) => {
+          const fieldName = td.dataset.field || headerFields[colIndex] || null;
+          console.log(fieldName, td.textContent);
+
+          // skip unknown/missing field names and geometry columns
+          if (!fieldName || fieldName === GEOM_NAME || fieldName === "geometry")
+            return;
+
+          const oldVal = feat.get(fieldName);
+          const raw = td.textContent.trim();
+          let val = raw;
+
+          // Simple number casting to preserve types
+          if (typeof oldVal === "number" && raw !== "") {
+            const n = Number(raw);
+            if (!Number.isNaN(n)) val = n;
+          }
+
+          if (oldVal !== val) {
+            updated[fieldName] = val;
           }
         });
 
-        if (Object.keys(updatedAttributes).length > 0) {
-          feature.setProperties(updatedAttributes);
-          updatedFeatures.push(feature);
+        if (Object.keys(updated).length) {
+          feat.setProperties(updated);
+          feat.setGeometryName("geom");
+          updatedFeatures.push(feat);
         }
       });
 
-    console.log("Updated features:", updatedFeatures);
-  });
-
-  document
-    .querySelectorAll("#attribute-table tbody tr")
-    .forEach((row, rowIndex) => {
-      const feature = features[rowIndex];
-
-      if (!feature) return;
-
-      const updatedAttributes = {};
-
-      row.querySelectorAll("td").forEach((td, colIndex) => {
-        const fieldName = headers[colIndex];
-        const newValue = td.textContent.trim();
-        console.log(`Field: ${fieldName}, New Value: ${newValue}`);
-
-        // Only include changed fields
-        if (feature.get(fieldName) != newValue) {
-          updatedAttributes[fieldName] = newValue;
-        }
-      });
-
-      // Only push if there is at least one updated field
-      if (Object.keys(updatedAttributes).length > 0) {
-        feature.setProperties(updatedAttributes); // update feature locally
-        updatedFeatures.push(feature);
+      if (!updatedFeatures.length) {
+        alert("No changes to save!");
+        return;
       }
-    });
 
-  if (updatedFeatures.length === 0) {
-    alert("No changes to save!");
-    return;
-  }
+      // 4) Write WFS-T Update
+      const wfs = new WFS();
+      const node = wfs.writeTransaction(
+        [], // inserts
+        updatedFeatures, // updates
+        [], // deletes
+        {
+          featureNS: `${workspace}@org`,
+          featurePrefix: workspace,
+          featureType: layerName,
+          srsName: "EPSG:3857",
+        }
+      );
 
-  // 2. Create WFS Transaction
-  const formatWFS = new WFS();
-  const formatGML = new GML({
-    featureNS: workspace,
-    featureType: layer,
-    srsName: "EPSG:3857",
-  });
+      const xml = new XMLSerializer().serializeToString(node);
 
-  const transaction = formatWFS.writeTransaction(
-    updatedFeatures, // updated features
-    null, // no inserts
-    null, // no deletes
-    formatGML
-  );
-
-  // 3. Send via fetch
-  fetch(`http://${host}:${port}/geoserver/${workspace}/ows`, {
-    method: "POST",
-    body: new XMLSerializer().serializeToString(transaction),
-    headers: {
-      "Content-Type": "text/xml",
-    },
-  })
-    .then((res) => res.text())
-    .then((data) => {
-      console.log("WFS Transaction response:", data);
+      return fetch(`http://${host}:${port}/geoserver/${workspace}/ows`, {
+        method: "POST",
+        headers: { "Content-Type": "text/xml" },
+        body: xml,
+      });
+    })
+    .then((res) => (res ? res.text() : null))
+    .then((txt) => {
+      if (!txt) return;
+      console.log("WFS Transaction response:", txt);
+      if (txt.includes("<ows:ExceptionReport")) {
+        console.error("WFS-T error:", txt);
+        alert("Save failed (see console).");
+        return;
+      }
       alert("Changes saved!");
     })
-    .catch((err) => console.error(err));
+    .catch((err) => {
+      console.error("Save failed:", err);
+      alert("Save failed. See console.");
+    });
 });
 
 // Function to zoom to a feature's extent
