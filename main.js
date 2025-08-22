@@ -5094,3 +5094,115 @@ runBtn.addEventListener("click", () => {
       siteSelectionModal.style.display = "none";
     });
 });
+
+// X/Y POINTS INPUT
+let xyPoints = [];
+
+// open modal when button clicked
+document.getElementById("add-xy").addEventListener("click", () => {
+  xyPoints = [];
+  document.getElementById("xyPointList").innerHTML = "";
+  document.getElementById("xyModal").style.display = "block";
+});
+
+// close modal
+document.getElementById("xyClose").addEventListener("click", () => {
+  document.getElementById("xyModal").style.display = "none";
+});
+
+// add point
+document.getElementById("xyAddPoint").addEventListener("click", () => {
+  const x = parseFloat(document.getElementById("xyX").value);
+  const y = parseFloat(document.getElementById("xyY").value);
+
+  if (isNaN(x) || isNaN(y)) {
+    alert("⚠️ Please enter valid coordinates.");
+    return;
+  }
+
+  xyPoints.push({ x, y });
+
+  const li = document.createElement("li");
+  li.textContent = `X: ${x}, Y: ${y}`;
+  document.getElementById("xyPointList").appendChild(li);
+
+  // clear inputs
+  document.getElementById("xyX").value = "";
+  document.getElementById("xyY").value = "";
+});
+
+const labelX = document.querySelector("label[for='xyX']");
+const labelY = document.querySelector("label[for='xyY']");
+const projectionSelect = document.getElementById("xyProjection");
+
+function updateXYLabels() {
+  if (projectionSelect.value === "EPSG:4326") {
+    labelX.textContent = "Longitude:";
+    labelY.textContent = "Latitude:";
+  } else {
+    labelX.textContent = "X:";
+    labelY.textContent = "Y:";
+  }
+}
+
+// run once when modal opens (pre-select 4326)
+document.getElementById("add-xy").addEventListener("click", () => {
+  document.getElementById("xyModal").style.display = "block";
+  updateXYLabels(); // set initial labels
+});
+
+// listen for changes
+projectionSelect.addEventListener("change", updateXYLabels);
+
+// create layer
+document.getElementById("xyCreateLayer").addEventListener("click", () => {
+  const inputCrs = document.getElementById("xyProjection").value;
+
+  const mapCrs = map.getView().getProjection(); // usually EPSG:3857
+
+  if (xyPoints.length === 0) {
+    alert("⚠️ No points added!");
+    return;
+  }
+
+  // Build point features
+  const pointFeatures = xyPoints.map((c) => {
+    const coords = transform([c.x, c.y], inputCrs, mapCrs);
+    return new Feature({
+      geometry: new Point(coords),
+    });
+  });
+
+  // Vector source
+  const vectorSource = new VectorSource({
+    features: pointFeatures,
+  });
+
+  // Style
+  const pointStyle = new Style({
+    image: new CircleStyle({
+      radius: 6,
+      fill: new Fill({ color: "red" }),
+      stroke: new Stroke({ color: "#fff", width: 2 }),
+    }),
+  });
+
+  // Vector layer
+  const pointLayer = new VectorLayer({
+    source: vectorSource,
+    style: pointStyle,
+  });
+
+  // Add to map
+  map.addLayer(pointLayer);
+
+  // Zoom to extent
+  map.getView().fit(vectorSource.getExtent(), {
+    padding: [20, 20, 20, 20],
+  });
+
+  console.log("✅ Point layer added with", xyPoints.length, "points");
+
+  // Close modal
+  document.getElementById("xyModal").style.display = "none";
+});

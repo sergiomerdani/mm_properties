@@ -188,9 +188,43 @@
           <button id="site-selection" class="fa-button" title="Site Selection">
             <i class="fa-solid fa-map-location"></i>
           </button>
+          <button id="add-xy" class="fa-button" title="Add XY Coordinates">
+            <i class="fa-solid fa-location-crosshairs"></i>
+          </button>
           <button class="logout" id="logout" title="Logout">
             <img src="assets/icons/logout-solid.svg" width="13" height="13" />
           </button>
+        </div>
+      </div>
+
+      <!-- ADD XY Coordinates -->
+
+      <div id="xyModal">
+        <div id="xyModalContent">
+          <h4>➕ Add XY Coordinates</h4>
+
+          <label for="xyProjection">🌐 Projection:</label>
+          <select id="xyProjection">
+            <option value="EPSG:4326">WGS84 (EPSG:4326) Decimal</option>
+            <option value="EPSG:3857">Web Mercator (EPSG:3857)</option>
+            <option value="EPSG:6870">Albania TM 2010 (EPSG:6870)</option>
+            <option value="EPSG:32634">UTM Zone 34N (EPSG:32634)</option>
+          </select>
+
+          <label for="xyX">X:</label>
+          <input type="number" id="xyX" step="any" />
+
+          <label for="xyY">Y:</label>
+          <input type="number" id="xyY" step="any" />
+
+          <div id="xyModalActions">
+            <button id="xyAddPoint">➕ Add Point</button>
+            <button id="xyCreateLayer">🗺️ Create Layer</button>
+            <button id="xyClose">❌ Cancel</button>
+          </div>
+
+          <h4>📍 Added Points</h4>
+          <ul id="xyPointList"></ul>
         </div>
       </div>
 
