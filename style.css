@@ -675,3 +675,38 @@ button.fa-button {
   margin-left: 6px;
   font-size: 12px;
 }
+
+/* EDIT BUTTONS */
+
+#editToolbar {
+  position: absolute;
+  top: 200px;
+  left: 10px;
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border: 1px solid #aaa;
+  padding: 4px;
+  z-index: 1000;
+}
+
+/* Icon buttons */
+#editToolbar button {
+  width: 32px;
+  height: 32px;
+  margin: 2px 0;
+  background: #f9f9f9;
+  border: 1px solid #ccc;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+#editToolbar button:hover {
+  background: #ddd;
+}
+
+/* Active tool */
+#editToolbar button.active {
+  background: #aaa;
+  color: white;
+}

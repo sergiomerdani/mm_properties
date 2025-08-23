@@ -74,7 +74,6 @@ import ol_style_Chart from "ol-ext/style/Chart";
 import TileArcGISRest from "ol/source/TileArcGISRest.js";
 import Heatmap from "ol/layer/Heatmap.js";
 import { toLonLat } from "ol/proj";
-import { GML } from "ol/format";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -2640,6 +2639,7 @@ let deletes = [];
 let updates = [];
 
 const editLayerButton = document.getElementById("editButton");
+const editToolbar = document.getElementById("editToolbar");
 
 editLayerButton.addEventListener("click", (e) => {
   const intExtent = extentBbox.map((c) => Math.trunc(c));
@@ -2651,6 +2651,14 @@ editLayerButton.addEventListener("click", (e) => {
   if (!selectedLayer) {
     alert("Please select a layer!");
     return;
+  }
+  if (
+    editToolbar.style.display === "none" ||
+    editToolbar.style.display === ""
+  ) {
+    editToolbar.style.display = "flex";
+  } else {
+    editToolbar.style.display = "none";
   }
   //WFS Layer
   wfsVectorSource = new VectorSource({
@@ -2679,7 +2687,7 @@ editLayerButton.addEventListener("click", (e) => {
 
 // ____________________________________________________________________________________________
 //MODIFY FEATURE
-const modifyFeature = document.getElementById("modifyFeature");
+const modifyFeature = document.getElementById("btnEditGeom");
 
 //MODIFY INTERACTION
 let modifyInteraction = null;
@@ -2715,7 +2723,7 @@ modifyFeature.addEventListener("click", (e) => {
 });
 
 //SELECT FEATURE
-const selectFeature = document.getElementById("selectFeature");
+const selectFeature = document.getElementById("btnSelect");
 
 // Define a style for point features
 const selectedPointStyle = new Style({
@@ -2783,7 +2791,7 @@ selectFeature.addEventListener("click", (e) => {
 // ________________________________________________________________________________
 
 //ADD NEW FEATURE
-const addNewFeature = document.getElementById("addNewFeature");
+const addNewFeature = document.getElementById("btnAdd");
 // Draw Feature Event Listener
 addNewFeature.addEventListener("click", (e) => {
   if (!layerName) {
@@ -2864,7 +2872,7 @@ function saveFeature() {
 }
 
 // DELETE Feature Listener (improved)
-const deleteFeature = document.getElementById("deleteFeature");
+const deleteFeature = document.getElementById("btnDelete");
 deleteFeature.addEventListener("click", (e) => {
   if (!vectorLayer) {
     alert("Please select a layer first.");
@@ -2892,7 +2900,7 @@ deleteFeature.addEventListener("click", (e) => {
 });
 
 // SAVE FEATURE EVENT
-const saveFeatureButton = document.getElementById("saveFeature");
+const saveFeatureButton = document.getElementById("btnSave");
 saveFeatureButton.addEventListener("click", () => {
   saveFeature();
 });
@@ -5206,3 +5214,5 @@ document.getElementById("xyCreateLayer").addEventListener("click", () => {
   // Close modal
   document.getElementById("xyModal").style.display = "none";
 });
+
+// _________________________________________________________________________________

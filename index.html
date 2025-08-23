@@ -23,91 +23,51 @@
       <div class="navbar">
         <div class="buttons">
           <button class="fa-button" id="identify" title="Get Information">
-            <img
-              src="assets/icons/circle-info-solid.svg"
-              width="13"
-              height="13"
-            />
+            ℹ️
           </button>
+
           <select id="identifyMode" style="display: none; margin-left: 8px">
             <option value="" disabled selected>Choose mode…</option>
             <option value="all">All Layers</option>
             <option value="top">Top Most Layer</option>
           </select>
           <button class="fa-button" id="move-right" title="Move Right">
-            <img
-              src="assets/icons/circle-right-solid.svg"
-              width="13"
-              height="13"
-            />
+            ➡️
           </button>
-          <button class="fa-button" id="move-left" title="Move Left">
-            <img
-              src="assets/icons/circle-arrow-left-solid.svg"
-              width="13"
-              height="13"
-            />
-          </button>
-          <button class="fa-button" id="zoom-out" title="Zoom Out">
-            <img
-              src="assets/icons/magnifying-glass-minus-solid.svg"
-              width="13"
-              height="13"
-            />
-          </button>
+          <button class="fa-button" id="move-left" title="Move Left">⬅️</button>
+          <button class="fa-button" id="zoom-out" title="Zoom Out">🔍➖</button>
           <input type="text" id="scaleInput" />
-          <button class="fa-button" id="zoom-in" title="Zoom In">
-            <img
-              src="assets/icons/magnifying-glass-plus-solid.svg"
-              width="13"
-              height="13"
-            />
-          </button>
+          <button class="fa-button" id="zoom-in" title="Zoom In">🔍➕</button>
           <button class="fa-button" id="coords" title="XY Coordinates">
-            <img
-              src="assets/icons/thumbtack-solid.svg"
-              width="13"
-              height="13"
-            />
+            📌
           </button>
-          <button class="fa-button" id="pan" title="DragPan">
-            <img src="assets/icons/hand-solid.svg" width="13" height="13" />
-          </button>
+          <button class="fa-button" id="pan" title="DragPan">✋</button>
           <button class="fa-button" id="zoom-extent" title="Zoom Extent">
-            <img src="assets/icons/globe-solid.svg" width="13" height="13" />
+            🌍
           </button>
+
           <button class="fa-button" id="graticuleButton" title="Show/Hide Grid">
-            <img
-              src="assets/icons/table-cells-large-solid.svg"
-              width="13"
-              height="13"
-            />
+            #️⃣
           </button>
+
           <button
             class="fa-button"
             id="getGeolocation"
             title="Your Current Location"
           >
-            <img
-              src="assets/icons/location-dot-solid.svg"
-              width="13"
-              height="13"
-            />
+            📡
           </button>
+
           <div class="measurement">
             <button
               class="fa-button"
               id="measure-length"
               title="Measure Length"
             >
-              <img src="assets/icons/ruler-solid.svg" width="13" height="13" />
+              📏
             </button>
             <button class="fa-button" id="measure-area" title="Measure Area">
-              <img
-                src="assets/icons/ruler-combined-solid.svg"
-                width="13"
-                height="13"
-              />
+              📐
             </button>
             <label for="segments">Show segment lengths: </label>
             <input type="checkbox" id="segments" checked />
@@ -119,82 +79,50 @@
             id="selectControlButton"
             title="Select By Attributes"
           >
-            <img
-              src="assets/icons/binoculars-solid.svg"
-              width="13"
-              height="13"
-            />
+            🔭
           </button>
           <button
             class="fa-button"
             id="searchControlButton"
             title="Search By Attributes"
           >
-            <img
-              src="assets/icons/magnifying-glass-solid.svg"
-              width="13"
-              height="13"
-            />
+            🔍
           </button>
-          <button class="fa-button" id="printContent" title="Print">
-            <img src="assets/icons/print-solid.svg" width="13" height="13" />
-          </button>
+          <button class="fa-button" id="printContent" title="Print">🖨️</button>
           <button class="fa-button" id="editButton" title="Edit layer">
-            <img src="assets/icons/edit-button.svg" width="13" height="13" />
-          </button>
-          <button class="fa-button" id="addNewFeature" title="Add New Feature">
-            <img src="assets/icons/plus-solid.svg" width="13" height="13" />
-          </button>
-          <button class="fa-button" id="modifyFeature" title="Modify Feature">
-            <img src="assets/icons/pen-solid.svg" width="13" height="13" />
-          </button>
-          <button class="fa-button" id="selectFeature" title="Select Feature">
-            <img src="assets/icons/select-solid.svg" width="13" height="13" />
-          </button>
-          <button class="fa-button" id="deleteFeature" title="Delete Feature">
-            <img
-              src="assets/icons/trash-can-solid.svg"
-              width="13"
-              height="13"
-            />
-          </button>
-          <button class="fa-button" id="saveFeature" title="Save Feature">
-            <img
-              src="assets/icons/floppy-disk-solid.svg"
-              width="13"
-              height="13"
-            />
+            🛠️
           </button>
 
           <button class="fa-button" id="attributeTable" title="Attribute table">
-            <img
-              src="assets/icons/table-cells-large-solid.svg"
-              width="13"
-              height="13"
-            />
+            📊
           </button>
-          <button class="fa-button" id="add-data" title="Add Data">
-            <i class="fa-solid fa-file-import"></i>
-          </button>
+          <button class="fa-button" id="add-data" title="Add Data">📥</button>
           <button class="fa-button" id="add-chart" title="Add Graphic">
-            <i class="fa-solid fa-chart-simple"></i>
+            🥧
           </button>
+
           <button class="fa-button" id="heatmap" title="Create Heatmap">
-            <i class="fa-solid fa-fire"></i>
+            🔥
           </button>
           <button id="reachabilityBtn" class="fa-button" title="Reachability">
-            <i class="fa-solid fa-map"></i>
+            🗺️
           </button>
           <button id="site-selection" class="fa-button" title="Site Selection">
-            <i class="fa-solid fa-map-location"></i>
+            📍
           </button>
           <button id="add-xy" class="fa-button" title="Add XY Coordinates">
-            <i class="fa-solid fa-location-crosshairs"></i>
+            🎯
           </button>
-          <button class="logout" id="logout" title="Logout">
-            <img src="assets/icons/logout-solid.svg" width="13" height="13" />
-          </button>
+          <button class="logout" id="logout" title="Logout">🚪</button>
         </div>
+      </div>
+
+      <div id="editToolbar" style="display: none">
+        <button id="btnAdd" title="Add Feature">🆕</button>
+        <button id="btnEditGeom" title="Edit Geometry">✏️</button>
+        <button id="btnSelect" title="Select Feature">🖱️</button>
+        <button id="btnDelete" title="Delete Feature">🗑️</button>
+        <button id="btnSave" title="Save Feature">💾</button>
       </div>
 
       <!-- ADD XY Coordinates -->
