@@ -2632,6 +2632,96 @@ map.on("click", function (evt) {
 });
 let extentBbox;
 
+// --- Style for the base geometry ---
+const baseStyle = new Style({
+  stroke: new Stroke({
+    color: "blue",
+    width: 2,
+  }),
+  fill: new Fill({
+    color: "rgba(0,0,255,0.1)",
+  }),
+});
+
+// --- Style for vertices ---
+const vertexStyle = new Style({
+  image: new CircleStyle({
+    radius: 4,
+    fill: new Fill({ color: "red" }),
+    stroke: new Stroke({ color: "white", width: 1 }),
+  }),
+});
+
+// --- Style function that shows base + vertices ---
+function styleWithVertices(feature) {
+  const styles = [baseStyle];
+  const geom = feature.getGeometry();
+  const type = geom.getType();
+
+  if (type === "Point") {
+    styles.push(
+      new Style({
+        geometry: geom,
+        image: vertexStyle.getImage(),
+      })
+    );
+  } else if (type === "LineString") {
+    geom.forEachSegment((start, end) => {
+      styles.push(
+        new Style({
+          geometry: new Point(start),
+          image: vertexStyle.getImage(),
+        })
+      );
+      styles.push(
+        new Style({
+          geometry: new Point(end),
+          image: vertexStyle.getImage(),
+        })
+      );
+    });
+  } else if (type === "Polygon") {
+    geom.getCoordinates()[0].forEach((coord) => {
+      styles.push(
+        new Style({
+          geometry: new Point(coord),
+          image: vertexStyle.getImage(),
+        })
+      );
+    });
+  } else if (type === "MultiLineString") {
+    geom.getLineStrings().forEach((line) => {
+      line.forEachSegment((start, end) => {
+        styles.push(
+          new Style({
+            geometry: new Point(start),
+            image: vertexStyle.getImage(),
+          })
+        );
+        styles.push(
+          new Style({
+            geometry: new Point(end),
+            image: vertexStyle.getImage(),
+          })
+        );
+      });
+    });
+  } else if (type === "MultiPolygon") {
+    geom.getPolygons().forEach((poly) => {
+      poly.getCoordinates()[0].forEach((coord) => {
+        styles.push(
+          new Style({
+            geometry: new Point(coord),
+            image: vertexStyle.getImage(),
+          })
+        );
+      });
+    });
+  }
+
+  return styles;
+}
+
 //EDIT LAYER
 
 let inserts = [];
@@ -2677,6 +2767,7 @@ editLayerButton.addEventListener("click", (e) => {
     // opacity: 0,
     visible: true,
     displayInLayerSwitcher: true,
+    style: styleWithVertices,
   });
   // Remove the polygon tile layer from the map
   layerGroup.getLayers().remove(selectedLayer);
