@@ -37,7 +37,7 @@ import {
 import { LineString, Point, Circle } from "ol/geom.js";
 import { getLength, getArea } from "ol/sphere";
 import { Modify, Draw, Select } from "ol/interaction";
-import Graticule from "ol/layer/Graticule.js";
+import Snap from "ol/interaction/Snap";
 import Geolocation from "ol/Geolocation.js";
 import { DragPan } from "ol/interaction";
 import PrintDialog from "ol-ext/control/PrintDialog";
@@ -2633,6 +2633,8 @@ map.on("click", function (evt) {
 let extentBbox;
 
 // --- Style for the base geometry ---
+
+// Base style
 const baseStyle = new Style({
   stroke: new Stroke({
     color: "blue",
@@ -2643,7 +2645,7 @@ const baseStyle = new Style({
   }),
 });
 
-// --- Style for vertices ---
+// Style for real vertices
 const vertexStyle = new Style({
   image: new CircleStyle({
     radius: 4,
@@ -2652,78 +2654,93 @@ const vertexStyle = new Style({
   }),
 });
 
-// --- Style function that shows base + vertices ---
+// Style for midpoints
+const midStyle = new Style({
+  image: new CircleStyle({
+    radius: 4,
+    fill: new Fill({ color: "rgba(30, 0, 200, 0.4)" }), // green with opacity
+    stroke: new Stroke({ color: "white", width: 1 }),
+  }),
+});
+
+// Point geometry style (with opacity)
+const pointStyleEdit = new Style({
+  image: new CircleStyle({
+    radius: 6,
+    fill: new Fill({ color: "rgba(0, 0, 255, 0.5)" }), // blue with 50% opacity
+    stroke: new Stroke({ color: "rgba(255,255,255,0.8)", width: 2 }), // white border, slightly transparent
+  }),
+});
+
 function styleWithVertices(feature) {
   const styles = [baseStyle];
   const geom = feature.getGeometry();
   const type = geom.getType();
 
-  if (type === "Point") {
+  // Helper: draw vertex
+  function addVertex(coord) {
     styles.push(
       new Style({
-        geometry: geom,
+        geometry: new Point(coord),
         image: vertexStyle.getImage(),
       })
     );
-  } else if (type === "LineString") {
+  }
+
+  // Helper: draw midpoint
+  function addMidpoint(start, end) {
+    const mid = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
+    styles.push(
+      new Style({
+        geometry: new Point(mid),
+        image: midStyle.getImage(),
+      })
+    );
+  }
+
+  if (type === "LineString") {
     geom.forEachSegment((start, end) => {
-      styles.push(
-        new Style({
-          geometry: new Point(start),
-          image: vertexStyle.getImage(),
-        })
-      );
-      styles.push(
-        new Style({
-          geometry: new Point(end),
-          image: vertexStyle.getImage(),
-        })
-      );
+      addVertex(start);
+      addVertex(end);
+      addMidpoint(start, end);
     });
   } else if (type === "Polygon") {
-    geom.getCoordinates()[0].forEach((coord) => {
-      styles.push(
-        new Style({
-          geometry: new Point(coord),
-          image: vertexStyle.getImage(),
-        })
-      );
+    geom.getCoordinates().forEach((ring) => {
+      for (let i = 0; i < ring.length - 1; i++) {
+        const start = ring[i];
+        const end = ring[i + 1];
+        addVertex(start);
+        addMidpoint(start, end);
+      }
     });
   } else if (type === "MultiLineString") {
     geom.getLineStrings().forEach((line) => {
       line.forEachSegment((start, end) => {
-        styles.push(
-          new Style({
-            geometry: new Point(start),
-            image: vertexStyle.getImage(),
-          })
-        );
-        styles.push(
-          new Style({
-            geometry: new Point(end),
-            image: vertexStyle.getImage(),
-          })
-        );
+        addVertex(start);
+        addVertex(end);
+        addMidpoint(start, end);
       });
     });
   } else if (type === "MultiPolygon") {
     geom.getPolygons().forEach((poly) => {
-      poly.getCoordinates()[0].forEach((coord) => {
-        styles.push(
-          new Style({
-            geometry: new Point(coord),
-            image: vertexStyle.getImage(),
-          })
-        );
+      poly.getCoordinates().forEach((ring) => {
+        for (let i = 0; i < ring.length - 1; i++) {
+          const start = ring[i];
+          const end = ring[i + 1];
+          addVertex(start);
+          addMidpoint(start, end);
+        }
       });
     });
+  } else if (type === "Point") {
+    return pointStyleEdit;
   }
 
   return styles;
 }
 
 //EDIT LAYER
-
+let snapInteraction = null;
 let inserts = [];
 let deletes = [];
 let updates = [];
@@ -2742,14 +2759,11 @@ editLayerButton.addEventListener("click", (e) => {
     alert("Please select a layer!");
     return;
   }
-  if (
-    editToolbar.style.display === "none" ||
-    editToolbar.style.display === ""
-  ) {
-    editToolbar.style.display = "flex";
-  } else {
-    editToolbar.style.display = "none";
-  }
+  // Toggle toolbar
+  editToolbar.style.display =
+    editToolbar.style.display === "none" || editToolbar.style.display === ""
+      ? "flex"
+      : "none";
   //WFS Layer
   wfsVectorSource = new VectorSource({
     // url: wfsLayerUrl + layerParam + wfsLayerUrlEnd ,
@@ -2769,11 +2783,31 @@ editLayerButton.addEventListener("click", (e) => {
     displayInLayerSwitcher: true,
     style: styleWithVertices,
   });
+
   // Remove the polygon tile layer from the map
   layerGroup.getLayers().remove(selectedLayer);
 
   // Add the WFS vector layer to the map
   layerGroup.getLayers().push(wfsVectorLayer);
+});
+
+// 🧲 Snap toggle button
+const btnSnap = document.getElementById("btnSnap");
+
+btnSnap.addEventListener("click", () => {
+  if (!snapInteraction) {
+    // Create and enable Snap
+    snapInteraction = new Snap({ source: wfsVectorSource });
+    map.addInteraction(snapInteraction);
+    btnSnap.classList.add("active"); // highlight button
+    console.log("✅ Snap ON");
+  } else {
+    // Disable Snap
+    map.removeInteraction(snapInteraction);
+    snapInteraction = null;
+    btnSnap.classList.remove("active");
+    console.log("❌ Snap OFF");
+  }
 });
 
 // ____________________________________________________________________________________________
@@ -2791,6 +2825,7 @@ modifyFeature.addEventListener("click", (e) => {
   // Remove any existing interactions
   if (modifyInteraction) {
     map.removeInteraction(modifyInteraction);
+    map.removeInteraction(selectSingleClick);
   }
   if (draw) {
     map.removeInteraction(draw);
@@ -2799,9 +2834,7 @@ modifyFeature.addEventListener("click", (e) => {
   modifyInteraction = new Modify({
     source: source,
   });
-
   map.addInteraction(modifyInteraction);
-
   // Handle modification end
   modifyInteraction.on("modifyend", function (event) {
     console.log(event);
@@ -2859,7 +2892,7 @@ let isSelectFeatureActive = false;
 selectFeature.addEventListener("click", (e) => {
   isSelectFeatureActive = true;
   map.removeInteraction(draw);
-  map.removeInteraction(modify);
+  map.removeInteraction(modifyInteraction);
   selectSingleClick = new Select({ style: selectStyle, hitTolerance: 5 });
   map.addInteraction(selectSingleClick);
   selectSingleClick.on("select", function (event) {
@@ -2899,6 +2932,7 @@ addNewFeature.addEventListener("click", (e) => {
     type: layerType,
   });
 
+  map.removeInteraction(selectSingleClick);
   map.addInteraction(draw);
 
   draw.on("drawend", function (event) {
