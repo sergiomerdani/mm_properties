@@ -2825,16 +2825,20 @@ modifyFeature.addEventListener("click", (e) => {
   // Remove any existing interactions
   if (modifyInteraction) {
     map.removeInteraction(modifyInteraction);
+    btnEditGeom.classList.remove("active");
     map.removeInteraction(selectSingleClick);
+    selectFeature.classList.remove("active");
   }
   if (draw) {
     map.removeInteraction(draw);
+    addNewFeature.classList.remove("active");
   }
   // Create new modify interaction
   modifyInteraction = new Modify({
     source: source,
   });
   map.addInteraction(modifyInteraction);
+  btnEditGeom.classList.add("active");
   // Handle modification end
   modifyInteraction.on("modifyend", function (event) {
     console.log(event);
@@ -2893,8 +2897,11 @@ selectFeature.addEventListener("click", (e) => {
   isSelectFeatureActive = true;
   map.removeInteraction(draw);
   map.removeInteraction(modifyInteraction);
+  btnEditGeom.classList.remove("active");
+  addNewFeature.classList.remove("active");
   selectSingleClick = new Select({ style: selectStyle, hitTolerance: 5 });
   map.addInteraction(selectSingleClick);
+  selectFeature.classList.add("active");
   selectSingleClick.on("select", function (event) {
     selectedFeatures = event.selected;
     var deselectedFeatures = event.deselected;
@@ -2925,6 +2932,7 @@ addNewFeature.addEventListener("click", (e) => {
 
   if (draw) {
     map.removeInteraction(draw);
+    addNewFeature.classList.remove("active");
   }
 
   draw = new Draw({
@@ -2933,7 +2941,10 @@ addNewFeature.addEventListener("click", (e) => {
   });
 
   map.removeInteraction(selectSingleClick);
+  selectFeature.classList.remove("active");
+
   map.addInteraction(draw);
+  addNewFeature.classList.add("active");
 
   draw.on("drawend", function (event) {
     const feature = event.feature;
@@ -3625,6 +3636,10 @@ const NAMESPACE_URI = "http://test"; // Namespace URI from GeoServer > Namespace
 // ----------------------------------------------
 
 saveBtn.addEventListener("click", () => {
+  btnEditGeom.classList.remove("active");
+  selectFeature.classList.remove("active");
+  addNewFeature.classList.remove("active");
+  deleteFeature.classList.remove("active");
   const [workspace, layerName] = tableLayerSelected.split(":");
 
   // 1) Load features fresh from WFS (GeoJSON)
