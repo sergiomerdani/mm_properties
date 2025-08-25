@@ -74,6 +74,7 @@ import ol_style_Chart from "ol-ext/style/Chart";
 import TileArcGISRest from "ol/source/TileArcGISRest.js";
 import Heatmap from "ol/layer/Heatmap.js";
 import { toLonLat } from "ol/proj";
+import ol_interaction_SnapGuides from "ol-ext/interaction/SnapGuides";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -2771,8 +2772,8 @@ editLayerButton.addEventListener("click", (e) => {
     format: new GeoJSON(),
     strategy: bboxStrategy,
   });
-  console.log(wfsVectorSource.getUrl());
-  console.log(wfsLayerUrl + layerParam + wfsLayerUrlEnd);
+  // console.log(wfsVectorSource.getUrl());
+  // console.log(wfsLayerUrl + layerParam + wfsLayerUrlEnd);
 
   wfsVectorLayer = new VectorLayer({
     source: wfsVectorSource,
@@ -2810,6 +2811,26 @@ btnSnap.addEventListener("click", () => {
   }
 });
 
+// SnapGuide
+
+const snapGuideBtn = document.getElementById("btnSnapGuides");
+let snapGuidesActive = false; // track state
+
+snapGuideBtn.addEventListener("click", () => {
+  if (!snapGuidesActive) {
+    // Turn ON
+    map.addInteraction(snapGuides);
+    snapGuideBtn.classList.add("active");
+    console.log("✅ SnapGuides ON");
+  } else {
+    // Turn OFF
+    map.removeInteraction(snapGuides);
+    snapGuideBtn.classList.remove("active");
+    console.log("❌ SnapGuides OFF");
+  }
+  snapGuidesActive = !snapGuidesActive; // flip state
+});
+
 // ____________________________________________________________________________________________
 //MODIFY FEATURE
 const modifyFeature = document.getElementById("btnEditGeom");
@@ -2835,16 +2856,18 @@ modifyFeature.addEventListener("click", (e) => {
   }
   // Create new modify interaction
   modifyInteraction = new Modify({
-    source: source,
+    source: wfsVectorSource,
   });
   map.addInteraction(modifyInteraction);
   btnEditGeom.classList.add("active");
+  snapGuides.setModifyInteraction(modifyInteraction);
+
   // Handle modification end
   modifyInteraction.on("modifyend", function (event) {
     console.log(event);
     event.features.forEach((feature) => {
       updates.push(feature);
-      console.log("Feature queued for update:", feature.getId());
+      // console.log("Feature queued for update:", feature.getId());
       console.log("Current updates:", updates);
     });
   });
@@ -2889,7 +2912,7 @@ function selectStyle(feature) {
   }
 }
 
-let selectSingleClick, featureID, url, extent, selectedFeatures, aaa;
+let selectSingleClick, extent, selectedFeatures;
 // Initialize a flag to control the map single-click event
 let isSelectFeatureActive = false;
 
@@ -2909,7 +2932,6 @@ selectFeature.addEventListener("click", (e) => {
     selectedFeatures.forEach(function (feature) {
       console.log("Selected feature:", feature);
       extent = feature.getGeometry().getExtent();
-      aaa = feature;
     });
 
     deselectedFeatures.forEach(function (feature) {
@@ -2920,6 +2942,28 @@ selectFeature.addEventListener("click", (e) => {
 });
 
 // ________________________________________________________________________________
+
+const redGuideStyle = new Style({
+  stroke: new Stroke({
+    color: "rgba(255, 0, 0, 0.8)", // bright red
+    width: 2,
+    lineDash: [8, 8], // dashed line
+  }),
+  image: new CircleStyle({
+    radius: 4,
+    fill: new Fill({ color: "rgba(255,0,0,0.8)" }),
+    stroke: new Stroke({ color: "#fff", width: 1 }), // white border for contrast
+  }),
+});
+
+const snapGuides = new ol_interaction_SnapGuides({
+  source: wfsVectorSource,
+  pixelTolerance: 10,
+  enableInitialGuides: true,
+  style: redGuideStyle,
+});
+// map.addInteraction(snapGuides);
+console.log(snapGuides);
 
 //ADD NEW FEATURE
 const addNewFeature = document.getElementById("btnAdd");
@@ -2935,8 +2979,10 @@ addNewFeature.addEventListener("click", (e) => {
     addNewFeature.classList.remove("active");
   }
 
+  console.log(wfsVectorSource.getFeatures().length);
+
   draw = new Draw({
-    source: source,
+    source: wfsVectorSource,
     type: layerType,
   });
 
@@ -2945,6 +2991,8 @@ addNewFeature.addEventListener("click", (e) => {
 
   map.addInteraction(draw);
   addNewFeature.classList.add("active");
+
+  snapGuides.setDrawInteraction(draw);
 
   draw.on("drawend", function (event) {
     const feature = event.feature;
