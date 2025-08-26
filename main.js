@@ -2816,6 +2816,27 @@ btnSnap.addEventListener("click", () => {
 const snapGuideBtn = document.getElementById("btnSnapGuides");
 let snapGuidesActive = false; // track state
 
+const redGuideStyle = new Style({
+  stroke: new Stroke({
+    color: "rgba(255, 0, 0, 0.8)", // bright red
+    width: 2,
+    lineDash: [8, 8], // dashed line
+  }),
+  image: new CircleStyle({
+    radius: 4,
+    fill: new Fill({ color: "rgba(255,0,0,0.8)" }),
+    stroke: new Stroke({ color: "#fff", width: 1 }), // white border for contrast
+  }),
+});
+
+const snapGuides = new ol_interaction_SnapGuides({
+  source: wfsVectorSource,
+  pixelTolerance: 10,
+  enableInitialGuides: true,
+  style: redGuideStyle,
+});
+console.log(snapGuides);
+
 snapGuideBtn.addEventListener("click", () => {
   if (!snapGuidesActive) {
     // Turn ON
@@ -2831,6 +2852,15 @@ snapGuideBtn.addEventListener("click", () => {
   snapGuidesActive = !snapGuidesActive; // flip state
 });
 
+function deactivateSnapGuides() {
+  if (snapGuidesActive) {
+    map.removeInteraction(snapGuides);
+    snapGuidesActive = false;
+    snapGuideBtn.classList.remove("active");
+    console.log("❌ SnapGuides OFF (tool switch)");
+  }
+}
+
 // ____________________________________________________________________________________________
 //MODIFY FEATURE
 const modifyFeature = document.getElementById("btnEditGeom");
@@ -2839,6 +2869,7 @@ const modifyFeature = document.getElementById("btnEditGeom");
 let modifyInteraction = null;
 
 modifyFeature.addEventListener("click", (e) => {
+  deactivateSnapGuides();
   if (!vectorLayer) {
     alert("Please select a layer first.");
     return;
@@ -2862,13 +2893,18 @@ modifyFeature.addEventListener("click", (e) => {
   btnEditGeom.classList.add("active");
   snapGuides.setModifyInteraction(modifyInteraction);
 
-  // Handle modification end
   modifyInteraction.on("modifyend", function (event) {
-    console.log(event);
     event.features.forEach((feature) => {
-      updates.push(feature);
-      // console.log("Feature queued for update:", feature.getId());
-      console.log("Current updates:", updates);
+      if (feature.getId()) {
+        // Existing feature → update
+        if (!updates.includes(feature)) {
+          updates.push(feature);
+          console.log("Feature queued for update:", feature.getId());
+        }
+      } else {
+        // New feature (still unsaved insert) → do nothing
+        console.log("Modified unsaved feature (still in inserts).");
+      }
     });
   });
 });
@@ -2943,32 +2979,11 @@ selectFeature.addEventListener("click", (e) => {
 
 // ________________________________________________________________________________
 
-const redGuideStyle = new Style({
-  stroke: new Stroke({
-    color: "rgba(255, 0, 0, 0.8)", // bright red
-    width: 2,
-    lineDash: [8, 8], // dashed line
-  }),
-  image: new CircleStyle({
-    radius: 4,
-    fill: new Fill({ color: "rgba(255,0,0,0.8)" }),
-    stroke: new Stroke({ color: "#fff", width: 1 }), // white border for contrast
-  }),
-});
-
-const snapGuides = new ol_interaction_SnapGuides({
-  source: wfsVectorSource,
-  pixelTolerance: 10,
-  enableInitialGuides: true,
-  style: redGuideStyle,
-});
-// map.addInteraction(snapGuides);
-console.log(snapGuides);
-
 //ADD NEW FEATURE
 const addNewFeature = document.getElementById("btnAdd");
 // Draw Feature Event Listener
 addNewFeature.addEventListener("click", (e) => {
+  deactivateSnapGuides();
   if (!layerName) {
     alert("Please select a layer first.");
     return;
@@ -2986,6 +3001,8 @@ addNewFeature.addEventListener("click", (e) => {
     type: layerType,
   });
 
+  map.removeInteraction(modifyInteraction);
+  modifyFeature.classList.remove("active");
   map.removeInteraction(selectSingleClick);
   selectFeature.classList.remove("active");
 
@@ -2996,11 +3013,13 @@ addNewFeature.addEventListener("click", (e) => {
 
   draw.on("drawend", function (event) {
     const feature = event.feature;
-    const geom = feature.getGeometry().clone();
 
-    feature.set("geom", geom);
+    // ✅ Don’t clone, just use the real feature in wfsVectorSource
+    feature.set("geom", feature.getGeometry());
 
-    inserts.push(feature);
+    if (!inserts.includes(feature)) {
+      inserts.push(feature);
+    }
 
     console.log("New feature drawn. Click 'Save' to apply.");
   });
