@@ -712,8 +712,8 @@ button.fa-button {
 }
 
 .btn-group {
-  position: relative;
-  display: inline-flex;
+  display: flex;
+  flex-direction: row; /* 🖱️ and ⏷ side by side */
 }
 
 .btn-group button {
@@ -723,20 +723,26 @@ button.fa-button {
   cursor: pointer;
 }
 
+.dropdown {
+  position: relative; /* anchor for dropdown */
+}
+
 .dropdown-arrow {
   width: 20px;
+  padding: 0;
 }
 
 .dropdown-content {
   display: none;
   position: absolute;
-  top: 100%;
-  left: 0;
+  top: 100%; /* ⏬ directly below the arrow */
+  left: 0; /* aligned with arrow's left edge */
   background: white;
   border: 1px solid #ccc;
-  min-width: 120px;
-  z-index: 999;
+  min-width: 40px;
+  z-index: 9999;
   flex-direction: column;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 .dropdown-content button {
@@ -745,7 +751,8 @@ button.fa-button {
   background: white;
   padding: 5px;
   cursor: pointer;
-  text-align: left;
+  text-align: center;
+  font-size: 16px;
 }
 
 .dropdown-content button:hover {

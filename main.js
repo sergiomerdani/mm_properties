@@ -2869,12 +2869,17 @@ modifyFeature.addEventListener("click", (e) => {
   if (modifyInteraction) {
     map.removeInteraction(modifyInteraction);
     btnEditGeom.classList.remove("active");
-    map.removeInteraction(selectSingleClick);
-    selectFeature.classList.remove("active");
   }
   if (draw) {
     map.removeInteraction(draw);
     addNewFeature.classList.remove("active");
+  }
+  if (activeSelectInteraction) {
+    map.removeInteraction(activeSelectInteraction);
+    btnSelect.classList.remove("active");
+    btnSelectSingle.classList.remove("active");
+    btnSelectRectangle.classList.remove("active");
+    btnSelect.textContent = "🖱️";
   }
   // Create new modify interaction
   modifyInteraction = new Modify({
@@ -2882,8 +2887,8 @@ modifyFeature.addEventListener("click", (e) => {
   });
   map.addInteraction(modifyInteraction);
   btnEditGeom.classList.add("active");
-  snapGuides.setModifyInteraction(modifyInteraction);
 
+  snapGuides.setModifyInteraction(modifyInteraction);
   modifyInteraction.on("modifyend", function (event) {
     event.features.forEach((feature) => {
       if (feature.getId()) {
@@ -2901,13 +2906,14 @@ modifyFeature.addEventListener("click", (e) => {
 });
 
 //SELECT FEATURE
-const selectFeature = document.getElementById("btnSelect");
+const btnSelect = document.getElementById("btnSelect");
 const btnSelectDropdown = document.getElementById("btnSelectDropdown");
 const selectOptions = document.getElementById("selectOptions");
 btnSelectDropdown.addEventListener("click", () => {
   selectOptions.classList.toggle("dropdown-show");
 });
-const selectByRectangle = document.getElementById("btnSelectMultiple");
+const btnSelectSingle = document.getElementById("btnSelectSingle");
+const btnSelectRectangle = document.getElementById("btnSelectRectangle");
 const btnSelectFreehand = document.getElementById("btnSelectFreehand");
 
 // Define a style for point features
@@ -2949,9 +2955,12 @@ function selectStyle(feature) {
 let activeSelectInteraction, extent;
 let selectedFeatures = []; // global selection array
 
-// --- Single-click select ---
-selectFeature.addEventListener("click", () => {
+function activateSingleSelect() {
+  btnSelectSingle.classList.add("active");
+  map.removeInteraction(modifyInteraction);
+  modifyFeature.classList.remove("active");
   // remove old interaction if exists
+
   if (activeSelectInteraction) {
     map.removeInteraction(activeSelectInteraction);
     activeSelectInteraction = null;
@@ -2961,7 +2970,7 @@ selectFeature.addEventListener("click", () => {
     hitTolerance: 5,
   });
   map.addInteraction(activeSelectInteraction);
-  selectFeature.classList.add("active");
+  btnSelect.classList.add("active");
 
   activeSelectInteraction.on("select", (event) => {
     // remove style from deselected
@@ -2978,10 +2987,27 @@ selectFeature.addEventListener("click", () => {
       extent = selectedFeatures[0].getGeometry().getExtent();
     }
   });
-});
+}
 
+// --- Single-click select ---
+btnSelect.addEventListener("click", () => {
+  activateSingleSelect();
+});
+// --- Dropdown choices ---
+btnSelectSingle.addEventListener("click", () => {
+  btnSelect.textContent = "🖱️";
+  btnSelect.title = "Single Select";
+  btnSelectSingle.classList.add("active");
+  btnSelectRectangle.classList.remove("active");
+  selectOptions.classList.remove("dropdown-show");
+  activateSingleSelect();
+});
 // --- Rectangle select ---
-selectByRectangle.addEventListener("click", () => {
+btnSelectRectangle.addEventListener("click", () => {
+  btnSelect.textContent = "🗂️";
+  btnSelectSingle.classList.remove("active");
+
+  document.getElementById("selectOptions").classList.remove("dropdown-show");
   // remove old interaction if exists
   if (activeSelectInteraction) {
     map.removeInteraction(activeSelectInteraction);
@@ -2990,6 +3016,7 @@ selectByRectangle.addEventListener("click", () => {
 
   activeSelectInteraction = new DragBox({
     condition: always,
+    freehand: true,
   });
   map.addInteraction(activeSelectInteraction);
 
@@ -3010,8 +3037,8 @@ selectByRectangle.addEventListener("click", () => {
     console.log("🎯 Selected (rectangle):", selectedFeatures);
   });
 
-  selectByRectangle.classList.add("active");
-  selectFeature.classList.add("active");
+  btnSelectRectangle.classList.add("active");
+  btnSelect.classList.add("active");
   selectOptions.classList.remove("dropdown-show");
   console.log("🗂️ Rectangle select active");
 });
@@ -3042,8 +3069,8 @@ addNewFeature.addEventListener("click", (e) => {
 
   map.removeInteraction(modifyInteraction);
   modifyFeature.classList.remove("active");
-  map.removeInteraction(selectSingleClick);
-  selectFeature.classList.remove("active");
+  map.removeInteraction(activeSelectInteraction);
+  btnSelect.classList.remove("active");
 
   map.addInteraction(draw);
   addNewFeature.classList.add("active");
@@ -3743,7 +3770,7 @@ const NAMESPACE_URI = "http://test"; // Namespace URI from GeoServer > Namespace
 
 saveBtn.addEventListener("click", () => {
   btnEditGeom.classList.remove("active");
-  selectFeature.classList.remove("active");
+  btnSelect.classList.remove("active");
   addNewFeature.classList.remove("active");
   deleteFeature.classList.remove("active");
   const [workspace, layerName] = tableLayerSelected.split(":");
