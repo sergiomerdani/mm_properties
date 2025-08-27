@@ -113,14 +113,21 @@
           <button id="add-xy" class="fa-button" title="Add XY Coordinates">
             🎯
           </button>
-          <button class="logout" id="logout" title="Logout">🚪</button>
         </div>
       </div>
 
       <div id="editToolbar" style="display: none">
         <button id="btnAdd" title="Add Feature">🆕</button>
         <button id="btnEditGeom" title="Edit Geometry">✏️</button>
-        <button id="btnSelect" title="Select Feature">🖱️</button>
+        <div class="btn-group">
+          <button id="btnSelect" title="Select Feature">🖱️</button>
+          <button id="btnSelectDropdown" class="dropdown-arrow">⏷</button>
+          <div id="selectOptions" class="dropdown-content">
+            <button id="btnSelectMultiple">🗂️</button>
+            <button id="btnSelectFreehand">✍️</button>
+          </div>
+        </div>
+
         <button id="btnDelete" title="Delete Feature">🗑️</button>
         <button id="btnSave" title="Save">💾</button>
         <button id="btnSnap" title="Toggle Snap">🧲</button>

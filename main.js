@@ -18,7 +18,11 @@ import {
   Rotate,
 } from "ol/control";
 import DragRotate from "ol/interaction/DragRotate";
-import { altKeyOnly, platformModifierKeyOnly } from "ol/events/condition";
+import {
+  altKeyOnly,
+  platformModifierKeyOnly,
+  always,
+} from "ol/events/condition";
 import { toStringXY } from "ol/coordinate";
 import LayerSwitcher from "ol-ext/control/LayerSwitcher";
 import LayerGroup from "ol/layer/Group";
@@ -75,6 +79,7 @@ import TileArcGISRest from "ol/source/TileArcGISRest.js";
 import Heatmap from "ol/layer/Heatmap.js";
 import { toLonLat } from "ol/proj";
 import ol_interaction_SnapGuides from "ol-ext/interaction/SnapGuides";
+import DragBox from "ol/interaction/DragBox.js";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -2525,20 +2530,6 @@ var drawCircleInMeter = function (map, radius, center) {
   map.addLayer(vectorLayer);
 };
 
-//Logout function
-
-document.getElementById("logout").addEventListener("click", function () {
-  fetch("/logout")
-    .then((response) => {
-      if (response.ok) {
-        window.location.href = "/login";
-      } else {
-        alert("Failed to log out");
-      }
-    })
-    .catch((error) => console.error("Logout error:", error));
-});
-
 //Drop KML or GPX
 let dragAndDropInteraction;
 
@@ -2973,8 +2964,58 @@ selectFeature.addEventListener("click", (e) => {
     deselectedFeatures.forEach(function (feature) {
       console.log("Deselected feature:", feature);
     });
-    getCenterOfExtent(extent);
   });
+});
+
+const btnSelectDropdown = document.getElementById("btnSelectDropdown");
+const selectOptions = document.getElementById("selectOptions");
+
+btnSelectDropdown.addEventListener("click", () => {
+  selectOptions.classList.toggle("dropdown-show");
+});
+
+const selectByRectangle = document.getElementById("btnSelectMultiple");
+const btnSelectFreehand = document.getElementById("btnSelectFreehand");
+
+let selectInteraction = null,
+  selectedByRectangle = [];
+// Multi-select option
+selectByRectangle.addEventListener("click", () => {
+  // Remove old interaction if exists
+  if (selectInteraction) {
+    map.removeInteraction(selectInteraction);
+    selectInteraction = null;
+  }
+
+  // Reset old selections (deselect all)
+  selectedByRectangle.forEach((f) => f.setStyle(null));
+  selectedByRectangle = [];
+
+  selectInteraction = new DragBox({
+    style: selectStyle,
+    condition: always,
+  });
+  map.addInteraction(selectInteraction);
+  selectInteraction.on("boxend", (event) => {
+    // Reset previous selection
+    selectedByRectangle.forEach((f) => f.setStyle(null));
+    selectedByRectangle = [];
+
+    const extent = selectInteraction.getGeometry().getExtent();
+    const features = wfsVectorSource.getFeaturesInExtent(extent);
+
+    features.forEach((f) => {
+      f.setStyle(selectStyle);
+      selectedByRectangle.push(f); // ✅ track selection
+    });
+
+    features.forEach((f) => f.setStyle(selectStyle));
+    console.log("🗂️ Rectangle selected features:", features);
+  });
+  selectByRectangle.classList.add("active"); // button highlighted
+  selectFeature.classList.add("active"); // main select highlighted
+  selectOptions.classList.remove("dropdown-show"); // close dropdown
+  console.log("🗂️ Multi-select active");
 });
 
 // ________________________________________________________________________________

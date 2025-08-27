@@ -710,3 +710,48 @@ button.fa-button {
   background: #aaa;
   color: white;
 }
+
+.btn-group {
+  position: relative;
+  display: inline-flex;
+}
+
+.btn-group button {
+  border: 1px solid #ccc;
+  background: #f9f9f9;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+
+.dropdown-arrow {
+  width: 20px;
+}
+
+.dropdown-content {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: white;
+  border: 1px solid #ccc;
+  min-width: 120px;
+  z-index: 999;
+  flex-direction: column;
+}
+
+.dropdown-content button {
+  width: 100%;
+  border: none;
+  background: white;
+  padding: 5px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dropdown-content button:hover {
+  background: #eee;
+}
+
+.dropdown-show {
+  display: flex;
+}
