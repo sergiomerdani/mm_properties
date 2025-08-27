@@ -2902,6 +2902,13 @@ modifyFeature.addEventListener("click", (e) => {
 
 //SELECT FEATURE
 const selectFeature = document.getElementById("btnSelect");
+const btnSelectDropdown = document.getElementById("btnSelectDropdown");
+const selectOptions = document.getElementById("selectOptions");
+btnSelectDropdown.addEventListener("click", () => {
+  selectOptions.classList.toggle("dropdown-show");
+});
+const selectByRectangle = document.getElementById("btnSelectMultiple");
+const btnSelectFreehand = document.getElementById("btnSelectFreehand");
 
 // Define a style for point features
 const selectedPointStyle = new Style({
@@ -2939,83 +2946,74 @@ function selectStyle(feature) {
   }
 }
 
-let selectSingleClick, extent, selectedFeatures;
-// Initialize a flag to control the map single-click event
-let isSelectFeatureActive = false;
+let activeSelectInteraction, extent;
+let selectedFeatures = []; // global selection array
 
-selectFeature.addEventListener("click", (e) => {
-  isSelectFeatureActive = true;
-  map.removeInteraction(draw);
-  map.removeInteraction(modifyInteraction);
-  btnEditGeom.classList.remove("active");
-  addNewFeature.classList.remove("active");
-  selectSingleClick = new Select({ style: selectStyle, hitTolerance: 5 });
-  map.addInteraction(selectSingleClick);
-  selectFeature.classList.add("active");
-  selectSingleClick.on("select", function (event) {
-    selectedFeatures = event.selected;
-    var deselectedFeatures = event.deselected;
-
-    selectedFeatures.forEach(function (feature) {
-      console.log("Selected feature:", feature);
-      extent = feature.getGeometry().getExtent();
-    });
-
-    deselectedFeatures.forEach(function (feature) {
-      console.log("Deselected feature:", feature);
-    });
-  });
-});
-
-const btnSelectDropdown = document.getElementById("btnSelectDropdown");
-const selectOptions = document.getElementById("selectOptions");
-
-btnSelectDropdown.addEventListener("click", () => {
-  selectOptions.classList.toggle("dropdown-show");
-});
-
-const selectByRectangle = document.getElementById("btnSelectMultiple");
-const btnSelectFreehand = document.getElementById("btnSelectFreehand");
-
-let selectInteraction = null,
-  selectedByRectangle = [];
-// Multi-select option
-selectByRectangle.addEventListener("click", () => {
-  // Remove old interaction if exists
-  if (selectInteraction) {
-    map.removeInteraction(selectInteraction);
-    selectInteraction = null;
+// --- Single-click select ---
+selectFeature.addEventListener("click", () => {
+  // remove old interaction if exists
+  if (activeSelectInteraction) {
+    map.removeInteraction(activeSelectInteraction);
+    activeSelectInteraction = null;
   }
 
-  // Reset old selections (deselect all)
-  selectedByRectangle.forEach((f) => f.setStyle(null));
-  selectedByRectangle = [];
+  activeSelectInteraction = new Select({
+    hitTolerance: 5,
+  });
+  map.addInteraction(activeSelectInteraction);
+  selectFeature.classList.add("active");
 
-  selectInteraction = new DragBox({
-    style: selectStyle,
+  activeSelectInteraction.on("select", (event) => {
+    // remove style from deselected
+    event.deselected.forEach((f) => f.setStyle(null));
+
+    // add style for newly selected
+    event.selected.forEach((f) => f.setStyle(selectStyle));
+
+    // update global selection array from OL's own collection
+    selectedFeatures = activeSelectInteraction.getFeatures().getArray();
+
+    console.log("🎯 Selected (click):", selectedFeatures);
+    if (selectedFeatures.length > 0) {
+      extent = selectedFeatures[0].getGeometry().getExtent();
+    }
+  });
+});
+
+// --- Rectangle select ---
+selectByRectangle.addEventListener("click", () => {
+  // remove old interaction if exists
+  if (activeSelectInteraction) {
+    map.removeInteraction(activeSelectInteraction);
+    activeSelectInteraction = null;
+  }
+
+  activeSelectInteraction = new DragBox({
     condition: always,
   });
-  map.addInteraction(selectInteraction);
-  selectInteraction.on("boxend", (event) => {
-    // Reset previous selection
-    selectedByRectangle.forEach((f) => f.setStyle(null));
-    selectedByRectangle = [];
+  map.addInteraction(activeSelectInteraction);
 
-    const extent = selectInteraction.getGeometry().getExtent();
+  activeSelectInteraction.on("boxend", () => {
+    // clear old selection
+    selectedFeatures.forEach((f) => f.setStyle(null));
+    selectedFeatures = [];
+
+    const extent = activeSelectInteraction.getGeometry().getExtent();
     const features = wfsVectorSource.getFeaturesInExtent(extent);
 
+    // style and store new ones
     features.forEach((f) => {
       f.setStyle(selectStyle);
-      selectedByRectangle.push(f); // ✅ track selection
+      selectedFeatures.push(f);
     });
 
-    features.forEach((f) => f.setStyle(selectStyle));
-    console.log("🗂️ Rectangle selected features:", features);
+    console.log("🎯 Selected (rectangle):", selectedFeatures);
   });
-  selectByRectangle.classList.add("active"); // button highlighted
-  selectFeature.classList.add("active"); // main select highlighted
-  selectOptions.classList.remove("dropdown-show"); // close dropdown
-  console.log("🗂️ Multi-select active");
+
+  selectByRectangle.classList.add("active");
+  selectFeature.classList.add("active");
+  selectOptions.classList.remove("dropdown-show");
+  console.log("🗂️ Rectangle select active");
 });
 
 // ________________________________________________________________________________
@@ -3123,8 +3121,8 @@ deleteFeature.addEventListener("click", (e) => {
     return;
   }
 
-  const selectedFeatures = selectSingleClick.getFeatures();
-  if (selectedFeatures.getLength() === 0) {
+  // const selectedFeatures = activeSelectInteraction.getFeatures();
+  if (selectedFeatures.length === 0) {
     alert("No features selected for deletion.");
     return;
   }
@@ -3140,7 +3138,7 @@ deleteFeature.addEventListener("click", (e) => {
       console.log("Feature queued for deletion:", feature.get("fid"));
     }
   });
-  console.log(`Queued ${selectedFeatures.getLength()} features for deletion`);
+  console.log(`Queued ${selectedFeatures.length} features for deletion`);
 });
 
 // SAVE FEATURE EVENT
