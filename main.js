@@ -2085,7 +2085,7 @@ let layerType,
   body,
   geometryType,
   featureIDvalue,
-  draw,
+  drawInteraction,
   layerTitle,
   selectedLayer,
   layerGroup,
@@ -2099,7 +2099,7 @@ const selectControl = new ol_control_Select({
 });
 
 layerSwitcher.on("select", (e) => {
-  map.removeInteraction(draw);
+  map.removeInteraction(drawInteraction);
   selectedLayer = e.layer;
 
   // logWMSLayerExtent(namePart);
@@ -2763,14 +2763,10 @@ editLayerButton.addEventListener("click", (e) => {
     format: new GeoJSON(),
     strategy: bboxStrategy,
   });
-  // console.log(wfsVectorSource.getUrl());
-  // console.log(wfsLayerUrl + layerParam + wfsLayerUrlEnd);
 
   wfsVectorLayer = new VectorLayer({
     source: wfsVectorSource,
     title: layerTitle,
-    // crossOrigin: "anonymous",
-    // opacity: 0,
     visible: true,
     displayInLayerSwitcher: true,
     style: styleWithVertices,
@@ -2820,35 +2816,35 @@ const redGuideStyle = new Style({
   }),
 });
 
-const snapGuides = new ol_interaction_SnapGuides({
+const snapGuidesInteraction = new ol_interaction_SnapGuides({
   source: wfsVectorSource,
   pixelTolerance: 10,
   enableInitialGuides: true,
   style: redGuideStyle,
 });
-console.log(snapGuides);
+console.log(snapGuidesInteraction);
 
 snapGuideBtn.addEventListener("click", () => {
   if (!snapGuidesActive) {
     // Turn ON
-    map.addInteraction(snapGuides);
+    map.addInteraction(snapGuidesInteraction);
     snapGuideBtn.classList.add("active");
-    console.log("✅ SnapGuides ON");
+    console.log("✅ SnapGuides Interaction ON");
   } else {
     // Turn OFF
-    map.removeInteraction(snapGuides);
+    map.removeInteraction(snapGuidesInteraction);
     snapGuideBtn.classList.remove("active");
-    console.log("❌ SnapGuides OFF");
+    console.log("❌ SnapGuides Interaction OFF");
   }
   snapGuidesActive = !snapGuidesActive; // flip state
 });
 
 function deactivateSnapGuides() {
   if (snapGuidesActive) {
-    map.removeInteraction(snapGuides);
+    map.removeInteraction(snapGuidesInteraction);
     snapGuidesActive = false;
     snapGuideBtn.classList.remove("active");
-    console.log("❌ SnapGuides OFF (tool switch)");
+    console.log("❌ SnapGuides Interaction OFF (tool switch)");
   }
 }
 
@@ -2860,27 +2856,14 @@ const modifyFeature = document.getElementById("btnEditGeom");
 let modifyInteraction = null;
 
 modifyFeature.addEventListener("click", (e) => {
-  deactivateSnapGuides();
   if (!vectorLayer) {
     alert("Please select a layer first.");
     return;
   }
-  // Remove any existing interactions
-  if (modifyInteraction) {
-    map.removeInteraction(modifyInteraction);
-    btnEditGeom.classList.remove("active");
-  }
-  if (draw) {
-    map.removeInteraction(draw);
-    addNewFeature.classList.remove("active");
-  }
-  if (activeSelectInteraction) {
-    map.removeInteraction(activeSelectInteraction);
-    btnSelect.classList.remove("active");
-    btnSelectSingle.classList.remove("active");
-    btnSelectRectangle.classList.remove("active");
-    btnSelect.textContent = "🖱️";
-  }
+  clearInteractions();
+  clearToolbarButtons();
+  btnSelect.textContent = "🖱️";
+
   // Create new modify interaction
   modifyInteraction = new Modify({
     source: wfsVectorSource,
@@ -2888,7 +2871,7 @@ modifyFeature.addEventListener("click", (e) => {
   map.addInteraction(modifyInteraction);
   btnEditGeom.classList.add("active");
 
-  snapGuides.setModifyInteraction(modifyInteraction);
+  snapGuidesInteraction.setModifyInteraction(modifyInteraction);
   modifyInteraction.on("modifyend", function (event) {
     event.features.forEach((feature) => {
       if (feature.getId()) {
@@ -2914,7 +2897,6 @@ btnSelectDropdown.addEventListener("click", () => {
 });
 const btnSelectSingle = document.getElementById("btnSelectSingle");
 const btnSelectRectangle = document.getElementById("btnSelectRectangle");
-const btnSelectFreehand = document.getElementById("btnSelectFreehand");
 
 // Define a style for point features
 const selectedPointStyle = new Style({
@@ -2956,15 +2938,14 @@ let activeSelectInteraction, extent;
 let selectedFeatures = []; // global selection array
 
 function activateSingleSelect() {
-  btnSelectSingle.classList.add("active");
-  map.removeInteraction(modifyInteraction);
-  modifyFeature.classList.remove("active");
-  // remove old interaction if exists
-
-  if (activeSelectInteraction) {
-    map.removeInteraction(activeSelectInteraction);
-    activeSelectInteraction = null;
+  if (!vectorLayer) {
+    alert("Please select a layer first.");
+    return;
   }
+  clearInteractions();
+  clearToolbarButtons();
+  btnSelectSingle.classList.add("active");
+  activeSelectInteraction = null;
 
   activeSelectInteraction = new Select({
     hitTolerance: 5,
@@ -3004,15 +2985,15 @@ btnSelectSingle.addEventListener("click", () => {
 });
 // --- Rectangle select ---
 btnSelectRectangle.addEventListener("click", () => {
-  btnSelect.textContent = "🗂️";
-  btnSelectSingle.classList.remove("active");
-
-  document.getElementById("selectOptions").classList.remove("dropdown-show");
-  // remove old interaction if exists
-  if (activeSelectInteraction) {
-    map.removeInteraction(activeSelectInteraction);
-    activeSelectInteraction = null;
+  if (!vectorLayer) {
+    alert("Please select a layer first.");
+    return;
   }
+  btnSelect.textContent = "🗂️";
+  clearInteractions();
+  clearToolbarButtons();
+  selectOptions.classList.remove("dropdown-show");
+  activeSelectInteraction = null;
 
   activeSelectInteraction = new DragBox({
     condition: always,
@@ -3049,35 +3030,25 @@ btnSelectRectangle.addEventListener("click", () => {
 const addNewFeature = document.getElementById("btnAdd");
 // Draw Feature Event Listener
 addNewFeature.addEventListener("click", (e) => {
-  deactivateSnapGuides();
   if (!layerName) {
     alert("Please select a layer first.");
     return;
   }
+  clearInteractions();
+  clearToolbarButtons();
+  btnSelect.textContent = "🖱️";
 
-  if (draw) {
-    map.removeInteraction(draw);
-    addNewFeature.classList.remove("active");
-  }
-
-  console.log(wfsVectorSource.getFeatures().length);
-
-  draw = new Draw({
+  drawInteraction = new Draw({
     source: wfsVectorSource,
     type: layerType,
   });
 
-  map.removeInteraction(modifyInteraction);
-  modifyFeature.classList.remove("active");
-  map.removeInteraction(activeSelectInteraction);
-  btnSelect.classList.remove("active");
-
-  map.addInteraction(draw);
+  map.addInteraction(drawInteraction);
   addNewFeature.classList.add("active");
 
-  snapGuides.setDrawInteraction(draw);
+  snapGuidesInteraction.setDrawInteraction(drawInteraction);
 
-  draw.on("drawend", function (event) {
+  drawInteraction.on("drawend", function (event) {
     const feature = event.feature;
 
     // ✅ Don’t clone, just use the real feature in wfsVectorSource
@@ -3173,6 +3144,58 @@ const saveFeatureButton = document.getElementById("btnSave");
 saveFeatureButton.addEventListener("click", () => {
   saveFeature();
 });
+
+function clearInteractions() {
+  // Reset styles of selected features before clearing
+  if (selectedFeatures && selectedFeatures.length > 0) {
+    selectedFeatures.forEach((f) => f.setStyle(null));
+    selectedFeatures = [];
+  }
+
+  const interactions = [
+    activeSelectInteraction,
+    modifyInteraction,
+    drawInteraction,
+    snapInteraction,
+  ];
+
+  interactions.forEach((i) => {
+    if (i) {
+      map.removeInteraction(i);
+    }
+  });
+
+  // reset references
+  activeSelectInteraction = null;
+  modifyInteraction = null;
+  drawInteraction = null;
+  snapInteraction = null;
+
+  // ✅ Handle SnapGuides separately
+  if (snapGuidesActive) {
+    map.removeInteraction(snapGuidesInteraction);
+    snapGuidesActive = false;
+    snapGuideBtn.classList.remove("active");
+    console.log("❌ SnapGuides Interaction OFF (clearInteractions)");
+  }
+
+  console.log("🧹 All interactions cleared");
+}
+
+function clearToolbarButtons() {
+  const buttons = [
+    btnSelect,
+    btnSelectSingle,
+    btnSelectRectangle,
+    btnEditGeom,
+    btnAdd,
+    btnSnap,
+    btnSnapGuides,
+  ];
+
+  buttons.forEach((btn) => btn.classList.remove("active"));
+  console.log("🔲 Toolbar buttons reset");
+}
 
 //SELECT RECORD FROM FEATURE ON MAP
 function highlightFeature(feature) {
