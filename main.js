@@ -80,6 +80,8 @@ import Heatmap from "ol/layer/Heatmap.js";
 import { toLonLat } from "ol/proj";
 import ol_interaction_SnapGuides from "ol-ext/interaction/SnapGuides";
 import DragBox from "ol/interaction/DragBox.js";
+import Translate from "ol/interaction/Translate.js";
+import Collection from "ol/Collection.js";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -291,17 +293,17 @@ const mousePositionControl = new MousePosition({
 const rotate = new Rotate();
 
 //DRAGPAN MAP
-const dragPanBtn = document.getElementById("pan");
+// const dragPanBtn = document.getElementById("pan");
 
-const dragPan = new DragPan({
-  condition: function (event) {
-    return platformModifierKeyOnly(event);
-  },
-});
+// const dragPan = new DragPan({
+//   condition: function (event) {
+//     return platformModifierKeyOnly(event);
+//   },
+// });
 
-dragPanBtn.addEventListener("click", function () {
-  map.addInteraction(dragPan);
-});
+// dragPanBtn.addEventListener("click", function () {
+//   map.addInteraction(dragPan);
+// });
 
 // Adding controls in a variable
 const mapControls = [
@@ -309,7 +311,6 @@ const mapControls = [
   fullScreenControl,
   mousePositionControl,
   rotate,
-  dragPan,
 ];
 
 // Bing Maps Basemap Layer
@@ -2839,15 +2840,6 @@ snapGuideBtn.addEventListener("click", () => {
   snapGuidesActive = !snapGuidesActive; // flip state
 });
 
-function deactivateSnapGuides() {
-  if (snapGuidesActive) {
-    map.removeInteraction(snapGuidesInteraction);
-    snapGuidesActive = false;
-    snapGuideBtn.classList.remove("active");
-    console.log("❌ SnapGuides Interaction OFF (tool switch)");
-  }
-}
-
 // ____________________________________________________________________________________________
 //MODIFY FEATURE
 const modifyFeature = document.getElementById("btnEditGeom");
@@ -2935,6 +2927,8 @@ function selectStyle(feature) {
 }
 
 let activeSelectInteraction, extent;
+let selectedFeatures2 = new Collection();
+
 let selectedFeatures = []; // global selection array
 
 function activateSingleSelect() {
@@ -2946,6 +2940,7 @@ function activateSingleSelect() {
   clearToolbarButtons();
   btnSelectSingle.classList.add("active");
   activeSelectInteraction = null;
+  btnTranslate.disabled = false;
 
   activeSelectInteraction = new Select({
     hitTolerance: 5,
@@ -2954,18 +2949,19 @@ function activateSingleSelect() {
   btnSelect.classList.add("active");
 
   activeSelectInteraction.on("select", (event) => {
-    // remove style from deselected
-    event.deselected.forEach((f) => f.setStyle(null));
+    // clear old styles and collection
+    selectedFeatures2.forEach((f) => f.setStyle(null));
+    selectedFeatures2.clear();
 
-    // add style for newly selected
-    event.selected.forEach((f) => f.setStyle(selectStyle));
+    // apply style for newly selected
+    event.selected.forEach((f) => {
+      f.setStyle(selectStyle);
+      selectedFeatures2.push(f); // ✅ push into the same collection
+    });
 
-    // update global selection array from OL's own collection
-    selectedFeatures = activeSelectInteraction.getFeatures().getArray();
-
-    console.log("🎯 Selected (click):", selectedFeatures);
-    if (selectedFeatures.length > 0) {
-      extent = selectedFeatures[0].getGeometry().getExtent();
+    console.log("🎯 Selected (click):", selectedFeatures2.getArray());
+    if (selectedFeatures2.getLength() > 0) {
+      extent = selectedFeatures2.item(0).getGeometry().getExtent();
     }
   });
 }
@@ -2990,10 +2986,13 @@ btnSelectRectangle.addEventListener("click", () => {
     return;
   }
   btnSelect.textContent = "🗂️";
-  clearInteractions();
-  clearToolbarButtons();
   selectOptions.classList.remove("dropdown-show");
+  btnSelectSingle.classList.remove("active");
+
   activeSelectInteraction = null;
+  map.removeInteraction(translateInteraction);
+  btnTranslate.classList.remove("active");
+  btnTranslate.disabled = false;
 
   activeSelectInteraction = new DragBox({
     condition: always,
@@ -3003,8 +3002,8 @@ btnSelectRectangle.addEventListener("click", () => {
 
   activeSelectInteraction.on("boxend", () => {
     // clear old selection
-    selectedFeatures.forEach((f) => f.setStyle(null));
-    selectedFeatures = [];
+    selectedFeatures2.forEach((f) => f.setStyle(null));
+    selectedFeatures2.clear();
 
     const extent = activeSelectInteraction.getGeometry().getExtent();
     const features = wfsVectorSource.getFeaturesInExtent(extent);
@@ -3012,10 +3011,10 @@ btnSelectRectangle.addEventListener("click", () => {
     // style and store new ones
     features.forEach((f) => {
       f.setStyle(selectStyle);
-      selectedFeatures.push(f);
+      selectedFeatures2.push(f);
     });
 
-    console.log("🎯 Selected (rectangle):", selectedFeatures);
+    console.log("🎯 Selected (rectangle):", selectedFeatures2);
   });
 
   btnSelectRectangle.classList.add("active");
@@ -5512,3 +5511,37 @@ document.getElementById("xyCreateLayer").addEventListener("click", () => {
 });
 
 // _________________________________________________________________________________
+// Drag Features
+
+const btnTranslate = document.getElementById("btnTranslate");
+let translateInteraction = null;
+
+btnTranslate.addEventListener("click", () => {
+  if (!selectedFeatures2.getLength()) {
+    alert("⚠️ Please select features to move first.");
+    return;
+  }
+
+  btnTranslate.classList.add("active");
+
+  translateInteraction = new Translate({
+    features: selectedFeatures2,
+  });
+
+  map.addInteraction(translateInteraction);
+
+  // Handle translate end
+  translateInteraction.on("translateend", (event) => {
+    event.features.forEach((feature) => {
+      if (feature.getId()) {
+        if (!updates.includes(feature)) {
+          updates.push(feature);
+          console.log("Feature moved, queued for update:", feature.getId());
+        }
+      } else {
+        console.log("Moved unsaved feature (still in inserts).");
+      }
+    });
+  });
+  console.log("🖐️ Translate interaction active");
+});
