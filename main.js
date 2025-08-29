@@ -2877,6 +2877,7 @@ modifyFeature.addEventListener("click", (e) => {
         console.log("Modified unsaved feature (still in inserts).");
       }
     });
+    updateSaveButtonState(); // ✅
   });
 });
 
@@ -3061,6 +3062,7 @@ addNewFeature.addEventListener("click", (e) => {
     }
 
     console.log("New feature drawn. Click 'Save' to apply.");
+    updateSaveButtonState(); // ✅
   });
 });
 
@@ -3138,6 +3140,7 @@ deleteFeature.addEventListener("click", (e) => {
       console.log("Feature queued for deletion:", feature.get("fid"));
     }
   });
+  updateSaveButtonState(); // ✅
   console.log(`Queued ${selectedFeatures.length} features for deletion`);
 });
 
@@ -5548,3 +5551,9 @@ btnTranslate.addEventListener("click", () => {
   });
   console.log("🖐️ Translate interaction active");
 });
+
+function updateSaveButtonState() {
+  const hasChanges =
+    inserts.length > 0 || updates.length > 0 || deletes.length > 0;
+  document.getElementById("btnSave").disabled = !hasChanges;
+}
