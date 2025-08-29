@@ -22,6 +22,7 @@ import {
   altKeyOnly,
   platformModifierKeyOnly,
   always,
+  shiftKeyOnly,
 } from "ol/events/condition";
 import { toStringXY } from "ol/coordinate";
 import LayerSwitcher from "ol-ext/control/LayerSwitcher";
@@ -2823,7 +2824,6 @@ const snapGuidesInteraction = new ol_interaction_SnapGuides({
   enableInitialGuides: true,
   style: redGuideStyle,
 });
-console.log(snapGuidesInteraction);
 
 snapGuideBtn.addEventListener("click", () => {
   if (!snapGuidesActive) {
@@ -2927,9 +2927,7 @@ function selectStyle(feature) {
 }
 
 let activeSelectInteraction, extent;
-let selectedFeatures2 = new Collection();
-
-let selectedFeatures = []; // global selection array
+let selectedFeatures = new Collection();
 
 function activateSingleSelect() {
   if (!vectorLayer) {
@@ -2944,24 +2942,29 @@ function activateSingleSelect() {
 
   activeSelectInteraction = new Select({
     hitTolerance: 5,
+    multi: true,
   });
   map.addInteraction(activeSelectInteraction);
   btnSelect.classList.add("active");
 
   activeSelectInteraction.on("select", (event) => {
     // clear old styles and collection
-    selectedFeatures2.forEach((f) => f.setStyle(null));
-    selectedFeatures2.clear();
-
-    // apply style for newly selected
-    event.selected.forEach((f) => {
-      f.setStyle(selectStyle);
-      selectedFeatures2.push(f); // ✅ push into the same collection
+    event.deselected.forEach((f) => {
+      f.setStyle(null);
+      selectedFeatures.remove(f);
     });
 
-    console.log("🎯 Selected (click):", selectedFeatures2.getArray());
-    if (selectedFeatures2.getLength() > 0) {
-      extent = selectedFeatures2.item(0).getGeometry().getExtent();
+    // add style + push into collection
+    event.selected.forEach((f) => {
+      f.setStyle(selectStyle);
+      if (!selectedFeatures.getArray().includes(f)) {
+        selectedFeatures.push(f);
+      }
+    });
+
+    console.log("🎯 Selected (click):", selectedFeatures.getArray());
+    if (selectedFeatures.getLength() > 0) {
+      extent = selectedFeatures.item(0).getGeometry().getExtent();
     }
   });
 }
@@ -3002,8 +3005,8 @@ btnSelectRectangle.addEventListener("click", () => {
 
   activeSelectInteraction.on("boxend", () => {
     // clear old selection
-    selectedFeatures2.forEach((f) => f.setStyle(null));
-    selectedFeatures2.clear();
+    selectedFeatures.forEach((f) => f.setStyle(null));
+    selectedFeatures.clear();
 
     const extent = activeSelectInteraction.getGeometry().getExtent();
     const features = wfsVectorSource.getFeaturesInExtent(extent);
@@ -3011,10 +3014,10 @@ btnSelectRectangle.addEventListener("click", () => {
     // style and store new ones
     features.forEach((f) => {
       f.setStyle(selectStyle);
-      selectedFeatures2.push(f);
+      selectedFeatures.push(f);
     });
 
-    console.log("🎯 Selected (rectangle):", selectedFeatures2);
+    console.log("🎯 Selected (rectangle):", selectedFeatures);
   });
 
   btnSelectRectangle.classList.add("active");
@@ -3119,7 +3122,7 @@ deleteFeature.addEventListener("click", (e) => {
   }
 
   // const selectedFeatures = activeSelectInteraction.getFeatures();
-  if (selectedFeatures.length === 0) {
+  if (selectedFeatures.getLength() === 0) {
     alert("No features selected for deletion.");
     return;
   }
@@ -3146,9 +3149,9 @@ saveFeatureButton.addEventListener("click", () => {
 
 function clearInteractions() {
   // Reset styles of selected features before clearing
-  if (selectedFeatures && selectedFeatures.length > 0) {
+  if (selectedFeatures && selectedFeatures.getLength() > 0) {
     selectedFeatures.forEach((f) => f.setStyle(null));
-    selectedFeatures = [];
+    selectedFeatures.clear();
   }
 
   const interactions = [
@@ -5517,7 +5520,7 @@ const btnTranslate = document.getElementById("btnTranslate");
 let translateInteraction = null;
 
 btnTranslate.addEventListener("click", () => {
-  if (!selectedFeatures2.getLength()) {
+  if (!selectedFeatures.getLength()) {
     alert("⚠️ Please select features to move first.");
     return;
   }
@@ -5525,7 +5528,7 @@ btnTranslate.addEventListener("click", () => {
   btnTranslate.classList.add("active");
 
   translateInteraction = new Translate({
-    features: selectedFeatures2,
+    features: selectedFeatures,
   });
 
   map.addInteraction(translateInteraction);
