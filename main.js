@@ -2100,6 +2100,70 @@ const selectControl = new ol_control_Select({
   className: "ol-select",
 });
 
+function fetchLayerPropertiesFromWFS(url, layerParam) {
+  const [workspaceName, layerNamePart] = layerParam.split(":");
+
+  // update globals
+  workspace = workspaceName;
+  layerName = layerNamePart;
+
+  // If this is a VectorSource, set as active source + layer
+  if (wfsVectorSource) {
+    source = wfsVectorSource;
+  }
+  if (wfsVectorLayer) {
+    vectorLayer = wfsVectorLayer;
+  }
+
+  const describeFeatureTypeUrl = `http://${host}:${port}/geoserver/${workspace}/ows?service=WFS&version=1.1.0&request=DescribeFeatureType&typeName=${layerParam}`;
+
+  fetch(describeFeatureTypeUrl)
+    .then((response) => response.text())
+    .then((data) => {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(data, "text/xml");
+      const elementNodes = doc.getElementsByTagName("xsd:element");
+
+      for (let i = 0; i < elementNodes.length; i++) {
+        const element = elementNodes[i];
+        if (element.getAttribute("name") === "geom") {
+          const typeAttribute = element.getAttribute("type");
+          const [, typeName] = typeAttribute.split(":");
+          geometryType = typeName;
+
+          if (
+            geometryType === "PointPropertyType" ||
+            geometryType === "MultiPointPropertyType"
+          ) {
+            layerType = "Point";
+          } else if (
+            geometryType === "GeometryPropertyType" ||
+            geometryType === "MultiPolygonPropertyType" ||
+            geometryType === "SurfacePropertyType"
+          ) {
+            layerType = "Polygon";
+          } else if (
+            geometryType === "MultiLineStringPropertyType" ||
+            geometryType === "LineStringPropertyType"
+          ) {
+            layerType = "LineString";
+          }
+
+          console.log("Layer Param:", layerParam);
+          console.log("Layer Name:", layerName);
+          console.log("Workspace:", workspace);
+          console.log("Geometry Type:", geometryType);
+          console.log("LayerType:", layerType);
+          console.log("Vector Layer:", vectorLayer);
+          console.log("Vector Source:", source);
+        }
+      }
+    })
+    .catch((error) => {
+      console.error("Error fetching DescribeFeatureType:", error);
+    });
+}
+
 layerSwitcher.on("select", (e) => {
   map.removeInteraction(drawInteraction);
   selectedLayer = e.layer;
@@ -2137,82 +2201,7 @@ layerSwitcher.on("select", (e) => {
     }
     const selectedLayerGroup = getLayerGroup(selectedLayer);
   } else {
-    layerTitle = selectedLayer.get("title");
-    source = selectedLayer.getSource();
-    console.log(source.params_);
-
-    // features = source.getFeatures();
-    const url = source.getUrl();
-
-    console.log(url);
-    vectorLayer = selectedLayer;
-    const urlParts = new URL(url);
-    console.log(urlParts);
-    layerParam = urlParts.searchParams.get("typeName");
-
-    [workspace, layerName] = layerParam.split(":");
-    // const workspace = urlParts.pathname.split("/")[2];
-
-    // Construct the URL for DescribeFeatureType request
-    const describeFeatureTypeUrl = `http://${host}:${port}/geoserver/${workspace}/ows?service=WFS&version=1.1.0&request=DescribeFeatureType&typeName=${layerParam}`;
-
-    // Make an AJAX request to GeoServer
-    fetch(describeFeatureTypeUrl)
-      .then((response) => response.text())
-      .then((data) => {
-        console.log(data);
-
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(data, "text/xml");
-
-        // Get all 'xsd:element' elements in the XML schema
-        const elementNodes = doc.getElementsByTagName("xsd:element");
-
-        // Loop through each 'xsd:element' to find the one with name="geom"
-        for (let i = 0; i < elementNodes.length; i++) {
-          const element = elementNodes[i];
-          const nameAttribute = element.getAttribute("name");
-
-          if (nameAttribute === "geom") {
-            // 'geom' element found, extract its 'type' attribute
-            const typeAttribute = element.getAttribute("type");
-            const [, typeName] = typeAttribute.split(":");
-
-            console.log(typeName);
-            // Log the type name
-            geometryType = typeName;
-            if (
-              geometryType === "PointPropertyType" ||
-              geometryType === "MultiPointPropertyType"
-            ) {
-              layerType = "Point";
-            } else if (
-              geometryType === "GeometryPropertyType" ||
-              geometryType === "MultiPolygonPropertyType" ||
-              geometryType === "SurfacePropertyType"
-            ) {
-              layerType = "Polygon";
-            } else if (
-              geometryType === "MultiLineStringPropertyType" ||
-              geometryType === "LineStringPropertyType"
-            ) {
-              layerType = "LineString";
-            }
-            console.log("Layer Param: ", layerParam);
-            console.log("Layer Name: ", layerName);
-            console.log("Workspace: ", workspace);
-            console.log("Geometry Type: ", geometryType);
-            console.log("Geometry (layertype):", layerType);
-            console.log("Vector Layer: ", vectorLayer);
-            console.log("Vector Source: ", source);
-            selectControl.setSources(source);
-            console.log(url);
-          }
-        }
-      })
-      .catch((error) => {
-        console.error("Error fetching DescribeFeatureType:", error);
-      });
+    fetchLayerPropertiesFromWFS(url, layerParam);
   }
 });
 
@@ -2774,6 +2763,10 @@ editLayerButton.addEventListener("click", () => {
     originalLayer = selectedLayer;
     layerGroup.getLayers().remove(selectedLayer);
     layerGroup.getLayers().push(wfsVectorLayer);
+
+    // 🔹 Fetch DescribeFeatureType for editing
+    const wfsUrl = wfsVectorSource.getUrl();
+    fetchLayerPropertiesFromWFS(wfsUrl, layerParam);
 
     // Show toolbar
     editToolbar.style.display = "flex";
