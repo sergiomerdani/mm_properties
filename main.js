@@ -3009,6 +3009,8 @@ btnSelectRectangle.addEventListener("click", () => {
     alert("Please select a layer first.");
     return;
   }
+  clearInteractions();
+  clearToolbarButtons();
   btnSelect.textContent = "🗂️";
   selectOptions.classList.remove("dropdown-show");
   btnSelectSingle.classList.remove("active");
