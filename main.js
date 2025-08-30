@@ -2742,43 +2742,70 @@ let updates = [];
 const editLayerButton = document.getElementById("editButton");
 const editToolbar = document.getElementById("editToolbar");
 
-editLayerButton.addEventListener("click", (e) => {
-  const intExtent = extentBbox.map((c) => Math.trunc(c));
+let isEditing = false;
+let originalLayer = null;
 
-  // join into your “minX,minY,maxX,maxY” string
-  const bboxParam = intExtent.join(",");
-
-  console.log(bboxParam);
-  if (!selectedLayer) {
+editLayerButton.addEventListener("click", () => {
+  if (!selectedLayer && !isEditing) {
     alert("Please select a layer!");
     return;
   }
-  // Toggle toolbar
-  editToolbar.style.display =
-    editToolbar.style.display === "none" || editToolbar.style.display === ""
-      ? "flex"
-      : "none";
-  //WFS Layer
-  wfsVectorSource = new VectorSource({
-    // url: wfsLayerUrl + layerParam + wfsLayerUrlEnd ,
-    url: `http://localhost:8080/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParam}&outputFormat=application/json&maxFeatures=500&bbox=${bboxParam},EPSG:3857`,
-    format: new GeoJSON(),
-    strategy: bboxStrategy,
-  });
 
-  wfsVectorLayer = new VectorLayer({
-    source: wfsVectorSource,
-    title: layerTitle,
-    visible: true,
-    displayInLayerSwitcher: true,
-    style: styleWithVertices,
-  });
+  if (!isEditing) {
+    // --- Enable edit mode ---
+    const intExtent = extentBbox.map((c) => Math.trunc(c));
+    const bboxParam = intExtent.join(",");
 
-  // Remove the polygon tile layer from the map
-  layerGroup.getLayers().remove(selectedLayer);
+    wfsVectorSource = new VectorSource({
+      url: `http://localhost:8080/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParam}&outputFormat=application/json&maxFeatures=500&bbox=${bboxParam},EPSG:3857`,
+      format: new GeoJSON(),
+      strategy: bboxStrategy,
+    });
 
-  // Add the WFS vector layer to the map
-  layerGroup.getLayers().push(wfsVectorLayer);
+    wfsVectorLayer = new VectorLayer({
+      source: wfsVectorSource,
+      title: layerTitle,
+      visible: true,
+      displayInLayerSwitcher: true,
+      style: styleWithVertices,
+    });
+
+    // Swap WMS → WFS
+    originalLayer = selectedLayer;
+    layerGroup.getLayers().remove(selectedLayer);
+    layerGroup.getLayers().push(wfsVectorLayer);
+
+    // Show toolbar
+    editToolbar.style.display = "flex";
+    editLayerButton.classList.add("active");
+    isEditing = true;
+    console.log("✏️ Edit mode enabled");
+  } else {
+    clearInteractions();
+    clearToolbarButtons();
+    map.removeInteraction(translateInteraction);
+    btnTranslate.classList.remove("active");
+    btnTranslate.disabled = true;
+    btnSelect.textContent = "🖱️";
+
+    if (wfsVectorLayer) {
+      layerGroup.getLayers().remove(wfsVectorLayer);
+    }
+    if (originalLayer) {
+      originalLayer.getSource().refresh(); // refresh WMS with edits
+      layerGroup.getLayers().push(originalLayer);
+    }
+    // Hide toolbar
+    editToolbar.style.display = "none";
+    editLayerButton.classList.remove("active");
+    isEditing = false;
+    // 🔹 Reset selection so user must pick again next time
+    selectedLayer = null;
+    originalLayer = null;
+    layerParam = null;
+    layerTitle = null;
+    console.log("✅ Edit mode disabled");
+  }
 });
 
 // 🧲 Snap toggle button
@@ -3108,6 +3135,7 @@ function saveFeature() {
       inserts = [];
       updates = [];
       deletes = [];
+      updateSaveButtonState(); // ✅
     })
     .catch((error) => {
       console.error("Transaction failed:", error);
@@ -5548,6 +5576,7 @@ btnTranslate.addEventListener("click", () => {
         console.log("Moved unsaved feature (still in inserts).");
       }
     });
+    updateSaveButtonState();
   });
   console.log("🖐️ Translate interaction active");
 });
