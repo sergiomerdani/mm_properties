@@ -5626,6 +5626,7 @@ rotateInteraction = new ol_interaction_Transform({
   rotate: true,
   scale: false,
   translateFeature: false,
+  translate: false,
 });
 
 let rotateActive = false;
@@ -5671,6 +5672,7 @@ scaleInteraction = new ol_interaction_Transform({
   rotate: false,
   scale: true,
   translateFeature: false,
+  translate: false,
 });
 
 let scaleActive = false;
