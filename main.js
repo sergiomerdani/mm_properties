@@ -3223,8 +3223,10 @@ function clearInteractions() {
   modifyInteraction = null;
   drawInteraction = null;
   snapInteraction = null;
-  rotateInteraction = null;
-  scaleInteraction = null;
+
+  // reset active flags too
+  rotateActive = false;
+  scaleActive = false;
 
   // ✅ Handle SnapGuides separately
   if (snapGuidesActive) {
@@ -5618,6 +5620,7 @@ function updateSaveButtonState() {
 
 const btnRotate = document.getElementById("btnRotate");
 let rotateInteraction = null;
+
 rotateInteraction = new ol_interaction_Transform({
   enableRotatedTransform: true,
   rotate: true,
@@ -5633,37 +5636,28 @@ btnRotate.addEventListener("click", () => {
     rotateActive = true;
     btnRotate.classList.add("active");
 
-    function handleTransformEnd(event, type) {
-      console.log(event);
-      console.log(type);
-
+    // Handle rotation end directly
+    rotateInteraction.on("rotateend", (event) => {
       const feats = event.features || (event.feature ? [event.feature] : []);
-
       feats.forEach((feature) => {
-        console.log(feature);
-        console.log(feats);
-
         if (feature.getId()) {
           if (!updates.includes(feature)) {
             updates.push(feature);
-            console.log(`Feature ${type}, queued for update:`, feature.getId());
+            console.log("Feature rotated, queued for update:", feature.getId());
           }
         } else {
-          console.log(`${type} unsaved feature (still in inserts).`);
+          console.log("Rotated unsaved feature (still in inserts).");
         }
       });
       updateSaveButtonState();
-    }
+    });
 
-    // Listen to all transform end events
-    rotateInteraction.on("rotateend", (e) => handleTransformEnd(e, "rotated"));
-
-    console.log("🔄 Transform interaction active");
+    console.log("🔄 Rotate interaction active");
   } else {
     map.removeInteraction(rotateInteraction);
     rotateActive = false;
     btnRotate.classList.remove("active");
-    console.log("❌ Transform interaction disabled");
+    console.log("❌ Rotate interaction disabled");
   }
 });
 
@@ -5671,6 +5665,7 @@ btnRotate.addEventListener("click", () => {
 
 const btnScale = document.getElementById("btnScale");
 let scaleInteraction = null;
+
 scaleInteraction = new ol_interaction_Transform({
   enableRotatedTransform: false, // not needed for scaling
   rotate: false,
@@ -5686,27 +5681,21 @@ btnScale.addEventListener("click", () => {
     scaleActive = true;
     btnScale.classList.add("active");
 
-    function handleTransformEnd(event, type) {
+    // Handle scale end directly
+    scaleInteraction.on("scaleend", (event) => {
       const feats = event.features || (event.feature ? [event.feature] : []);
-
       feats.forEach((feature) => {
-        console.log(feature);
-        console.log(feats);
-
         if (feature.getId()) {
           if (!updates.includes(feature)) {
             updates.push(feature);
-            console.log(`Feature ${type}, queued for update:`, feature.getId());
+            console.log("Feature scaled, queued for update:", feature.getId());
           }
         } else {
-          console.log(`${type} unsaved feature (still in inserts).`);
+          console.log("Scaled unsaved feature (still in inserts).");
         }
       });
       updateSaveButtonState();
-    }
-
-    // Listen only to scale end
-    scaleInteraction.on("scaleend", (e) => handleTransformEnd(e, "scaled"));
+    });
 
     console.log("📏 Scale interaction active");
   } else {
