@@ -83,6 +83,7 @@ import ol_interaction_SnapGuides from "ol-ext/interaction/SnapGuides";
 import DragBox from "ol/interaction/DragBox.js";
 import Translate from "ol/interaction/Translate.js";
 import Collection from "ol/Collection.js";
+import ol_interaction_Transform from "ol-ext/interaction/Transform.js";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -3097,9 +3098,31 @@ function saveFeature() {
   // Create WFS format instance
   const wfsFormat = new WFS();
   const deleteFeatures = deletes.map((item) => item.feature);
-  updates.forEach((feature) => {
-    feature.setGeometryName("geom");
+
+  console.log(updates[0].values_);
+  console.log(updates[0].getGeometry());
+  console.log(updates[0].getGeometryName());
+
+  // updates.forEach((feature) => {
+  //   feature.setGeometryName("geom");
+  // });
+
+  updates.forEach((f) => {
+    // 🔹 Drop all non-geometry properties (like fid) before saving
+    const keepGeom = f.getGeometry();
+    f.getKeys().forEach((key) => {
+      if (key !== "geom") {
+        f.unset(key, true);
+      }
+    });
+
+    // 🔹 Normalize geometry property
+    if (f.getGeometryName() !== "geom") {
+      f.set("geom", keepGeom); // store under correct key
+      f.setGeometryName("geom"); // tell OL the schema property
+    }
   });
+
   // Prepare the transaction
   const transaction = wfsFormat.writeTransaction(
     inserts,
@@ -3125,7 +3148,7 @@ function saveFeature() {
   })
     .then((response) => response.text())
     .then((responseText) => {
-      console.log("Transaction successful:", responseText);
+      console.log("Transaction XML:", responseText);
       source.refresh();
       inserts = [];
       updates = [];
@@ -3185,6 +3208,8 @@ function clearInteractions() {
     modifyInteraction,
     drawInteraction,
     snapInteraction,
+    rotateInteraction,
+    scaleInteraction,
   ];
 
   interactions.forEach((i) => {
@@ -3198,6 +3223,8 @@ function clearInteractions() {
   modifyInteraction = null;
   drawInteraction = null;
   snapInteraction = null;
+  rotateInteraction = null;
+  scaleInteraction = null;
 
   // ✅ Handle SnapGuides separately
   if (snapGuidesActive) {
@@ -3219,6 +3246,8 @@ function clearToolbarButtons() {
     btnAdd,
     btnSnap,
     btnSnapGuides,
+    btnRotate,
+    btnScale,
   ];
 
   buttons.forEach((btn) => btn.classList.remove("active"));
@@ -5562,6 +5591,9 @@ btnTranslate.addEventListener("click", () => {
   // Handle translate end
   translateInteraction.on("translateend", (event) => {
     event.features.forEach((feature) => {
+      console.log(feature);
+      console.log(event.features);
+
       if (feature.getId()) {
         if (!updates.includes(feature)) {
           updates.push(feature);
@@ -5581,3 +5613,106 @@ function updateSaveButtonState() {
     inserts.length > 0 || updates.length > 0 || deletes.length > 0;
   document.getElementById("btnSave").disabled = !hasChanges;
 }
+
+//Rotate Features
+
+const btnRotate = document.getElementById("btnRotate");
+let rotateInteraction = null;
+rotateInteraction = new ol_interaction_Transform({
+  enableRotatedTransform: true,
+  rotate: true,
+  scale: false,
+  translateFeature: false,
+});
+
+let rotateActive = false;
+
+btnRotate.addEventListener("click", () => {
+  if (!rotateActive) {
+    map.addInteraction(rotateInteraction);
+    rotateActive = true;
+    btnRotate.classList.add("active");
+
+    function handleTransformEnd(event, type) {
+      console.log(event);
+      console.log(type);
+
+      const feats = event.features || (event.feature ? [event.feature] : []);
+
+      feats.forEach((feature) => {
+        console.log(feature);
+        console.log(feats);
+
+        if (feature.getId()) {
+          if (!updates.includes(feature)) {
+            updates.push(feature);
+            console.log(`Feature ${type}, queued for update:`, feature.getId());
+          }
+        } else {
+          console.log(`${type} unsaved feature (still in inserts).`);
+        }
+      });
+      updateSaveButtonState();
+    }
+
+    // Listen to all transform end events
+    rotateInteraction.on("rotateend", (e) => handleTransformEnd(e, "rotated"));
+
+    console.log("🔄 Transform interaction active");
+  } else {
+    map.removeInteraction(rotateInteraction);
+    rotateActive = false;
+    btnRotate.classList.remove("active");
+    console.log("❌ Transform interaction disabled");
+  }
+});
+
+//SCALE FEATURES
+
+const btnScale = document.getElementById("btnScale");
+let scaleInteraction = null;
+scaleInteraction = new ol_interaction_Transform({
+  enableRotatedTransform: false, // not needed for scaling
+  rotate: false,
+  scale: true,
+  translateFeature: false,
+});
+
+let scaleActive = false;
+
+btnScale.addEventListener("click", () => {
+  if (!scaleActive) {
+    map.addInteraction(scaleInteraction);
+    scaleActive = true;
+    btnScale.classList.add("active");
+
+    function handleTransformEnd(event, type) {
+      const feats = event.features || (event.feature ? [event.feature] : []);
+
+      feats.forEach((feature) => {
+        console.log(feature);
+        console.log(feats);
+
+        if (feature.getId()) {
+          if (!updates.includes(feature)) {
+            updates.push(feature);
+            console.log(`Feature ${type}, queued for update:`, feature.getId());
+          }
+        } else {
+          console.log(`${type} unsaved feature (still in inserts).`);
+        }
+      });
+      updateSaveButtonState();
+    }
+
+    // Listen only to scale end
+    scaleInteraction.on("scaleend", (e) => handleTransformEnd(e, "scaled"));
+
+    console.log("📏 Scale interaction active");
+  } else {
+    map.removeInteraction(scaleInteraction);
+    scaleActive = false;
+    btnScale.classList.remove("active");
+    console.log("❌ Scale interaction disabled");
+  }
+});
