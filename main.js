@@ -84,6 +84,8 @@ import DragBox from "ol/interaction/DragBox.js";
 import Translate from "ol/interaction/Translate.js";
 import Collection from "ol/Collection.js";
 import ol_interaction_Transform from "ol-ext/interaction/Transform.js";
+import ol_interaction_CopyPaste from "ol-ext/interaction/CopyPaste.js";
+import { getCenter } from "ol/extent";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
@@ -562,7 +564,7 @@ const map = new Map({
   view: new View({
     projection: "EPSG:3857",
     center: center_3857,
-    zoom: 14,
+    zoom: 18,
     maxZoom: 20,
   }),
 });
@@ -3098,14 +3100,7 @@ function saveFeature() {
   // Create WFS format instance
   const wfsFormat = new WFS();
   const deleteFeatures = deletes.map((item) => item.feature);
-
-  console.log(updates[0].values_);
-  console.log(updates[0].getGeometry());
-  console.log(updates[0].getGeometryName());
-
-  // updates.forEach((feature) => {
-  //   feature.setGeometryName("geom");
-  // });
+  console.log(inserts);
 
   updates.forEach((f) => {
     // 🔹 Drop all non-geometry properties (like fid) before saving
@@ -5705,5 +5700,122 @@ btnScale.addEventListener("click", () => {
     scaleActive = false;
     btnScale.classList.remove("active");
     console.log("❌ Scale interaction disabled");
+  }
+});
+
+// COPY PASTE FEATURES
+
+// 1. Get your button
+const btnClone = document.getElementById("btnClone");
+
+// 2. Create a Transform interaction (acts as selection tool)
+let cloneTransformInteraction = new ol_interaction_Transform({
+  enableRotatedTransform: false,
+  rotate: false,
+  scale: false,
+  stretch: false,
+  translateFeature: true,
+});
+
+// 3. Create CopyPaste interaction, linked to transform selection
+let copyPasteInteraction = new ol_interaction_CopyPaste({
+  features: cloneTransformInteraction.getFeatures(),
+  source: wfsVectorSource,
+  destination: wfsVectorSource,
+});
+
+// 4. Toggle Clone mode with button
+let cloneActive = false;
+
+btnClone.addEventListener("click", () => {
+  if (!cloneActive) {
+    // enable transform + copy/paste
+    map.addInteraction(cloneTransformInteraction);
+    map.addInteraction(copyPasteInteraction);
+    cloneActive = true;
+    btnClone.classList.add("active");
+
+    // Listen for copy/cut/paste events
+    copyPasteInteraction.on("copy", (e) => {
+      const copied = cloneTransformInteraction.getFeatures().getArray();
+      console.log("📋 Copied features:", copied);
+    });
+
+    copyPasteInteraction.on("cut", (e) => {
+      const cut = cloneTransformInteraction.getFeatures().getArray();
+      console.log("✂️ Cut features:", cut);
+      // clear selection after cut
+      cloneTransformInteraction.select();
+    });
+
+    copyPasteInteraction.on("paste", (e) => {
+      console.log("📌 Pasted features:", e.features);
+
+      e.features.forEach((f) => {
+        // Extract geometry
+        const geom = f.getGeometry();
+        f.set("geom", geom);
+        f.setGeometryName("geom");
+        if (f.get("geometry")) {
+          f.unset("geometry", true);
+        }
+
+        wfsVectorSource.addFeature(f);
+
+        // 🔹 Make feature follow the cursor
+        const moveFeature = (evt) => {
+          const coord = evt.coordinate;
+          const featureGeom = f.getGeometry();
+
+          if (featureGeom.getType() === "Point") {
+            featureGeom.setCoordinates(coord);
+          } else {
+            // For Polygon / LineString: translate centroid to cursor
+            const extent = featureGeom.getExtent();
+            console.log(extent);
+
+            const center = getCenter(extent);
+            const dx = coord[0] - center[0];
+            const dy = coord[1] - center[1];
+            featureGeom.translate(dx, dy);
+          }
+        };
+
+        map.on("pointermove", moveFeature);
+
+        // 🔹 Finalize on click
+        const finalizePlacement = () => {
+          map.un("pointermove", moveFeature);
+
+          if (!inserts.includes(f)) {
+            inserts.push(f);
+          }
+          updateSaveButtonState();
+
+          // Stop listening after placing
+          map.un("click", finalizePlacement);
+
+          console.log(
+            "📌 Feature placed at:",
+            f.getGeometry().getCoordinates()
+          );
+        };
+        map.once("click", finalizePlacement);
+      });
+
+      updateSaveButtonState();
+
+      // Auto-select pasted features
+      cloneTransformInteraction.select();
+      e.features.forEach((f) => cloneTransformInteraction.select(f, true));
+    });
+
+    console.log("📋 Copy/Paste active (Ctrl+C / Ctrl+X / Ctrl+V)");
+  } else {
+    map.removeInteraction(cloneTransformInteraction);
+    map.removeInteraction(copyPasteInteraction);
+    cloneActive = false;
+    btnClone.classList.remove("active");
+    console.log("❌ Copy/Paste disabled");
   }
 });
