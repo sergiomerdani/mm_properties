@@ -3191,66 +3191,6 @@ saveFeatureButton.addEventListener("click", () => {
   saveFeature();
 });
 
-function clearInteractions() {
-  // Reset styles of selected features before clearing
-  if (selectedFeatures && selectedFeatures.getLength() > 0) {
-    selectedFeatures.forEach((f) => f.setStyle(null));
-    selectedFeatures.clear();
-  }
-
-  const interactions = [
-    activeSelectInteraction,
-    modifyInteraction,
-    drawInteraction,
-    snapInteraction,
-    rotateInteraction,
-    scaleInteraction,
-  ];
-
-  interactions.forEach((i) => {
-    if (i) {
-      map.removeInteraction(i);
-    }
-  });
-
-  // reset references
-  activeSelectInteraction = null;
-  modifyInteraction = null;
-  drawInteraction = null;
-  snapInteraction = null;
-
-  // reset active flags too
-  rotateActive = false;
-  scaleActive = false;
-
-  // ✅ Handle SnapGuides separately
-  if (snapGuidesActive) {
-    map.removeInteraction(snapGuidesInteraction);
-    snapGuidesActive = false;
-    snapGuideBtn.classList.remove("active");
-    console.log("❌ SnapGuides Interaction OFF (clearInteractions)");
-  }
-
-  console.log("🧹 All interactions cleared");
-}
-
-function clearToolbarButtons() {
-  const buttons = [
-    btnSelect,
-    btnSelectSingle,
-    btnSelectRectangle,
-    btnEditGeom,
-    btnAdd,
-    btnSnap,
-    btnSnapGuides,
-    btnRotate,
-    btnScale,
-  ];
-
-  buttons.forEach((btn) => btn.classList.remove("active"));
-  console.log("🔲 Toolbar buttons reset");
-}
-
 //SELECT RECORD FROM FEATURE ON MAP
 function highlightFeature(feature) {
   const featureId = feature.getId();
@@ -5627,6 +5567,8 @@ rotateInteraction = new ol_interaction_Transform({
 let rotateActive = false;
 
 btnRotate.addEventListener("click", () => {
+  clearInteractions();
+  clearToolbarButtons();
   if (!rotateActive) {
     map.addInteraction(rotateInteraction);
     rotateActive = true;
@@ -5673,6 +5615,8 @@ scaleInteraction = new ol_interaction_Transform({
 let scaleActive = false;
 
 btnScale.addEventListener("click", () => {
+  clearInteractions();
+  clearToolbarButtons();
   if (!scaleActive) {
     map.addInteraction(scaleInteraction);
     scaleActive = true;
@@ -5744,7 +5688,24 @@ btnClone.addEventListener("click", () => {
     copyPasteInteraction.on("cut", (e) => {
       const cut = cloneTransformInteraction.getFeatures().getArray();
       console.log("✂️ Cut features:", cut);
-      // clear selection after cut
+
+      cut.forEach((f) => {
+        // Remove from source immediately
+        wfsVectorSource.removeFeature(f);
+
+        // Track for delete if it has an ID (already saved in DB)
+        if (f.getId()) {
+          deletes.push({ feature: f });
+        }
+
+        // If it's a new unsaved feature, also remove from inserts
+        const idx = inserts.indexOf(f);
+        if (idx > -1) {
+          inserts.splice(idx, 1);
+        }
+      });
+
+      // Clear selection after cut
       cloneTransformInteraction.select();
     });
 
@@ -5819,3 +5780,67 @@ btnClone.addEventListener("click", () => {
     console.log("❌ Copy/Paste disabled");
   }
 });
+
+function clearInteractions() {
+  // Reset styles of selected features before clearing
+  if (selectedFeatures && selectedFeatures.getLength() > 0) {
+    selectedFeatures.forEach((f) => f.setStyle(null));
+    selectedFeatures.clear();
+  }
+
+  const interactions = [
+    activeSelectInteraction,
+    modifyInteraction,
+    drawInteraction,
+    snapInteraction,
+    rotateInteraction,
+    scaleInteraction,
+    copyPasteInteraction,
+    cloneTransformInteraction,
+  ];
+
+  interactions.forEach((i) => {
+    if (i) {
+      map.removeInteraction(i);
+    }
+  });
+
+  // reset references
+  activeSelectInteraction = null;
+  modifyInteraction = null;
+  drawInteraction = null;
+  snapInteraction = null;
+
+  // reset active flags too
+  rotateActive = false;
+  scaleActive = false;
+  cloneActive = false;
+
+  // ✅ Handle SnapGuides separately
+  if (snapGuidesActive) {
+    map.removeInteraction(snapGuidesInteraction);
+    snapGuidesActive = false;
+    snapGuideBtn.classList.remove("active");
+    console.log("❌ SnapGuides Interaction OFF (clearInteractions)");
+  }
+
+  console.log("🧹 All interactions cleared");
+}
+
+function clearToolbarButtons() {
+  const buttons = [
+    btnSelect,
+    btnSelectSingle,
+    btnSelectRectangle,
+    btnEditGeom,
+    btnAdd,
+    btnSnap,
+    btnSnapGuides,
+    btnRotate,
+    btnScale,
+    btnClone,
+  ];
+
+  buttons.forEach((btn) => btn.classList.remove("active"));
+  console.log("🔲 Toolbar buttons reset");
+}
