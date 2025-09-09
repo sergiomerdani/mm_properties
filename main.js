@@ -2882,13 +2882,33 @@ modifyFeature.addEventListener("click", (e) => {
   // Create new modify interaction
   modifyInteraction = new Modify({
     source: wfsVectorSource,
+    insertVertexCondition: (e) => {
+      // Allow creating vertices only when dragging on a midpoint
+      return e.type === "pointerdrag";
+    },
+    addCondition: () => false,
   });
   map.addInteraction(modifyInteraction);
   btnEditGeom.classList.add("active");
 
   snapGuidesInteraction.setModifyInteraction(modifyInteraction);
+
+  // when pin is OFF: prevent dragging coincident vertices together
+  modifyInteraction.on("modifystart", (event) => {
+    if (pinEnabled) return;
+    const segs = modifyInteraction.dragSegments_;
+    if (segs && segs.length > 1) {
+      modifyInteraction.dragSegments_ = [segs[0]];
+    }
+  });
+
   modifyInteraction.on("modifyend", function (event) {
     event.features.forEach((feature) => {
+      const geom = feature.getGeometry();
+      console.log(geom.getCoordinates());
+      syncClosure(feature);
+      fixPolygon(geom);
+      removeCollinearVertices(geom, 1.0);
       if (feature.getId()) {
         // Existing feature → update
         if (!updates.includes(feature)) {
@@ -5843,4 +5863,164 @@ function clearToolbarButtons() {
 
   buttons.forEach((btn) => btn.classList.remove("active"));
   console.log("🔲 Toolbar buttons reset");
+}
+
+//PIN SHARED VERTICES TOGETHER
+
+// PIN BUTTON
+let pinEnabled = false;
+const btnPin = document.getElementById("btnPin");
+
+btnPin.addEventListener("click", () => {
+  pinEnabled = !pinEnabled;
+  btnPin.classList.toggle("active", pinEnabled);
+  console.log("📌 Pin mode:", pinEnabled ? "ON" : "OFF");
+});
+
+function updatePinnedVertices(movedCoords, sourceFeature) {
+  const tolerance = 1e-6;
+  const [mx, my] = movedCoords;
+
+  wfsVectorSource.forEachFeature((feat) => {
+    if (feat === sourceFeature) return;
+    const geom = feat.getGeometry();
+    if (!geom) return;
+
+    let changed = false;
+
+    const updateCoords = (coords) => {
+      for (let idx = 0; idx < coords.length; idx++) {
+        // skip closure point
+        if (
+          idx === coords.length - 1 &&
+          Math.abs(coords[0][0] - coords[idx][0]) < tolerance &&
+          Math.abs(coords[0][1] - coords[idx][1]) < tolerance
+        ) {
+          continue;
+        }
+
+        const pt = coords[idx];
+        if (
+          Math.abs(pt[0] - mx) < tolerance &&
+          Math.abs(pt[1] - my) < tolerance
+        ) {
+          coords[idx] = [mx, my];
+          changed = true;
+        }
+      }
+      return coords;
+    };
+
+    if (geom.getType() === "Polygon") {
+      const rings = geom.getCoordinates();
+      rings.forEach((ring, i) => (rings[i] = updateCoords(ring)));
+      if (changed) geom.setCoordinates(rings);
+    }
+
+    if (geom.getType() === "MultiPolygon") {
+      const polys = geom.getCoordinates();
+      polys.forEach((rings, i) => {
+        rings.forEach((ring, j) => (polys[i][j] = updateCoords(ring)));
+      });
+      if (changed) geom.setCoordinates(polys);
+    }
+
+    if (changed) feat.changed();
+  });
+}
+
+function removeCollinearVertices(geom, tolerance = 1e-9) {
+  const isCollinear = (a, b, c) => {
+    // area of triangle (a,b,c) = 0 when collinear
+    const area = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    return Math.abs(area) < tolerance;
+  };
+
+  const cleanRing = (ring) => {
+    if (ring.length <= 3) return ring;
+    const cleaned = [ring[0]];
+
+    for (let i = 1; i < ring.length - 1; i++) {
+      const prev = cleaned[cleaned.length - 1];
+      const curr = ring[i];
+      const next = ring[i + 1];
+      if (!isCollinear(prev, curr, next)) {
+        cleaned.push(curr);
+      }
+    }
+
+    cleaned.push(ring[ring.length - 1]); // close ring
+    return cleaned;
+  };
+
+  if (geom.getType() === "Polygon") {
+    const rings = geom.getCoordinates().map(cleanRing);
+    geom.setCoordinates(rings);
+  }
+
+  if (geom.getType() === "MultiPolygon") {
+    const polys = geom.getCoordinates().map((rings) => rings.map(cleanRing));
+    geom.setCoordinates(polys);
+  }
+}
+
+function fixPolygon(geom) {
+  const closeRing = (ring) => {
+    // remove duplicates
+    let cleaned = ring.filter(
+      (pt, i, arr) =>
+        i === 0 || pt[0] !== arr[i - 1][0] || pt[1] !== arr[i - 1][1]
+    );
+    // ensure closure
+    const first = cleaned[0];
+    const last = cleaned[cleaned.length - 1];
+    if (first[0] !== last[0] || first[1] !== last[1]) {
+      cleaned.push([...first]);
+    }
+    return cleaned;
+  };
+
+  if (geom.getType() === "Polygon") {
+    geom.setCoordinates(geom.getCoordinates().map(closeRing));
+  }
+  if (geom.getType() === "MultiPolygon") {
+    geom.setCoordinates(
+      geom.getCoordinates().map((rings) => rings.map(closeRing))
+    );
+  }
+}
+
+function syncClosure(feature) {
+  const geom = feature.getGeometry();
+
+  if (geom.getType() === "Polygon") {
+    const rings = geom.getCoordinates();
+    rings.forEach((ring, i) => {
+      if (ring.length > 2) {
+        const first = ring[0];
+        const last = ring[ring.length - 1];
+        if (first[0] !== last[0] || first[1] !== last[1]) {
+          // only fix closure inside this feature
+          ring[ring.length - 1] = [...first];
+        }
+      }
+    });
+    geom.setCoordinates(rings);
+  }
+
+  if (geom.getType() === "MultiPolygon") {
+    const polys = geom.getCoordinates();
+    polys.forEach((rings, i) => {
+      rings.forEach((ring, j) => {
+        if (ring.length > 2) {
+          const first = ring[0];
+          const last = ring[ring.length - 1];
+          if (first[0] !== last[0] || first[1] !== last[1]) {
+            ring[ring.length - 1] = [...first];
+          }
+        }
+      });
+    });
+    geom.setCoordinates(polys);
+  }
 }
