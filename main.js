@@ -5877,58 +5877,6 @@ btnPin.addEventListener("click", () => {
   console.log("📌 Pin mode:", pinEnabled ? "ON" : "OFF");
 });
 
-function updatePinnedVertices(movedCoords, sourceFeature) {
-  const tolerance = 1e-6;
-  const [mx, my] = movedCoords;
-
-  wfsVectorSource.forEachFeature((feat) => {
-    if (feat === sourceFeature) return;
-    const geom = feat.getGeometry();
-    if (!geom) return;
-
-    let changed = false;
-
-    const updateCoords = (coords) => {
-      for (let idx = 0; idx < coords.length; idx++) {
-        // skip closure point
-        if (
-          idx === coords.length - 1 &&
-          Math.abs(coords[0][0] - coords[idx][0]) < tolerance &&
-          Math.abs(coords[0][1] - coords[idx][1]) < tolerance
-        ) {
-          continue;
-        }
-
-        const pt = coords[idx];
-        if (
-          Math.abs(pt[0] - mx) < tolerance &&
-          Math.abs(pt[1] - my) < tolerance
-        ) {
-          coords[idx] = [mx, my];
-          changed = true;
-        }
-      }
-      return coords;
-    };
-
-    if (geom.getType() === "Polygon") {
-      const rings = geom.getCoordinates();
-      rings.forEach((ring, i) => (rings[i] = updateCoords(ring)));
-      if (changed) geom.setCoordinates(rings);
-    }
-
-    if (geom.getType() === "MultiPolygon") {
-      const polys = geom.getCoordinates();
-      polys.forEach((rings, i) => {
-        rings.forEach((ring, j) => (polys[i][j] = updateCoords(ring)));
-      });
-      if (changed) geom.setCoordinates(polys);
-    }
-
-    if (changed) feat.changed();
-  });
-}
-
 function removeCollinearVertices(geom, tolerance = 1e-9) {
   const isCollinear = (a, b, c) => {
     // area of triangle (a,b,c) = 0 when collinear
