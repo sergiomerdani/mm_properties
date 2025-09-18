@@ -258,6 +258,105 @@ fetch(apiUrl, {
     console.error("There was a problem with the fetch operation:", error);
   });
 
+// Logged in As USER - Reading data
+
+// const capabilitiesUrl = `http://localhost:8000/geoserver-proxy/${workspaceName}/wms?SERVICE=WMS&REQUEST=GetCapabilities`;
+
+// fetch(capabilitiesUrl, {
+//   method: "GET",
+//   headers: { Accept: "application/xml" },
+// })
+//   .then((response) => response.text())
+//   .then((xmlText) => {
+//     const parser = new DOMParser();
+//     const xml = parser.parseFromString(xmlText, "text/xml");
+
+//     const capability = xml.getElementsByTagName("Capability")[0];
+//     const rootLayer = capability.getElementsByTagName("Layer")[0];
+
+//     // Step 1: collect names of all group children
+//     const groupChildren = new Set();
+//     const allLayers = rootLayer.getElementsByTagName("Layer");
+//     Array.from(allLayers).forEach((ln) => {
+//       const parent = ln.parentNode;
+//       if (parent !== rootLayer) {
+//         const n = ln.getElementsByTagName("Name")[0];
+//         if (n) groupChildren.add(n.textContent);
+//       }
+//     });
+
+//     // Step 2: loop through direct children of root
+//     Array.from(rootLayer.children).forEach((layerNode) => {
+//       if (layerNode.tagName !== "Layer") return;
+
+//       const nameNode = layerNode.getElementsByTagName("Name")[0];
+//       const titleNode = layerNode.getElementsByTagName("Title")[0];
+//       if (!nameNode) return;
+
+//       const layerName = nameNode.textContent;
+//       const layerTitle = titleNode ? titleNode.textContent : layerName;
+
+//       // Skip if this layer is already a child of a group
+//       if (groupChildren.has(layerName)) return;
+
+//       // Check if it’s a group (has direct child Layers)
+//       const childLayers = Array.from(layerNode.children).filter(
+//         (el) => el.tagName === "Layer"
+//       );
+
+//       if (childLayers.length > 0) {
+//         // Build a LayerGroup
+//         const newLayerGroup = new LayerGroup({
+//           title: layerTitle,
+//           displayInLayerSwitcher: true,
+//           layers: [],
+//         });
+
+//         childLayers.forEach((childNode) => {
+//           const childName = childNode.getElementsByTagName("Name")[0];
+//           const childTitle = childNode.getElementsByTagName("Title")[0];
+//           if (!childName) return;
+
+//           const childLayer = new ImageLayer({
+//             source: new ImageWMS({
+//               url: `http://localhost:8000/geoserver-proxy/${workspaceName}/wms`,
+//               params: { LAYERS: childName.textContent, VERSION: "1.1.1" },
+//               ratio: 1,
+//               serverType: "geoserver",
+//               crossOrigin: "anonymous",
+//             }),
+//             title: childTitle ? childTitle.textContent : childName.textContent,
+//             visible: false,
+//             displayInLayerSwitcher: true,
+//           });
+
+//           newLayerGroup.getLayers().push(childLayer);
+//         });
+
+//         map.addLayer(newLayerGroup);
+//         layersArray.push(newLayerGroup);
+//       } else {
+//         // Single standalone layer
+//         const tileLayer = new ImageLayer({
+//           source: new ImageWMS({
+//             url: `http://localhost:8000/geoserver-proxy/${workspaceName}/wms`,
+//             params: { LAYERS: layerName, VERSION: "1.1.1" },
+//             ratio: 1,
+//             serverType: "geoserver",
+//             crossOrigin: "anonymous",
+//           }),
+//           title: layerTitle,
+//           visible: false,
+//           displayInLayerSwitcher: true,
+//         });
+
+//         map.addLayer(tileLayer);
+//         layersArray.push(tileLayer);
+//       }
+//     });
+//   })
+//   .catch((error) => console.error("Error in GetCapabilities:", error));
+
 //creating attribution control for ol
 const attributionControl = new Attribution({
   collapsible: true,
