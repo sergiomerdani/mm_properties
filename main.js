@@ -178,7 +178,7 @@ fetch(apiUrl, {
   method: "GET",
   // mode: "no-cors",
   headers: {
-    Authorization: "Basic " + btoa(`${username}:${password}`), // Change credentials
+    Authorization: "Basic " + btoa(`${username}:${password}`),
     Accept: "application/json",
   },
   credentials: "include",
@@ -210,7 +210,7 @@ fetch(apiUrl, {
         method: "GET",
         // mode: "no-cors",
         headers: {
-          Authorization: "Basic " + btoa(`${username}:${password}`), // Change credentials
+          Authorization: "Basic " + btoa(`${username}:${password}`),
           Accept: "application/json",
         },
         credentials: "include",
@@ -228,10 +228,10 @@ fetch(apiUrl, {
             layerParams = layer.name;
             const { workspace2, layerName2, layerTitle2 } =
               parseLayerInfo(layerParams);
+
             const tileLayer = new ImageLayer({
               source: new ImageWMS({
-                url: `http://${host}:${port}/geoserver/${workspace2}/wms`,
-                // url: `http://admin:geoserver@${host}:8082/geoserver/${workspace2}/wms`,
+                url: `http://localhost:8000/geoserver-proxy/test/wms`,
                 params: {
                   LAYERS: layerParams,
                   VERSION: "1.1.1",
@@ -376,16 +376,6 @@ fetch("https://geoportal.asig.gov.al/service/wmts?request=getCapabilities")
   })
 
   .catch(function (error) {});
-
-const country = new Style({
-  stroke: new Stroke({
-    color: "gray",
-    width: 1,
-  }),
-  fill: new Fill({
-    color: "rgba(20,20,20,0.9)",
-  }),
-});
 
 //ASIG Layers
 const protectedAreas = new Tile({
@@ -564,7 +554,7 @@ const map = new Map({
   view: new View({
     projection: "EPSG:3857",
     center: center_3857,
-    zoom: 18,
+    zoom: 8,
     maxZoom: 20,
   }),
 });
@@ -2118,7 +2108,8 @@ function fetchLayerPropertiesFromWFS(url, layerParam) {
     vectorLayer = wfsVectorLayer;
   }
 
-  const describeFeatureTypeUrl = `http://${host}:${port}/geoserver/${workspace}/ows?service=WFS&version=1.1.0&request=DescribeFeatureType&typeName=${layerParam}`;
+  // const describeFeatureTypeUrl = `http://${host}:${port}/geoserver-proxy/${workspace}/ows?service=WFS&version=1.1.0&request=DescribeFeatureType&typeName=${layerParam}`;
+  const describeFeatureTypeUrl = `http://localhost:8000/geoserver-proxy/${workspace}/ows?service=WFS&version=1.1.0&request=DescribeFeatureType&typeName=${layerParam}`;
 
   fetch(describeFeatureTypeUrl)
     .then((response) => response.text())
@@ -2749,7 +2740,7 @@ editLayerButton.addEventListener("click", () => {
     const bboxParam = intExtent.join(",");
 
     wfsVectorSource = new VectorSource({
-      url: `http://localhost:8080/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParam}&outputFormat=application/json&maxFeatures=500&bbox=${bboxParam},EPSG:3857`,
+      url: `http://localhost:8000/geoserver-proxy/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParam}&outputFormat=application/json&maxFeatures=500&bbox=${bboxParam},EPSG:3857`,
       format: new GeoJSON(),
       strategy: bboxStrategy,
     });
@@ -3159,6 +3150,7 @@ function saveFeature() {
     body: wfsPayload,
     headers: {
       "Content-Type": "text/xml",
+      Authorization: "Basic " + btoa(`${username}:${password}`),
     },
   })
     .then((response) => response.text())
@@ -5972,3 +5964,22 @@ function syncClosure(feature) {
     geom.setCoordinates(polys);
   }
 }
+
+// const librari = new ImageLayer({
+//   source: new ImageWMS({
+//     url: `http://localhost:8000/geoserver-proxy/test/wms`,
+//     params: {
+//       LAYERS: "test:Librari",
+//       VERSION: "1.1.1",
+//     },
+//     ratio: 1,
+//     serverType: "geoserver",
+//     crossOrigin: "anonymous",
+//   }),
+//   visible: true,
+//   title: "Library",
+//   information: "Kufiri i tokësor i republikës së Shqipërisë",
+//   displayInLayerSwitcher: true,
+// });
+
+// map.addLayer(librari);
