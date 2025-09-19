@@ -167,7 +167,7 @@ function parseLayerInfo(layerParams) {
     .join(" ");
   return { workspace2, layerName2, layerTitle2 };
 }
-const username = "user_editor";
+const username = "user_reader";
 const password = "geoserver";
 
 // Map usernames to roles
@@ -310,8 +310,13 @@ function loadUserLayers() {
         const titleNode = layerNode.getElementsByTagName("Title")[0];
         if (!nameNode) return;
 
-        const layerName = nameNode.textContent;
+        const layerName = nameNode.textContent; // this might already include workspace
         const layerTitle = titleNode ? titleNode.textContent : layerName;
+
+        // Ensure it has workspace prefix
+        const qualifiedName = layerName.includes(":")
+          ? layerName
+          : `${workspaceName}:${layerName}`;
 
         if (groupChildren.has(layerName)) return; // skip duplicates
 
@@ -355,7 +360,7 @@ function loadUserLayers() {
           const tileLayer = new ImageLayer({
             source: new ImageWMS({
               url: `http://localhost:8000/geoserver-proxy/${workspaceName}/wms`,
-              params: { LAYERS: layerName, VERSION: "1.1.1" },
+              params: { LAYERS: qualifiedName, VERSION: "1.1.1" },
               ratio: 1,
               serverType: "geoserver",
               crossOrigin: "anonymous",
@@ -2482,12 +2487,11 @@ layerSwitcher.on("select", (e) => {
     const parts = params.split(":");
     namePart = parts[1];
     workspacePart = parts[0];
-    console.log(namePart, workspacePart);
-
     layerTitle = selectedLayer.get("title");
-    console.log("Selected Image Layer:", layerTitle);
-
     layerParam = selectedLayer.getSource().getParams().LAYERS;
+    console.log(selectedLayer);
+    console.log(selectedLayer.getSource());
+
     function getLayerGroup(layer) {
       map.getLayers().forEach(function (groupLayer) {
         if (groupLayer instanceof LayerGroup) {
@@ -3021,6 +3025,29 @@ function styleWithVertices(feature) {
   return styles;
 }
 
+// === Helper: Replace a layer either in a LayerGroup or directly on the map ===
+function replaceLayer(oldLayer, newLayer) {
+  let replaced = false;
+
+  // Check if inside a LayerGroup
+  map.getLayers().forEach((groupLayer) => {
+    if (groupLayer instanceof LayerGroup) {
+      const groupLayers = groupLayer.getLayers();
+      if (groupLayers.getArray().includes(oldLayer)) {
+        groupLayers.remove(oldLayer);
+        groupLayers.push(newLayer);
+        replaced = true;
+      }
+    }
+  });
+
+  // If not replaced in a group, assume it’s direct on map
+  if (!replaced) {
+    map.removeLayer(oldLayer);
+    map.addLayer(newLayer);
+  }
+}
+
 //EDIT LAYER
 let snapInteraction = null;
 let inserts = [];
@@ -3060,8 +3087,7 @@ editLayerButton.addEventListener("click", () => {
 
     // Swap WMS → WFS
     originalLayer = selectedLayer;
-    layerGroup.getLayers().remove(selectedLayer);
-    layerGroup.getLayers().push(wfsVectorLayer);
+    replaceLayer(selectedLayer, wfsVectorLayer);
 
     // 🔹 Fetch DescribeFeatureType for editing
     const wfsUrl = wfsVectorSource.getUrl();
@@ -3080,12 +3106,9 @@ editLayerButton.addEventListener("click", () => {
     btnTranslate.disabled = true;
     btnSelect.textContent = "🖱️";
 
-    if (wfsVectorLayer) {
-      layerGroup.getLayers().remove(wfsVectorLayer);
-    }
-    if (originalLayer) {
-      originalLayer.getSource().refresh(); // refresh WMS with edits
-      layerGroup.getLayers().push(originalLayer);
+    if (wfsVectorLayer && originalLayer) {
+      replaceLayer(wfsVectorLayer, originalLayer);
+      originalLayer.getSource().refresh(); // refresh WMS after edits
     }
     // Hide toolbar
     editToolbar.style.display = "none";
@@ -6269,22 +6292,3 @@ function syncClosure(feature) {
     geom.setCoordinates(polys);
   }
 }
-
-// const librari = new ImageLayer({
-//   source: new ImageWMS({
-//     url: `http://localhost:8000/geoserver-proxy/test/wms`,
-//     params: {
-//       LAYERS: "test:Librari",
-//       VERSION: "1.1.1",
-//     },
-//     ratio: 1,
-//     serverType: "geoserver",
-//     crossOrigin: "anonymous",
-//   }),
-//   visible: true,
-//   title: "Library",
-//   information: "Kufiri i tokësor i republikës së Shqipërisë",
-//   displayInLayerSwitcher: true,
-// });
-
-// map.addLayer(librari);
