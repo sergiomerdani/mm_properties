@@ -167,96 +167,302 @@ function parseLayerInfo(layerParams) {
     .join(" ");
   return { workspace2, layerName2, layerTitle2 };
 }
-const username = "admin";
+const username = "user_editor";
 const password = "geoserver";
+
+// Map usernames to roles
+const roleMap = {
+  admin: "superAdmin",
+  user_reader: "reader",
+  user_editor: "editor",
+  user_admin: "admin",
+};
+
+const role = roleMap[username] || "reader";
+
 let layerGroupName,
   layerParams,
   layersArray = [];
 
-// Make a GET request to the API
-fetch(apiUrl, {
-  method: "GET",
-  // mode: "no-cors",
-  headers: {
-    Authorization: "Basic " + btoa(`${username}:${password}`),
-    Accept: "application/json",
-  },
-  credentials: "include",
-})
-  .then((response) => {
-    // Check if the response is successful (status code 200-299)
-    if (!response.ok) {
-      throw new Error("Network response was not ok");
-    }
-    // Parse the response as JSON
-    return response.json();
+// === Backend Admin Loader ===
+function loadAdminLayers() {
+  const apiUrl = `http://${host}:${port}/geoserver/rest/workspaces/${workspaceName}/layergroups`;
+  console.log("loading admin layers...");
+  fetch(apiUrl, {
+    method: "GET",
+    headers: {
+      Authorization: "Basic " + btoa(`${username}:${password}`),
+      Accept: "application/json",
+    },
+    credentials: "include",
   })
-  .then((data) => {
-    const layerGroups = data.layerGroups.layerGroup;
-    layerGroups.forEach((layerGroup) => {
-      layerGroupName = layerGroup.name;
-      const constLayerGroup = camelCase(layerGroupName);
-      const newLayerGroup = new LayerGroup({
-        layers: [],
-        title: layerGroupName,
-        displayInLayerSwitcher: true,
-      });
-      map.addLayer(newLayerGroup);
-      layerGroupsArray.push(newLayerGroup);
-      const apiUrlLayerGroups =
-        apiUrl + "/" + encodeURIComponent(layerGroupName);
+    .then((response) => {
+      // Check if the response is successful (status code 200-299)
+      if (!response.ok) {
+        throw new Error("Network response was not ok");
+      }
+      // Parse the response as JSON
+      return response.json();
+    })
+    .then((data) => {
+      const layerGroups = data.layerGroups.layerGroup;
+      layerGroups.forEach((layerGroup) => {
+        layerGroupName = layerGroup.name;
+        const constLayerGroup = camelCase(layerGroupName);
+        const newLayerGroup = new LayerGroup({
+          layers: [],
+          title: layerGroupName,
+          displayInLayerSwitcher: true,
+        });
+        map.addLayer(newLayerGroup);
+        layerGroupsArray.push(newLayerGroup);
+        const apiUrlLayerGroups =
+          apiUrl + "/" + encodeURIComponent(layerGroupName);
 
-      fetch(apiUrlLayerGroups, {
-        method: "GET",
-        // mode: "no-cors",
-        headers: {
-          Authorization: "Basic " + btoa(`${username}:${password}`),
-          Accept: "application/json",
-        },
-        credentials: "include",
-      })
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error("Network response was not ok");
-          }
-          return response.json();
+        fetch(apiUrlLayerGroups, {
+          method: "GET",
+          // mode: "no-cors",
+          headers: {
+            Authorization: "Basic " + btoa(`${username}:${password}`),
+            Accept: "application/json",
+          },
+          credentials: "include",
         })
-        .then((data) => {
-          const layers = data.layerGroup.publishables.published;
-          const normalizedLayers = Array.isArray(layers) ? layers : [layers];
-          normalizedLayers.forEach((layer) => {
-            layerParams = layer.name;
-            const { workspace2, layerName2, layerTitle2 } =
-              parseLayerInfo(layerParams);
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error("Network response was not ok");
+            }
+            return response.json();
+          })
+          .then((data) => {
+            const layers = data.layerGroup.publishables.published;
+            const normalizedLayers = Array.isArray(layers) ? layers : [layers];
+            normalizedLayers.forEach((layer) => {
+              layerParams = layer.name;
+              const { workspace2, layerName2, layerTitle2 } =
+                parseLayerInfo(layerParams);
 
-            const tileLayer = new ImageLayer({
+              const tileLayer = new ImageLayer({
+                source: new ImageWMS({
+                  url: `http://localhost:8000/geoserver-proxy/test/wms`,
+                  params: {
+                    LAYERS: layerParams,
+                    VERSION: "1.1.1",
+                  },
+                  ratio: 1,
+                  serverType: "geoserver",
+                  crossOrigin: "anonymous",
+                }),
+                visible: true,
+                title: layerTitle2,
+                information: "Kufiri i tokësor i republikës së Shqipërisë",
+                displayInLayerSwitcher: true,
+              });
+              newLayerGroup.getLayers().push(tileLayer);
+              layersArray.push(tileLayer);
+            });
+          })
+          .catch((error) => {
+            console.error(
+              "There was a problem with the fetch operation:",
+              error
+            );
+          });
+      });
+    })
+    .catch((error) => {
+      console.error("There was a problem with the fetch operation:", error);
+    });
+}
+
+// === Reader/Editor/Admin Loader ===
+function loadUserLayers() {
+  const capabilitiesUrl = `http://localhost:8000/geoserver-proxy/${workspaceName}/wms?SERVICE=WMS&REQUEST=GetCapabilities`;
+  console.log("loading user layers...");
+  fetch(capabilitiesUrl, {
+    method: "GET",
+    headers: { Accept: "application/xml" },
+  })
+    .then((response) => response.text())
+    .then((xmlText) => {
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(xmlText, "text/xml");
+
+      const capability = xml.getElementsByTagName("Capability")[0];
+      const rootLayer = capability.getElementsByTagName("Layer")[0];
+
+      // Collect names of group children
+      const groupChildren = new Set();
+      const allLayers = rootLayer.getElementsByTagName("Layer");
+      Array.from(allLayers).forEach((ln) => {
+        const parent = ln.parentNode;
+        if (parent !== rootLayer) {
+          const n = ln.getElementsByTagName("Name")[0];
+          if (n) groupChildren.add(n.textContent);
+        }
+      });
+
+      // Loop through root children
+      Array.from(rootLayer.children).forEach((layerNode) => {
+        if (layerNode.tagName !== "Layer") return;
+
+        const nameNode = layerNode.getElementsByTagName("Name")[0];
+        const titleNode = layerNode.getElementsByTagName("Title")[0];
+        if (!nameNode) return;
+
+        const layerName = nameNode.textContent;
+        const layerTitle = titleNode ? titleNode.textContent : layerName;
+
+        if (groupChildren.has(layerName)) return; // skip duplicates
+
+        const childLayers = Array.from(layerNode.children).filter(
+          (el) => el.tagName === "Layer"
+        );
+
+        if (childLayers.length > 0) {
+          const newLayerGroup = new LayerGroup({
+            title: layerTitle,
+            displayInLayerSwitcher: true,
+            layers: [],
+          });
+
+          childLayers.forEach((childNode) => {
+            const childName = childNode.getElementsByTagName("Name")[0];
+            const childTitle = childNode.getElementsByTagName("Title")[0];
+            if (!childName) return;
+
+            const childLayer = new ImageLayer({
               source: new ImageWMS({
-                url: `http://localhost:8000/geoserver-proxy/test/wms`,
-                params: {
-                  LAYERS: layerParams,
-                  VERSION: "1.1.1",
-                },
+                url: `http://localhost:8000/geoserver-proxy/${workspaceName}/wms`,
+                params: { LAYERS: childName.textContent, VERSION: "1.1.1" },
                 ratio: 1,
                 serverType: "geoserver",
                 crossOrigin: "anonymous",
               }),
-              visible: true,
-              title: layerTitle2,
-              information: "Kufiri i tokësor i republikës së Shqipërisë",
+              title: childTitle
+                ? childTitle.textContent
+                : childName.textContent,
+              visible: false,
               displayInLayerSwitcher: true,
             });
-            newLayerGroup.getLayers().push(tileLayer);
-            layersArray.push(tileLayer);
+
+            newLayerGroup.getLayers().push(childLayer);
           });
-        })
-        .catch((error) => {
-          console.error("There was a problem with the fetch operation:", error);
-        });
-    });
-  })
-  .catch((error) => {
-    console.error("There was a problem with the fetch operation:", error);
-  });
+
+          map.addLayer(newLayerGroup);
+          layersArray.push(newLayerGroup);
+        } else {
+          const tileLayer = new ImageLayer({
+            source: new ImageWMS({
+              url: `http://localhost:8000/geoserver-proxy/${workspaceName}/wms`,
+              params: { LAYERS: layerName, VERSION: "1.1.1" },
+              ratio: 1,
+              serverType: "geoserver",
+              crossOrigin: "anonymous",
+            }),
+            title: layerTitle,
+            visible: false,
+            displayInLayerSwitcher: true,
+          });
+
+          map.addLayer(tileLayer);
+          layersArray.push(tileLayer);
+        }
+      });
+    })
+    .catch((err) => console.error("Error in GetCapabilities:", err));
+}
+
+if (role === "superAdmin") {
+  loadAdminLayers();
+} else {
+  loadUserLayers();
+}
+
+// Make a GET request to the API
+// fetch(apiUrl, {
+//   method: "GET",
+//   // mode: "no-cors",
+//   headers: {
+//     Authorization: "Basic " + btoa(`${username}:${password}`),
+//     Accept: "application/json",
+//   },
+//   credentials: "include",
+// })
+//   .then((response) => {
+//     // Check if the response is successful (status code 200-299)
+//     if (!response.ok) {
+//       throw new Error("Network response was not ok");
+//     }
+//     // Parse the response as JSON
+//     return response.json();
+//   })
+//   .then((data) => {
+//     const layerGroups = data.layerGroups.layerGroup;
+//     layerGroups.forEach((layerGroup) => {
+//       layerGroupName = layerGroup.name;
+//       const constLayerGroup = camelCase(layerGroupName);
+//       const newLayerGroup = new LayerGroup({
+//         layers: [],
+//         title: layerGroupName,
+//         displayInLayerSwitcher: true,
+//       });
+//       map.addLayer(newLayerGroup);
+//       layerGroupsArray.push(newLayerGroup);
+//       const apiUrlLayerGroups =
+//         apiUrl + "/" + encodeURIComponent(layerGroupName);
+
+//       fetch(apiUrlLayerGroups, {
+//         method: "GET",
+//         // mode: "no-cors",
+//         headers: {
+//           Authorization: "Basic " + btoa(`${username}:${password}`),
+//           Accept: "application/json",
+//         },
+//         credentials: "include",
+//       })
+//         .then((response) => {
+//           if (!response.ok) {
+//             throw new Error("Network response was not ok");
+//           }
+//           return response.json();
+//         })
+//         .then((data) => {
+//           const layers = data.layerGroup.publishables.published;
+//           const normalizedLayers = Array.isArray(layers) ? layers : [layers];
+//           normalizedLayers.forEach((layer) => {
+//             layerParams = layer.name;
+//             const { workspace2, layerName2, layerTitle2 } =
+//               parseLayerInfo(layerParams);
+
+//             const tileLayer = new ImageLayer({
+//               source: new ImageWMS({
+//                 url: `http://localhost:8000/geoserver-proxy/test/wms`,
+//                 params: {
+//                   LAYERS: layerParams,
+//                   VERSION: "1.1.1",
+//                 },
+//                 ratio: 1,
+//                 serverType: "geoserver",
+//                 crossOrigin: "anonymous",
+//               }),
+//               visible: true,
+//               title: layerTitle2,
+//               information: "Kufiri i tokësor i republikës së Shqipërisë",
+//               displayInLayerSwitcher: true,
+//             });
+//             newLayerGroup.getLayers().push(tileLayer);
+//             layersArray.push(tileLayer);
+//           });
+//         })
+//         .catch((error) => {
+//           console.error("There was a problem with the fetch operation:", error);
+//         });
+//     });
+//   })
+//   .catch((error) => {
+//     console.error("There was a problem with the fetch operation:", error);
+//   });
 
 // Logged in As USER - Reading data
 
@@ -2206,9 +2412,9 @@ function fetchLayerPropertiesFromWFS(url, layerParam) {
   if (wfsVectorLayer) {
     vectorLayer = wfsVectorLayer;
   }
+  console.log(host, port, workspace, layerParam);
 
-  // const describeFeatureTypeUrl = `http://${host}:${port}/geoserver-proxy/${workspace}/ows?service=WFS&version=1.1.0&request=DescribeFeatureType&typeName=${layerParam}`;
-  const describeFeatureTypeUrl = `http://localhost:8000/geoserver-proxy/${workspace}/ows?service=WFS&version=1.1.0&request=DescribeFeatureType&typeName=${layerParam}`;
+  const describeFeatureTypeUrl = `http://${host}:8000/geoserver-proxy/${workspace}/ows?service=WFS&version=1.1.0&request=DescribeFeatureType&typeName=${layerParam}`;
 
   fetch(describeFeatureTypeUrl)
     .then((response) => response.text())
