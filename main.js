@@ -6292,3 +6292,91 @@ function syncClosure(feature) {
     geom.setCoordinates(polys);
   }
 }
+
+const chatForm = document.getElementById("chatForm");
+const chatInput = document.getElementById("chatInput");
+const chatMessages = document.getElementById("chatMessages");
+
+const chatbotReplies = [
+  {
+    terms: ["measure", "length", "area", "distance"],
+    text: "Use the ruler buttons in the top toolbar for length or area. Keep Clear previous measure checked if you want each new measurement to replace the last one.",
+  },
+  {
+    terms: ["layer", "layers", "switch", "basemap", "wms"],
+    text: "Use the layer switcher on the map to turn layers on or off. If you add new data, it will appear as a map layer after the upload or creation step completes.",
+  },
+  {
+    terms: ["search", "attribute", "select"],
+    text: "For attribute workflows, use Search By Attributes to filter records or Select By Attributes to highlight matching features on the map.",
+  },
+  {
+    terms: ["edit", "draw", "save", "feature"],
+    text: "Open Edit layer from the toolbar, then choose add, select, edit geometry, delete, or save from the edit toolbar on the left side of the map.",
+  },
+  {
+    terms: ["print", "export", "pdf"],
+    text: "Use the Print button in the toolbar to prepare a printable map output. Make sure the map is zoomed to the area you want before printing.",
+  },
+  {
+    terms: ["coordinate", "xy", "location", "gps"],
+    text: "Use XY Coordinates to add a point from typed coordinates, or Your Current Location to center the map near your device position.",
+  },
+  {
+    terms: ["heatmap", "chart", "graphic"],
+    text: "Use Create Heatmap for density-style visualization, or Add Graphic to build a chart from fields in one of your layers.",
+  },
+];
+
+function addChatMessage(author, text, type) {
+  const message = document.createElement("div");
+  message.className = `chat-message chat-message--${type}`;
+
+  const authorEl = document.createElement("div");
+  authorEl.className = "chat-message__author";
+  authorEl.textContent = author;
+
+  const bubble = document.createElement("div");
+  bubble.className = "chat-message__bubble";
+  bubble.textContent = text;
+
+  message.append(authorEl, bubble);
+  chatMessages.appendChild(message);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function getChatbotReply(message) {
+  const normalized = message.toLowerCase();
+  const match = chatbotReplies.find((reply) =>
+    reply.terms.some((term) => normalized.includes(term))
+  );
+
+  if (match) {
+    return match.text;
+  }
+
+  return "I can help with map tools, layers, attribute search, measuring, editing, coordinates, heatmaps, charts, and printing. Try asking about one of those workflows.";
+}
+
+if (chatForm && chatInput && chatMessages) {
+  chatForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+
+    const message = chatInput.value.trim();
+    if (!message) return;
+
+    addChatMessage("You", message, "user");
+    chatInput.value = "";
+
+    window.setTimeout(() => {
+      addChatMessage("Assistant", getChatbotReply(message), "bot");
+    }, 250);
+  });
+
+  chatInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      chatForm.requestSubmit();
+    }
+  });
+}

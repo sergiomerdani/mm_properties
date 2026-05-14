@@ -505,6 +505,37 @@
           ></ul>
         </div>
       </div>
+
+      <aside class="chat-sidebar" aria-label="Map chatbot">
+        <div class="chat-sidebar__header">
+          <div>
+            <h2>GIS Assistant</h2>
+            <p>Ask about tools, layers, and map workflow.</p>
+          </div>
+          <span class="chat-sidebar__status">Online</span>
+        </div>
+
+        <div id="chatMessages" class="chat-messages" aria-live="polite">
+          <div class="chat-message chat-message--bot">
+            <div class="chat-message__author">Assistant</div>
+            <div class="chat-message__bubble">
+              Hi. I can help you find tools, explain map actions, or guide you
+              through layer, search, measure, print, and edit workflows.
+            </div>
+          </div>
+        </div>
+
+        <form id="chatForm" class="chat-compose">
+          <label class="visually-hidden" for="chatInput">Message</label>
+          <textarea
+            id="chatInput"
+            rows="2"
+            placeholder="Ask something..."
+            autocomplete="off"
+          ></textarea>
+          <button type="submit">Send</button>
+        </form>
+      </aside>
     </div>
     <div id="myModal" class="modal">
       <div class="modal-content">
