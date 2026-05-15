@@ -86,19 +86,20 @@ import Collection from "ol/Collection.js";
 import ol_interaction_Transform from "ol-ext/interaction/Transform.js";
 import ol_interaction_CopyPaste from "ol-ext/interaction/CopyPaste.js";
 import { getCenter } from "ol/extent";
+import EsriJSON from "ol/format/EsriJSON.js";
 
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
 register(proj4);
 
 proj4.defs(
   "EPSG:6870",
-  "+proj=tmerc +lat_0=0 +lon_0=20 +k=1 +x_0=500000 +y_0=0 +ellps=GRS8082 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs"
+  "+proj=tmerc +lat_0=0 +lon_0=20 +k=1 +x_0=500000 +y_0=0 +ellps=GRS8082 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs",
 );
 register(proj4);
 
 proj4.defs(
   "EPSG:32634",
-  "+proj=utm +zone=34 +datum=WGS84 +units=m +no_defs +type=crs"
+  "+proj=utm +zone=34 +datum=WGS84 +units=m +no_defs +type=crs",
 );
 register(proj4);
 
@@ -167,7 +168,7 @@ function parseLayerInfo(layerParams) {
     .join(" ");
   return { workspace2, layerName2, layerTitle2 };
 }
-const username = "user_reader";
+const username = "admin";
 const password = "geoserver";
 
 // Map usernames to roles
@@ -265,7 +266,7 @@ function loadAdminLayers() {
           .catch((error) => {
             console.error(
               "There was a problem with the fetch operation:",
-              error
+              error,
             );
           });
       });
@@ -321,7 +322,7 @@ function loadUserLayers() {
         if (groupChildren.has(layerName)) return; // skip duplicates
 
         const childLayers = Array.from(layerNode.children).filter(
-          (el) => el.tagName === "Layer"
+          (el) => el.tagName === "Layer",
         );
 
         if (childLayers.length > 0) {
@@ -821,6 +822,32 @@ const wfsLayerUrlEnd = "&maxFeatures=50&outputFormat=application/json";
 
 let wfsVectorLayer, wfsVectorSource;
 
+function getGeoServerProxyOwsUrl(workspace = workspaceName) {
+  return `http://localhost:8000/geoserver-proxy/${workspace}/ows`;
+}
+
+function getWfsGetFeatureUrl({
+  typeName,
+  workspace = workspaceName,
+  version = "1.1.0",
+  maxFeatures,
+  outputFormat = "application/json",
+}) {
+  const params = new URLSearchParams({
+    service: "WFS",
+    version,
+    request: "GetFeature",
+    typeName,
+    outputFormat,
+  });
+
+  if (maxFeatures) {
+    params.set("maxFeatures", String(maxFeatures));
+  }
+
+  return `${getGeoServerProxyOwsUrl(workspace)}?${params}`;
+}
+
 //LAYER GROUPS
 baseLayerGroup = new LayerGroup({
   layers: [cartoDBBaseLayer, osmMap],
@@ -855,7 +882,6 @@ const addressSystem = new LayerGroup({
 const center_4326 = [19.80835, 41.310824];
 const center_3857 = [2206185.65, 5060810.15];
 const saranda_center = [2226806.503832, 4847588.560703];
-const tirana_center = [2226806.503832, 4847588.560703];
 
 const map = new Map({
   target: "map",
@@ -871,6 +897,24 @@ const map = new Map({
 
 // Creating vectorSource to store layers
 const vectorSource = new VectorSource();
+
+const attributeSelectionSource = new VectorSource();
+const attributeSelectionLayer = new VectorLayer({
+  source: attributeSelectionSource,
+  title: "Selected Attribute Features",
+  displayInLayerSwitcher: false,
+  style: new Style({
+    image: new CircleStyle({
+      radius: 12,
+      fill: new Fill({ color: "rgba(255, 214, 10, 0.9)" }),
+      stroke: new Stroke({ color: "#111827", width: 3 }),
+    }),
+    fill: new Fill({ color: "rgba(255, 214, 10, 0.34)" }),
+    stroke: new Stroke({ color: "#f59e0b", width: 5 }),
+  }),
+});
+
+map.addLayer(attributeSelectionLayer);
 
 //DragRotate Interaction
 const dragRotateInteraction = new DragRotate({
@@ -1481,7 +1525,7 @@ function logWMSLayerExtent(layerName) {
                 `  minx: ${minx}\n` +
                 `  miny: ${miny}\n` +
                 `  maxx: ${maxx}\n` +
-                `  maxy: ${maxy}`
+                `  maxy: ${maxy}`,
             );
             map.getView().fit([minx, miny, maxx, maxy], {
               padding: [20, 20, 20, 20],
@@ -1526,8 +1570,9 @@ layerSwitcher.setHeader(treePanelHeader);
 // Position the LayerSwitcherImage control on the top-right corner of the map
 const layerSwitcherElement = layerSwitcher.element;
 layerSwitcherElement.style.position = "absolute";
-layerSwitcherElement.style.top = "50px";
-layerSwitcherElement.style.right = "10px";
+layerSwitcherElement.style.top = "150px";
+layerSwitcherElement.style.left = "0";
+layerSwitcherElement.style.right = "auto";
 
 //_____________________________________________________________________________________________
 // Display data from WMS Layer
@@ -1559,8 +1604,16 @@ identifyBtn.addEventListener("click", () => {
   clearResults();
 
   // show/hide the select
-  identifyModeSelect.style.display =
-    identifyModeSelect.style.display === "block" ? "none" : "block";
+  const isOpen = identifyModeSelect.style.display === "block";
+  if (isOpen) {
+    identifyModeSelect.style.display = "none";
+    return;
+  }
+
+  const buttonRect = identifyBtn.getBoundingClientRect();
+  identifyModeSelect.style.left = `${buttonRect.left}px`;
+  identifyModeSelect.style.top = `${buttonRect.bottom + 6}px`;
+  identifyModeSelect.style.display = "block";
 });
 
 // 2) when the user picks a mode…
@@ -1602,7 +1655,7 @@ async function getInfo(evt) {
         .getLayers()
         .getArray()
         .filter((l) => l.getVisible())
-        .reverse()
+        .reverse(),
     );
   }
 
@@ -1619,7 +1672,7 @@ async function getInfo(evt) {
           lastClickCoord,
           map.getView().getResolution(),
           map.getView().getProjection(),
-          { INFO_FORMAT: "application/json" }
+          { INFO_FORMAT: "application/json" },
         );
       if (!url) continue;
       try {
@@ -1652,7 +1705,7 @@ async function getInfo(evt) {
           lastClickCoord,
           map.getView().getResolution(),
           map.getView().getProjection(),
-          params
+          params,
         );
       if (!url) return Promise.resolve({ layer, features: [] });
       return fetch(url)
@@ -1664,7 +1717,7 @@ async function getInfo(evt) {
     // when *all* are done...
     Promise.all(promises).then((results) => {
       const hits = results.flatMap(({ layer, features }) =>
-        features.map((f) => ({ layer, feature: f }))
+        features.map((f) => ({ layer, feature: f })),
       );
 
       if (!hits.length) {
@@ -1690,7 +1743,7 @@ function queryLayer(layer) {
       coordinate,
       map.getView().getResolution(),
       map.getView().getProjection(),
-      { INFO_FORMAT: "application/json" }
+      { INFO_FORMAT: "application/json" },
     );
   if (!url) {
     clearResults();
@@ -1996,7 +2049,7 @@ map.addControl(
         font: '20px "Lucida Grande",Verdana,Geneva,Lucida,Arial,Helvetica,sans-serif',
       }),
     }),
-  })
+  }),
 );
 // // Add a ScaleLine control
 map.addControl(new CanvasScaleLine());
@@ -2029,7 +2082,7 @@ printControl.on(["print", "error"], function (e) {
         e.print.position[0],
         e.print.position[0],
         e.print.imageWidth,
-        e.print.imageHeight
+        e.print.imageHeight,
       );
       pdf.save(e.print.legend ? "legend.pdf" : "map.pdf");
     } else {
@@ -2042,7 +2095,7 @@ printControl.on(["print", "error"], function (e) {
           saveAs(blob, name);
         },
         e.imageType,
-        e.quality
+        e.quality,
       );
     }
   } else {
@@ -2736,7 +2789,7 @@ const generateChartWithAxes = (features, xAxisProperty, yAxisProperty) => {
 
   const labels = features.map((feature) => feature.properties[xAxisProperty]);
   const dataValues = features.map(
-    (feature) => feature.properties[yAxisProperty]
+    (feature) => feature.properties[yAxisProperty],
   );
 
   const config = {
@@ -2797,7 +2850,7 @@ var drawCircleInMeter = function (map, radius, center) {
   var pointResolution = getPointResolution(
     projection,
     resolutionAtEquator,
-    center
+    center,
   );
   console.log(projection.getMetersPerUnit());
   var resolutionFactor = resolutionAtEquator / pointResolution;
@@ -2863,7 +2916,7 @@ function setInteraction() {
     map.addLayer(
       new VectorLayer({
         source: vectorSource,
-      })
+      }),
     );
     map.getView().fit(vectorSource.getExtent());
   });
@@ -2969,7 +3022,7 @@ function styleWithVertices(feature) {
       new Style({
         geometry: new Point(coord),
         image: vertexStyle.getImage(),
-      })
+      }),
     );
   }
 
@@ -2980,7 +3033,7 @@ function styleWithVertices(feature) {
       new Style({
         geometry: new Point(mid),
         image: midStyle.getImage(),
-      })
+      }),
     );
   }
 
@@ -3467,7 +3520,7 @@ function saveFeature() {
       featurePrefix: workspace,
       featureType: layerName,
       srsName: "EPSG:3857",
-    }
+    },
   );
   // Serialize to XML
   const serializer = new XMLSerializer();
@@ -3550,7 +3603,7 @@ function highlightFeature(feature) {
                 width: 2,
               }),
             }),
-          })
+          }),
         );
       } else {
         // Change style for other types (e.g., LineString, Polygon)
@@ -3563,7 +3616,7 @@ function highlightFeature(feature) {
             fill: new Fill({
               color: "rgba(255, 0, 0, 0.3)",
             }),
-          })
+          }),
         );
       }
     } else {
@@ -3923,14 +3976,34 @@ document
     getLayers2();
   });
 
+document
+  .getElementById("close-attribute-table")
+  .addEventListener("click", () => {
+    const tableContainer = document.getElementById("attribute-table-container");
+    tableContainer.hidden = true;
+    clearAttributeSelection();
+  });
+
 attributeLayerSelect.addEventListener("change", (event) => {
   layerIndex = event.target.value;
   selectedLayer2 = layersArray[layerIndex];
   getSelectedLayerTable(selectedLayer2);
 });
 function getSelectedLayerTable(selectedLayer) {
-  tableLayerSelected = selectedLayer.getSource().getParams().LAYERS;
-  const layerWFS = `http://${host}:${port}/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${tableLayerSelected}&outputFormat=json`;
+  const layerParams = selectedLayer.getSource()?.getParams?.();
+  tableLayerSelected = layerParams?.LAYERS;
+
+  if (!tableLayerSelected) {
+    console.warn("Selected layer does not expose WMS LAYERS params.");
+    populateAttributeTable([]);
+    return;
+  }
+
+  const [selectedWorkspace = workspaceName] = tableLayerSelected.split(":");
+  const layerWFS = getWfsGetFeatureUrl({
+    workspace: selectedWorkspace,
+    typeName: tableLayerSelected,
+  });
 
   async function fetchData() {
     try {
@@ -3943,10 +4016,13 @@ function getSelectedLayerTable(selectedLayer) {
 
       // Parse the JSON data
       const data = await response.json();
-      const features = data.features;
+      featuresInView = [];
       if (data.features && data.features.length > 0) {
         const features = data.features.map((feature) => {
-          const olFeature = new GeoJSON().readFeature(feature);
+          const olFeature = new GeoJSON().readFeature(feature, {
+            dataProjection: "EPSG:3857",
+            featureProjection: map.getView().getProjection().getCode(),
+          });
           return olFeature;
         });
 
@@ -3976,10 +4052,79 @@ function getSelectedLayerTable(selectedLayer) {
 }
 
 let highlightedRow = null;
+let selectedAttributeFeatures = [];
+
+function updateAttributeZoomButton() {
+  const hasSelection = selectedAttributeFeatures.length > 0;
+  document.getElementById("zoom-btn").disabled = !hasSelection;
+  document.getElementById("highlight-selected-btn").disabled = !hasSelection;
+}
+
+function syncAttributeSelectionLayer() {
+  attributeSelectionSource.clear();
+  selectedAttributeFeatures.forEach((feature) => {
+    const clone = feature.clone();
+    clone.setProperties(feature.getProperties());
+    attributeSelectionSource.addFeature(clone);
+  });
+}
+
+function clearAttributeSelection() {
+  selectedAttributeFeatures = [];
+  highlightedRow = null;
+  document
+    .querySelectorAll("#attribute-table tbody tr.highlighted-row")
+    .forEach((row) => row.classList.remove("highlighted-row"));
+  attributeSelectionSource.clear();
+  updateAttributeZoomButton();
+}
+
+function selectSingleAttributeFeature(row, feature) {
+  clearAttributeSelection();
+  selectedAttributeFeatures = [feature];
+  row.classList.add("highlighted-row");
+  highlightedRow = row;
+  updateAttributeZoomButton();
+}
+
+function toggleAttributeFeatureSelection(row, feature, additive = false) {
+  if (!additive) {
+    selectSingleAttributeFeature(row, feature);
+    return;
+  }
+
+  const existingIndex = selectedAttributeFeatures.indexOf(feature);
+
+  if (existingIndex >= 0) {
+    selectedAttributeFeatures.splice(existingIndex, 1);
+    row.classList.remove("highlighted-row");
+  } else {
+    selectedAttributeFeatures.push(feature);
+    row.classList.add("highlighted-row");
+    highlightedRow = row;
+  }
+
+  updateAttributeZoomButton();
+}
+
+function zoomToSelectedAttributeFeatures() {
+  if (!selectedAttributeFeatures.length) return;
+
+  zoomToFeatureExtent(selectedAttributeFeatures);
+}
+
+document
+  .getElementById("zoom-btn")
+  .addEventListener("click", zoomToSelectedAttributeFeatures);
+
+document
+  .getElementById("highlight-selected-btn")
+  .addEventListener("click", syncAttributeSelectionLayer);
 
 function populateAttributeTable(features) {
   const tableHeaders = document.getElementById("table-headers");
   const tableBody = document.getElementById("table-body");
+  clearAttributeSelection();
 
   // Clear existing table content
   tableHeaders.innerHTML = "";
@@ -3996,7 +4141,7 @@ function populateAttributeTable(features) {
   // Extract headers from feature properties and exclude 'geometry'
   const firstFeature = features[0];
   const headers = Object.keys(firstFeature.getProperties()).filter(
-    (header) => header !== "geometry"
+    (header) => header !== "geometry",
   );
 
   // Create header row and filter row combined in a stacked layout
@@ -4016,9 +4161,6 @@ function populateAttributeTable(features) {
     tableHeaders.appendChild(th);
   });
 
-  // Variable to keep track of the currently highlighted row
-  let highlightedRow = null;
-
   // Populate table rows with feature attributes
   features.forEach((feature) => {
     const row = tableBody.insertRow();
@@ -4026,38 +4168,10 @@ function populateAttributeTable(features) {
       const cell = row.insertCell();
       cell.textContent = feature.get(header) || "";
     });
-    // Single click = highlight row
-    row.addEventListener("click", () => {
-      if (highlightedRow) {
-        highlightedRow.classList.remove("highlighted-row");
-      }
-      row.classList.add("highlighted-row");
-      highlightedRow = row;
-    });
 
-    const zoomBtn = document.getElementById("zoom-btn");
-
-    // When a row is selected, enable the button
-    row.addEventListener("click", () => {
-      if (highlightedRow) {
-        highlightedRow.classList.remove("highlighted-row");
-      }
-      row.classList.add("highlighted-row");
-      highlightedRow = row;
-
-      zoomBtn.disabled = false; // enable zoom button
-    });
-
-    // When zoom button is clicked
-    zoomBtn.addEventListener("click", () => {
-      if (!highlightedRow) return;
-
-      const rowData = {};
-      headers.forEach((header) => {
-        rowData[header] = feature.get(header);
-      });
-      zoomToFeatureExtent(feature);
-    });
+    row.addEventListener("click", (event) =>
+      toggleAttributeFeatureSelection(row, feature, event.shiftKey),
+    );
   });
 }
 
@@ -4088,12 +4202,12 @@ editBtn.addEventListener("click", () => {
   [workspace, layerName] = tableLayerSelected.split(":");
 
   // Build WFS GetFeature URL (GeoJSON output)
-  const wfsUrl =
-    `http://${host}:${port}/geoserver/${workspace}/ows` +
-    `?service=WFS&version=1.0.0&request=GetFeature` +
-    `&typeName=${tableLayerSelected}` +
-    `&maxFeatures=500` +
-    `&outputFormat=application/json`;
+  const wfsUrl = getWfsGetFeatureUrl({
+    workspace,
+    typeName: tableLayerSelected,
+    version: "1.0.0",
+    maxFeatures: 500,
+  });
 
   // Load features (manual fetch avoids OL loader event quirks)
   fetch(wfsUrl)
@@ -4133,11 +4247,12 @@ saveBtn.addEventListener("click", () => {
   const [workspace, layerName] = tableLayerSelected.split(":");
 
   // 1) Load features fresh from WFS (GeoJSON)
-  const wfsUrl =
-    `http://localhost:8080/geoserver/${workspace}/ows` +
-    `?service=WFS&version=1.0.0&request=GetFeature` +
-    `&typeName=${tableLayerSelected}` +
-    `&maxFeatures=1000&outputFormat=application/json`;
+  const wfsUrl = getWfsGetFeatureUrl({
+    workspace,
+    typeName: tableLayerSelected,
+    version: "1.0.0",
+    maxFeatures: 1000,
+  });
 
   fetch(wfsUrl)
     .then((r) => {
@@ -4163,7 +4278,7 @@ saveBtn.addEventListener("click", () => {
 
       // 2) Build a safe column→field mapping from the THEAD you already have
       const ths = Array.from(
-        document.querySelectorAll("#attribute-table thead th")
+        document.querySelectorAll("#attribute-table thead th"),
       );
       const firstKeys = new Set(features[0].getKeys()); // real attribute names on the feature
       const headerFields = ths.map((th) => {
@@ -4226,12 +4341,12 @@ saveBtn.addEventListener("click", () => {
           featurePrefix: workspace,
           featureType: layerName,
           srsName: "EPSG:3857",
-        }
+        },
       );
 
       const xml = new XMLSerializer().serializeToString(node);
 
-      return fetch(`http://${host}:${port}/geoserver/${workspace}/ows`, {
+      return fetch(getGeoServerProxyOwsUrl(workspace), {
         method: "POST",
         headers: { "Content-Type": "text/xml" },
         body: xml,
@@ -4261,8 +4376,26 @@ saveBtn.addEventListener("click", () => {
 });
 
 // Function to zoom to a feature's extent
-function zoomToFeatureExtent(feature) {
-  const extent = feature.getGeometry().getExtent();
+function zoomToFeatureExtent(featureOrFeatures) {
+  const features = Array.isArray(featureOrFeatures)
+    ? featureOrFeatures
+    : [featureOrFeatures];
+  const extent = features.reduce((combinedExtent, feature) => {
+    const geometry = feature.getGeometry();
+    if (!geometry) return combinedExtent;
+
+    const featureExtent = geometry.getExtent();
+    if (!combinedExtent) return [...featureExtent];
+
+    combinedExtent[0] = Math.min(combinedExtent[0], featureExtent[0]);
+    combinedExtent[1] = Math.min(combinedExtent[1], featureExtent[1]);
+    combinedExtent[2] = Math.max(combinedExtent[2], featureExtent[2]);
+    combinedExtent[3] = Math.max(combinedExtent[3], featureExtent[3]);
+    return combinedExtent;
+  }, null);
+
+  if (!extent) return;
+
   map.getView().fit(extent, { duration: 1000, padding: [50, 50, 50, 50] });
 }
 
@@ -4270,14 +4403,15 @@ function zoomToFeatureExtent(feature) {
 function applyFilter(features) {
   const tableBody = document.getElementById("table-body");
   const filterInputs = Array.from(
-    document.querySelectorAll("#table-headers input")
+    document.querySelectorAll("#table-headers input"),
   );
   const headers = filterInputs.map((input) =>
-    input.placeholder.replace("Filter ", "")
+    input.placeholder.replace("Filter ", ""),
   );
 
   // Clear existing table body content
   tableBody.innerHTML = "";
+  clearAttributeSelection();
 
   // Filter features based on each input value
   const filteredFeatures = features.filter((feature) => {
@@ -4295,19 +4429,8 @@ function applyFilter(features) {
       const cell = row.insertCell();
       cell.textContent = feature.get(header) || "";
     });
-    // Add click event listener to the row for zooming
-    row.addEventListener("click", () => {
-      // Remove previous highlight if any
-      if (highlightedRow) {
-        highlightedRow.classList.remove("highlighted-row");
-      }
-
-      // Highlight the clicked row
-      row.classList.add("highlighted-row");
-      highlightedRow = row;
-
-      // Zoom to the feature's extent
-      zoomToFeatureExtent(feature);
+    row.addEventListener("click", (event) => {
+      toggleAttributeFeatureSelection(row, feature, event.shiftKey);
     });
   });
 }
@@ -4336,7 +4459,7 @@ map.on("singleclick", function (evt) {
     {
       INFO_FORMAT: "application/json",
       FEATURE_COUNT: 1, // Retrieve only one feature
-    }
+    },
   );
 
   if (url) {
@@ -4359,7 +4482,7 @@ map.on("singleclick", function (evt) {
 
 function selectTableRow(featureData) {
   const tableHeaders = Array.from(
-    document.querySelectorAll("#table-headers th")
+    document.querySelectorAll("#table-headers th"),
   );
   const tableBody = document.getElementById("table-body");
   const rows = Array.from(tableBody.rows);
@@ -4375,7 +4498,7 @@ function selectTableRow(featureData) {
     const cellValue = String(firstCell.textContent).trim();
 
     console.log(
-      `Comparing feature "${featureValue}" with table cell "${cellValue}"`
+      `Comparing feature "${featureValue}" with table cell "${cellValue}"`,
     ); // Debug: Log comparison
 
     const match = featureValue === cellValue;
@@ -4384,21 +4507,17 @@ function selectTableRow(featureData) {
 
     // Apply the highlight class if there's a match
     if (match) {
-      // Remove the highlight from the previous row, if any
-      if (highlightedRow) {
-        highlightedRow.classList.remove("highlighted-row");
+      const feature = featuresInView?.[rows.indexOf(row)];
+      if (feature && !selectedAttributeFeatures.includes(feature)) {
+        selectedAttributeFeatures.push(feature);
       }
-
       row.classList.add("highlighted-row");
       row.scrollIntoView({ behavior: "smooth", block: "center" });
-
-      // Update the previous highlighted row
       highlightedRow = row;
+      updateAttributeZoomButton();
 
       // Exit the loop once a match is found
       return;
-    } else {
-      row.classList.remove("highlighted-row");
     }
   });
 }
@@ -4412,7 +4531,7 @@ async function logWmsLayerNamesFlat(wmsCapUrl) {
 }
 
 logWmsLayerNamesFlat(
-  "https://geoportal.asig.gov.al/service/adresar/wms?request=GetCapabilities"
+  "https://geoportal.asig.gov.al/service/adresar/wms?request=GetCapabilities",
 );
 
 const newWMSLayer = new Tile({
@@ -4475,7 +4594,7 @@ async function getWmtsLayerList(wmtsCapUrl) {
 }
 
 getWmtsLayerList(
-  "https://geoportal.asig.gov.al/service/wmts?request=getCapabilities"
+  "https://geoportal.asig.gov.al/service/wmts?request=getCapabilities",
 );
 
 // Add ArcGIS Tile Layer with Filtered Layers
@@ -4825,7 +4944,7 @@ const styleFunctionMVT = (feature, resolution) => {
       new Style({
         fill: new Fill({ color: fillColor }),
         stroke: new Stroke({ color: "#333", width: 1 }),
-      })
+      }),
     );
   }
 
@@ -4835,7 +4954,7 @@ const styleFunctionMVT = (feature, resolution) => {
     styles.push(
       new Style({
         stroke: new Stroke({ color: "#607d8b", width }),
-      })
+      }),
     );
   }
 
@@ -4851,7 +4970,7 @@ const styleFunctionMVT = (feature, resolution) => {
           stroke: new Stroke({ color: "#fff", width: 2 }),
           offsetY: -10,
         }),
-      })
+      }),
     );
   }
 
@@ -4931,7 +5050,7 @@ function makeChartStyleFunction(fields, chartType, colors) {
         }),
         geometry: feature.getGeometry().getInteriorPoint(),
         zIndex: 1,
-      })
+      }),
     );
 
     // ✅ Always show percentage labels (if sum > 0)
@@ -4957,7 +5076,7 @@ function makeChartStyleFunction(fields, chartType, colors) {
             }),
             geometry: feature.getGeometry().getInteriorPoint(),
             zIndex: 10,
-          })
+          }),
         );
 
         offsetAcc += data[i];
@@ -5046,7 +5165,7 @@ document.getElementById("chartForm").addEventListener("submit", async (e) => {
 
   // 1) Which fields & chart type?
   const fields = Array.from(
-    fieldsContainer.querySelectorAll("input:checked")
+    fieldsContainer.querySelectorAll("input:checked"),
   ).map((cb) => cb.value);
   const chartType = document.getElementById("chartTypeSelect").value;
 
@@ -5293,7 +5412,7 @@ document
         maxWeight = 1;
       } else {
         const weights = featuresHeatmap.map(
-          (f) => parseFloat(f.get(weightField)) || 0
+          (f) => parseFloat(f.get(weightField)) || 0,
         );
         minWeight = Math.min(...weights);
         maxWeight = Math.max(...weights);
@@ -5358,9 +5477,8 @@ map.on("click", function (evt) {
     mapClickCoordinate = evt.coordinate; // This stays in EPSG:3857
     const [x, y] = mapClickCoordinate;
 
-    document.getElementById(
-      "clickCoordDisplay"
-    ).textContent = `Start Point: ${x.toFixed(5)}, ${y.toFixed(5)}`;
+    document.getElementById("clickCoordDisplay").textContent =
+      `Start Point: ${x.toFixed(5)}, ${y.toFixed(5)}`;
 
     reachabilityModal.showModal();
   }
@@ -5394,7 +5512,7 @@ document
     } else {
       const layerIdx = parseInt(
         document.getElementById("originLayerSelect").value,
-        10
+        10,
       );
       const selectedLayer = layersArray[layerIdx];
 
@@ -5600,10 +5718,10 @@ const facilitiesSelect = document.getElementById("existingLayerSelect");
 
 const candidateLayerType = document.getElementById("candidateLayerType");
 const candidateLayerNameWrapper = document.getElementById(
-  "candidateLayerNameWrapper"
+  "candidateLayerNameWrapper",
 );
 const candidateLayerSelectWrapper = document.getElementById(
-  "candidateLayerSelectWrapper"
+  "candidateLayerSelectWrapper",
 );
 const candidateLayerSelect = document.getElementById("candidateLayerSelect");
 
@@ -5626,7 +5744,7 @@ function populateSiteSelectionLayers() {
   demandSelect.appendChild(makeDefaultOption("Select demand layer..."));
   facilitiesSelect.appendChild(makeDefaultOption("Select facilities layer..."));
   candidateLayerSelect.appendChild(
-    makeDefaultOption("Select candidate layer...")
+    makeDefaultOption("Select candidate layer..."),
   );
 
   layersArray.forEach((layer, index) => {
@@ -5693,7 +5811,7 @@ runBtn.addEventListener("click", () => {
 
   const demandLayer =
     demandSelect.options[demandSelect.selectedIndex].dataset.layername.split(
-      ":"
+      ":",
     )[1];
   const facilitiesLayer = facilitiesSelect?.options[
     facilitiesSelect.selectedIndex
@@ -6098,7 +6216,7 @@ btnClone.addEventListener("click", () => {
 
           console.log(
             "📌 Feature placed at:",
-            f.getGeometry().getCoordinates()
+            f.getGeometry().getCoordinates(),
           );
         };
         map.once("click", finalizePlacement);
@@ -6237,7 +6355,7 @@ function fixPolygon(geom) {
     // remove duplicates
     let cleaned = ring.filter(
       (pt, i, arr) =>
-        i === 0 || pt[0] !== arr[i - 1][0] || pt[1] !== arr[i - 1][1]
+        i === 0 || pt[0] !== arr[i - 1][0] || pt[1] !== arr[i - 1][1],
     );
     // ensure closure
     const first = cleaned[0];
@@ -6253,7 +6371,7 @@ function fixPolygon(geom) {
   }
   if (geom.getType() === "MultiPolygon") {
     geom.setCoordinates(
-      geom.getCoordinates().map((rings) => rings.map(closeRing))
+      geom.getCoordinates().map((rings) => rings.map(closeRing)),
     );
   }
 }
@@ -6296,6 +6414,8 @@ function syncClosure(feature) {
 const chatForm = document.getElementById("chatForm");
 const chatInput = document.getElementById("chatInput");
 const chatMessages = document.getElementById("chatMessages");
+const chatSidebarToggle = document.getElementById("chatSidebarToggle");
+const gridContainer = document.querySelector(".grid-container");
 
 const chatbotReplies = [
   {
@@ -6348,7 +6468,7 @@ function addChatMessage(author, text, type) {
 function getChatbotReply(message) {
   const normalized = message.toLowerCase();
   const match = chatbotReplies.find((reply) =>
-    reply.terms.some((term) => normalized.includes(term))
+    reply.terms.some((term) => normalized.includes(term)),
   );
 
   if (match) {
@@ -6358,8 +6478,392 @@ function getChatbotReply(message) {
   return "I can help with map tools, layers, attribute search, measuring, editing, coordinates, heatmaps, charts, and printing. Try asking about one of those workflows.";
 }
 
+function getLayerParam(layer) {
+  const params = layer.getSource?.()?.getParams?.();
+  return params?.LAYERS || params?.layers || "";
+}
+
+function getLayerAgentItems(layers, groupTitle = "") {
+  const items = [];
+
+  layers.forEach((layer) => {
+    const title = layer.get("title") || layer.get("name") || "";
+    const layerParam = getLayerParam(layer);
+    const arcgisFeatureServiceUrl = layer.get("arcgisFeatureServiceUrl") || "";
+    const childLayers = layer.getLayers?.();
+
+    if (title || layerParam || arcgisFeatureServiceUrl) {
+      items.push({
+        layer,
+        title,
+        groupTitle,
+        layerParam,
+        arcgisFeatureServiceUrl,
+        visible: layer.getVisible?.() ?? true,
+      });
+    }
+
+    if (childLayers) {
+      items.push(...getLayerAgentItems(childLayers, title || groupTitle));
+    }
+  });
+
+  return items;
+}
+
+function normalizeAgentText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[_:-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function findAgentLayer(message) {
+  const normalizedMessage = normalizeAgentText(message);
+  const layers = getLayerAgentItems(map.getLayers()).filter(
+    (item) => item.title || item.layerParam,
+  );
+
+  return layers.find((item) => {
+    const title = normalizeAgentText(item.title);
+    const layerParam = normalizeAgentText(item.layerParam);
+    const shortLayerParam = normalizeAgentText(
+      item.layerParam.split(":").pop(),
+    );
+
+    return (
+      (title && normalizedMessage.includes(title)) ||
+      (layerParam && normalizedMessage.includes(layerParam)) ||
+      (shortLayerParam && normalizedMessage.includes(shortLayerParam))
+    );
+  });
+}
+
+function formatAgentLayerName(item) {
+  return item.title || item.layerParam || "Unnamed layer";
+}
+
+function summarizeFeatureProperties(properties) {
+  return Object.entries(properties || {})
+    .filter(([key, value]) => key !== "geometry" && value !== null)
+    .slice(0, 6)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(", ");
+}
+
+async function fetchWfsFeatureSample(layerParam, maxFeatures = 5) {
+  const qualifiedLayer = layerParam.includes(":")
+    ? layerParam
+    : `${workspaceName}:${layerParam}`;
+  const [workspace] = qualifiedLayer.split(":");
+  const params = new URLSearchParams({
+    service: "WFS",
+    version: "1.1.0",
+    request: "GetFeature",
+    typeName: qualifiedLayer,
+    outputFormat: "application/json",
+    maxFeatures: String(maxFeatures),
+  });
+
+  const response = await fetch(`/geoserver-proxy/${workspace}/ows?${params}`);
+  if (!response.ok) {
+    throw new Error(`WFS request failed with status ${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function fetchArcgisFeatureSample(serviceUrl, maxFeatures = 5) {
+  const response = await fetch(
+    `${serviceUrl}/query?` +
+      new URLSearchParams({
+        where: "1=1",
+        outFields: "*",
+        returnGeometry: "false",
+        f: "geojson",
+        resultRecordCount: String(maxFeatures),
+      }),
+  );
+
+  if (!response.ok) {
+    throw new Error(`ArcGIS query failed with status ${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function getArcgisMetadata(layerMatch) {
+  const existingMetadata = layerMatch.layer.get("arcgisMetadata");
+  if (existingMetadata) return existingMetadata;
+
+  const response = await fetch(`${layerMatch.arcgisFeatureServiceUrl}?f=pjson`);
+  if (!response.ok) {
+    throw new Error(
+      `ArcGIS metadata request failed with status ${response.status}`,
+    );
+  }
+
+  const metadata = await response.json();
+  layerMatch.layer.set("arcgisMetadata", metadata);
+  return metadata;
+}
+
+function summarizeArcgisMetadata(metadata) {
+  const fields = metadata.fields || [];
+  const renderer = metadata.drawingInfo?.renderer || {};
+  const fieldNames = fields
+    .slice(0, 12)
+    .map((field) => `${field.name} (${field.type})`)
+    .join(", ");
+
+  return [
+    `Name: ${metadata.name || "Unknown"}`,
+    `Geometry: ${metadata.geometryType || "Unknown"}`,
+    `Object ID field: ${metadata.objectIdField || "Unknown"}`,
+    `Display field: ${metadata.displayField || "Unknown"}`,
+    `Renderer: ${renderer.type || "Unknown"}`,
+    `Fields: ${fieldNames || "None returned"}`,
+  ].join("\n");
+}
+
+async function getChatAction(message) {
+  const normalized = message.toLowerCase();
+  const asksForZoom =
+    normalized.includes("zoom") ||
+    normalized.includes("go to") ||
+    normalized.includes("center") ||
+    normalized.includes("fly to");
+
+  if (
+    normalized.includes("list layers") ||
+    normalized.includes("show layers") ||
+    normalized.includes("visible layers")
+  ) {
+    return {
+      name: "list-map-layers",
+      run: async () => {
+        const layers = getLayerAgentItems(map.getLayers())
+          .filter((item) => item.title || item.layerParam)
+          .map((item) => {
+            const name = formatAgentLayerName(item);
+            return `${item.visible ? "visible" : "hidden"} - ${name}`;
+          })
+          .slice(0, 40);
+
+        return layers.length
+          ? `Map layers:\n${layers.join("\n")}`
+          : "I could not find any map layers.";
+      },
+    };
+  }
+
+  if (
+    normalized.includes("geoserver layers") ||
+    normalized.includes("layers from geoserver") ||
+    normalized.includes("read layers from geoserver")
+  ) {
+    return {
+      name: "list-geoserver-layers",
+      run: async () => {
+        const response = await fetch(`/api/groups/${workspaceName}/postgres/`);
+        if (!response.ok) {
+          throw new Error(
+            `GeoServer layer request failed with ${response.status}`,
+          );
+        }
+
+        const layers = await response.json();
+        if (!Array.isArray(layers) || !layers.length) {
+          return "GeoServer did not return any layers.";
+        }
+
+        return `GeoServer layers:\n${layers
+          .map((layer) => `${layer.name} (${layer.geometry_type})`)
+          .join("\n")}`;
+      },
+    };
+  }
+
+  const layerMatch = findAgentLayer(message);
+
+  if (
+    layerMatch &&
+    (normalized.includes("hide") ||
+      normalized.includes("turn off") ||
+      normalized.includes("remove layer"))
+  ) {
+    return {
+      name: "hide-layer",
+      run: async () => {
+        layerMatch.layer.setVisible(false);
+        return `Done. I hid ${formatAgentLayerName(layerMatch)}.`;
+      },
+    };
+  }
+
+  if (
+    layerMatch &&
+    (normalized.includes("show") ||
+      normalized.includes("turn on") ||
+      normalized.includes("display layer"))
+  ) {
+    return {
+      name: "show-layer",
+      run: async () => {
+        layerMatch.layer.setVisible(true);
+        return `Done. I showed ${formatAgentLayerName(layerMatch)}.`;
+      },
+    };
+  }
+
+  if (
+    layerMatch &&
+    layerMatch.arcgisFeatureServiceUrl &&
+    (normalized.includes("metadata") ||
+      normalized.includes("symbology") ||
+      normalized.includes("simbology") ||
+      normalized.includes("renderer") ||
+      normalized.includes("details") ||
+      normalized.includes("fields"))
+  ) {
+    return {
+      name: "read-arcgis-metadata",
+      run: async () => {
+        const metadata = await getArcgisMetadata(layerMatch);
+        return `ArcGIS Feature Service metadata for ${formatAgentLayerName(
+          layerMatch,
+        )}:\n${summarizeArcgisMetadata(metadata)}`;
+      },
+    };
+  }
+
+  if (
+    layerMatch &&
+    layerMatch.arcgisFeatureServiceUrl &&
+    (normalized.includes("features") ||
+      normalized.includes("records") ||
+      normalized.includes("read data") ||
+      normalized.includes("query"))
+  ) {
+    return {
+      name: "read-arcgis-features",
+      run: async () => {
+        const geojson = await fetchArcgisFeatureSample(
+          layerMatch.arcgisFeatureServiceUrl,
+        );
+        const features = geojson.features || [];
+
+        if (!features.length) {
+          return `I queried ${formatAgentLayerName(
+            layerMatch,
+          )}, but ArcGIS returned no features.`;
+        }
+
+        const sample = features
+          .slice(0, 5)
+          .map((feature, index) => {
+            const summary = summarizeFeatureProperties(feature.properties);
+            return `${index + 1}. ${summary || "No properties"}`;
+          })
+          .join("\n");
+
+        return `I read ${features.length} feature(s) from ${formatAgentLayerName(
+          layerMatch,
+        )}.\n${sample}`;
+      },
+    };
+  }
+
+  if (
+    layerMatch &&
+    layerMatch.layerParam &&
+    (normalized.includes("wfs") ||
+      normalized.includes("features") ||
+      normalized.includes("records") ||
+      normalized.includes("read data"))
+  ) {
+    return {
+      name: "read-wfs-features",
+      run: async () => {
+        const geojson = await fetchWfsFeatureSample(layerMatch.layerParam);
+        const features = geojson.features || [];
+
+        if (!features.length) {
+          return `I read ${formatAgentLayerName(layerMatch)}, but WFS returned no features.`;
+        }
+
+        const sample = features
+          .slice(0, 5)
+          .map((feature, index) => {
+            const summary = summarizeFeatureProperties(feature.properties);
+            return `${index + 1}. ${summary || "No properties"}`;
+          })
+          .join("\n");
+
+        return `I read ${features.length} feature(s) from ${formatAgentLayerName(
+          layerMatch,
+        )}.\n${sample}`;
+      },
+    };
+  }
+
+  return null;
+}
+
+function getVisibleLayerTitles(layers) {
+  const titles = [];
+
+  layers.forEach((layer) => {
+    const title = layer.get("title");
+    const childLayers = layer.getLayers?.();
+
+    if (layer.getVisible?.() && title) {
+      titles.push(title);
+    }
+
+    if (childLayers) {
+      titles.push(...getVisibleLayerTitles(childLayers));
+    }
+  });
+
+  return titles;
+}
+
+function getChatMapContext() {
+  const view = map.getView();
+
+  return {
+    center: view.getCenter(),
+    zoom: view.getZoom(),
+    projection: view.getProjection().getCode(),
+    visible_layers: getVisibleLayerTitles(map.getLayers()),
+  };
+}
+
+async function getBackendChatReply(message) {
+  const response = await fetch("/api/custom/chat/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      message,
+      map_context: getChatMapContext(),
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "The backend chat request failed.");
+  }
+
+  return data.reply;
+}
+
 if (chatForm && chatInput && chatMessages) {
-  chatForm.addEventListener("submit", (event) => {
+  chatForm.addEventListener("submit", async (event) => {
     event.preventDefault();
 
     const message = chatInput.value.trim();
@@ -6368,9 +6872,30 @@ if (chatForm && chatInput && chatMessages) {
     addChatMessage("You", message, "user");
     chatInput.value = "";
 
-    window.setTimeout(() => {
+    const action = await getChatAction(message);
+    if (action) {
+      try {
+        const runReply = await action.run();
+        const actionReply = action.reply || runReply;
+        addChatMessage("Assistant", actionReply, "bot");
+      } catch (error) {
+        addChatMessage(
+          "Assistant",
+          `I found the ${action.name} tool, but it failed: ${error.message}`,
+          "bot",
+        );
+        console.warn("Chat action failed:", error);
+      }
+      return;
+    }
+
+    try {
+      const reply = await getBackendChatReply(message);
+      addChatMessage("Assistant", reply, "bot");
+    } catch (error) {
       addChatMessage("Assistant", getChatbotReply(message), "bot");
-    }, 250);
+      console.warn("Backend chatbot unavailable:", error);
+    }
   });
 
   chatInput.addEventListener("keydown", (event) => {
@@ -6378,5 +6903,16 @@ if (chatForm && chatInput && chatMessages) {
       event.preventDefault();
       chatForm.requestSubmit();
     }
+  });
+}
+
+if (chatSidebarToggle && gridContainer) {
+  chatSidebarToggle.addEventListener("click", () => {
+    const isCollapsed = gridContainer.classList.toggle("chat-collapsed");
+    chatSidebarToggle.setAttribute("aria-expanded", String(!isCollapsed));
+
+    window.setTimeout(() => {
+      map.updateSize();
+    }, 250);
   });
 }

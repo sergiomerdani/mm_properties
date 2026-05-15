@@ -59,43 +59,46 @@ header {
 .grid-container {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: 54px minmax(0, 1fr);
   height: 100vh;
   overflow: hidden;
+}
+
+.grid-container.chat-collapsed {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* Set the styles for the navbar */
 .navbar {
   grid-column: 1 / -1;
+  position: relative;
+  z-index: 4000;
   display: flex;
-  flex-direction: column;
-  background-color: #dce5e7;
-  padding-left: 10px;
-  min-height: 84px;
-  max-height: 350px;
-  overflow-y: auto;
+  align-items: center;
+  background: #edf3f6;
+  border-bottom: 1px solid #c9d5de;
+  min-height: 54px;
+  padding: 6px 10px;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
-.ol-search {
-  left: 10px;
-}
-
-/* 
 .ol-layerswitcher {
-  pointer-events: auto;
-  position: absolute;
-  left: 10px;
-  width: 20%;
+  left: 0 !important;
+  right: auto !important;
+  width: 260px;
 }
 
 .ol-layerswitcher-image > button,
 .ol-layerswitcher > button {
   background-color: white;
   float: left;
-  z-index: 10;
-  position: relative;
-  font-size: 1.7em;
-} */
+  margin-left: 0;
+}
+
+.ol-search {
+  left: 10px;
+}
 
 .form-container {
   padding: 30px;
@@ -184,27 +187,52 @@ td {
 
 /* Custom CSS for the scale input */
 #scaleInput {
-  width: 150px;
+  width: 92px;
+  height: 30px;
   text-align: center;
-  padding: 5px;
-  font-size: 14px;
-  border: 1px solid #ccc;
+  padding: 3px 6px;
+  font-size: 12px;
+  border: 1px solid #b9c6cf;
   border-radius: 4px;
+  background: white;
 }
 .buttons {
-  width: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  min-width: max-content;
+  white-space: nowrap;
 }
 
 .buttons button {
-  transform: scale(1.2);
-  margin-right: 5px;
+  margin-right: 0;
 }
 
 .measurement {
-  border: 1px solid #050505;
-  padding: 5px;
-  display: inline-block;
-  margin-right: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  margin-right: 0;
+  padding: 3px 8px;
+  border: 1px solid #c4d0d8;
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 12px;
+  color: #263647;
+}
+
+.measurement label {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.measurement input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0 4px 0 0;
 }
 
 .ol-ext-print-dialog .ol-print-param {
@@ -318,6 +346,7 @@ button {
   grid-column: 1;
   grid-row: 2;
   position: relative;
+  z-index: 1;
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -333,6 +362,35 @@ button {
   background: #f8fafc;
   border-left: 1px solid #cbd5e1;
   color: #172033;
+}
+
+.grid-container.chat-collapsed .chat-sidebar {
+  display: none;
+}
+
+.chat-sidebar-toggle {
+  position: fixed;
+  top: 110px;
+  right: 354px;
+  z-index: 2500;
+  width: 34px;
+  height: 34px;
+  margin-left: 0;
+  border: 1px solid #b8c6d1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1f6feb;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.16);
+  cursor: pointer;
+}
+
+.chat-sidebar-toggle:hover {
+  background: #eaf2ff;
+}
+
+.grid-container.chat-collapsed .chat-sidebar-toggle {
+  top: 110px;
+  right: 14px;
 }
 
 .chat-sidebar__header {
@@ -410,6 +468,10 @@ button {
   color: #ffffff;
 }
 
+.grid-container.chat-collapsed .custom-mouse-position {
+  right: 10px;
+}
+
 .chat-compose {
   display: flex;
   gap: 8px;
@@ -452,6 +514,10 @@ button {
     grid-template-rows: auto minmax(0, 1fr) 320px;
   }
 
+  .grid-container.chat-collapsed {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
   #map {
     grid-column: 1;
     grid-row: 2;
@@ -464,9 +530,20 @@ button {
     border-top: 1px solid #cbd5e1;
   }
 
+  .chat-sidebar-toggle,
+  .grid-container.chat-collapsed .chat-sidebar-toggle {
+    top: auto;
+    right: 14px;
+    bottom: 14px;
+  }
+
   .custom-mouse-position {
     right: 10px;
     bottom: 340px;
+  }
+
+  .grid-container.chat-collapsed .custom-mouse-position {
+    bottom: 50px;
   }
 }
 
@@ -518,7 +595,7 @@ button {
   left: 0;
   width: 100%;
   max-height: 300px; /* Adjust height as needed */
-  overflow-y: auto;
+  overflow: auto;
   background-color: white;
   border-top: 2px solid #ccc;
   box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
@@ -526,6 +603,9 @@ button {
 }
 
 #layer-selector-container {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   display: flex;
   justify-content: space-between; /* Pushes left and right sections apart */
   align-items: center;
@@ -546,6 +626,7 @@ button {
   gap: 10px;
 }
 
+#highlight-selected-btn,
 #edit-btn,
 #save-btn {
   border: 1px solid red;
@@ -557,12 +638,14 @@ button {
   transition: all 0.2s;
 }
 
+#highlight-selected-btn:hover,
 #edit-btn:hover,
 #save-btn:hover {
   background: red;
   color: white;
 }
 
+#highlight-selected-btn:disabled,
 #save-btn:disabled {
   border: 1px solid #ccc;
   color: #aaa;
@@ -570,9 +653,39 @@ button {
   background: #f9f9f9;
 }
 
+#close-attribute-table {
+  width: 28px;
+  height: 28px;
+  margin-left: 0;
+  border: 1px solid #c6ced6;
+  border-radius: 4px;
+  background: white;
+  color: #334155;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#close-attribute-table:hover {
+  border-color: #ef4444;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 #attribute-table {
   width: 100%;
   border-collapse: collapse;
+}
+
+#attribute-table thead {
+  position: sticky;
+  top: 45px;
+  z-index: 2;
+  background: white;
+}
+
+#attribute-table th {
+  background: white;
 }
 
 #attribute-table th,
@@ -598,10 +711,41 @@ button.fa-button {
   display: inline-flex; /* restore flex/container if you need it */
   align-items: center;
   justify-content: center;
+  width: 30px;
+  height: 30px;
   padding: 0; /* whatever padding you want */
   margin: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
   background: transparent;
+  color: #1d2a36;
   cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+
+button.fa-button:hover {
+  border-color: #b4c2cc;
+  background: #ffffff;
+}
+
+button.fa-button.active {
+  border-color: #78a9d8;
+  background: #dbeafe;
+  color: #0f4c81;
+}
+
+#identifyMode {
+  position: fixed;
+  display: none;
+  min-width: 160px;
+  padding: 5px;
+  background: white;
+  border: 1px solid #9aa8b5;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+  font-size: 13px;
+  z-index: 10000;
 }
 
 /* __________________________________ */
