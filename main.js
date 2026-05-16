@@ -579,12 +579,14 @@ const attributionControl = new Attribution({
 const zoomExtentBtn = document.getElementById("zoom-extent");
 
 zoomExtentBtn.addEventListener("click", function () {
-  map
-    .getView()
-    .fit([2064411.259926, 4774562.53480825, 2399511.191928, 5332247.093174], {
-      padding: [10, 10, 10, 10], // Optional padding around the extent
-      maxZoom: 18, // Optional maximum zoom level
-    });
+  const view = map.getView();
+  const savedView = getInitialMapViewState();
+
+  view.animate({
+    center: savedView.center,
+    zoom: savedView.zoom,
+    duration: 500,
+  });
   calculateScale();
 });
 
@@ -925,6 +927,31 @@ const planifikimiLayers = new LayerGroup({
 const center_4326 = [19.80835, 41.310824];
 const center_3857 = [2206185.65, 5060810.15];
 const saranda_center = [2226806.503832, 4847588.560703];
+const mapSessionViewKey = "mmPropertiesMapView";
+
+function getInitialMapViewState() {
+  try {
+    const savedView = JSON.parse(sessionStorage.getItem(mapSessionViewKey));
+    if (
+      Array.isArray(savedView?.center) &&
+      savedView.center.length === 2 &&
+      Number.isFinite(savedView.center[0]) &&
+      Number.isFinite(savedView.center[1]) &&
+      Number.isFinite(savedView.zoom)
+    ) {
+      return savedView;
+    }
+  } catch (error) {
+    console.warn("Could not read saved map view:", error);
+  }
+
+  return {
+    center: [0, 0],
+    zoom: 2,
+  };
+}
+
+const initialMapViewState = getInitialMapViewState();
 
 const map = new Map({
   target: "map",
@@ -932,11 +959,29 @@ const map = new Map({
   layers: [baseLayerGroup, asigLayers, addressSystem, planifikimiLayers],
   view: new View({
     projection: "EPSG:3857",
-    center: center_3857,
-    zoom: 8,
+    center: initialMapViewState.center,
+    zoom: initialMapViewState.zoom,
     maxZoom: 20,
   }),
 });
+
+function saveCurrentMapViewForSession() {
+  const view = map.getView();
+  sessionStorage.setItem(
+    mapSessionViewKey,
+    JSON.stringify({
+      center: view.getCenter(),
+      zoom: view.getZoom(),
+    }),
+  );
+}
+
+document
+  .getElementById("save-session-view")
+  .addEventListener("click", () => {
+    saveCurrentMapViewForSession();
+    alert("Current map view saved for this session.");
+  });
 
 // Creating vectorSource to store layers
 const vectorSource = new VectorSource();
