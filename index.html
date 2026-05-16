@@ -113,6 +113,9 @@
           <button id="add-xy" class="fa-button" title="Add XY Coordinates">
             🎯
           </button>
+          <button id="georef-image" class="fa-button" title="Georeference Image">
+            <i class="fa-solid fa-image"></i>
+          </button>
         </div>
       </div>
 
@@ -151,6 +154,116 @@
       </div>
 
       <!-- ADD XY Coordinates -->
+
+      <div id="georefModal">
+        <div id="georefModalContent">
+          <h4>Georeference Image</h4>
+
+          <label for="georefImageFile">Image</label>
+          <input type="file" id="georefImageFile" accept="image/png,image/jpeg" />
+
+          <label for="georefLayerName">Layer Name</label>
+          <input type="text" id="georefLayerName" value="Georeferenced image" />
+
+          <label for="georefMode">Method</label>
+          <select id="georefMode">
+            <option value="extent">Absolute Coordinates</option>
+            <option value="tiepoints">Two Tie Points</option>
+          </select>
+
+          <label for="georefProjection">Input Coordinate System</label>
+          <select id="georefProjection">
+            <option value="EPSG:3857">Web Mercator (EPSG:3857)</option>
+            <option value="EPSG:4326">WGS84 (EPSG:4326)</option>
+            <option value="EPSG:6870">Albania TM 2010 (EPSG:6870)</option>
+            <option value="EPSG:32634">UTM Zone 34N (EPSG:32634)</option>
+          </select>
+
+          <div id="georefExtentFields">
+            <div id="georefAbsoluteAnchorFields">
+              <div class="georef-map-note">
+                Click one point on the uploaded image, then type its known map
+                coordinate. Add at least two points.
+              </div>
+              <div class="georef-image-tools">
+                <button id="georefAbsZoomIn" type="button">+</button>
+                <button id="georefAbsZoomOut" type="button">-</button>
+                <button id="georefAbsAddPoint" type="button">Add Point</button>
+                <button id="georefAbsResetPoint" type="button">Reset Point</button>
+              </div>
+              <div id="georefAbsoluteImageViewport" class="georef-image-viewport">
+                <img id="georefAbsoluteImagePreview" alt="Uploaded image preview" />
+              </div>
+              <label>Source Pixel</label>
+              <div class="georef-grid">
+                <input type="number" id="georefAbsPx" step="any" placeholder="Pixel X" readonly />
+                <input type="number" id="georefAbsPy" step="any" placeholder="Pixel Y" readonly />
+              </div>
+              <label>Known Coordinate</label>
+              <div class="georef-grid">
+                <input type="number" id="georefAbsMapX" step="any" placeholder="Map X" />
+                <input type="number" id="georefAbsMapY" step="any" placeholder="Map Y" />
+              </div>
+              <div class="georef-table-wrap">
+                <table id="georefAbsolutePointTable">
+                  <thead>
+                    <tr>
+                      <th>Id</th>
+                      <th>X source</th>
+                      <th>Y source</th>
+                      <th>X known</th>
+                      <th>Y known</th>
+                    </tr>
+                  </thead>
+                  <tbody id="georefAbsolutePointBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div id="georefTiepointFields" hidden>
+            <div class="georef-map-note">
+              Click the image to set source points, then click the basemap to
+              set matching destination points.
+            </div>
+
+            <div class="georef-image-tools">
+              <button id="georefZoomIn" type="button">+</button>
+              <button id="georefZoomOut" type="button">-</button>
+              <button id="georefAddPoint" type="button">Add Point</button>
+              <button id="georefPickMapPoint" type="button">Pick On Map</button>
+              <button id="georefResetPoints" type="button">Reset</button>
+            </div>
+
+            <div id="georefImageViewport">
+              <img id="georefImagePreview" alt="Uploaded image preview" />
+            </div>
+
+            <div class="georef-table-wrap">
+              <table id="georefTiepointTable">
+                <thead>
+                  <tr>
+                    <th>Id</th>
+                    <th>X source</th>
+                    <th>Y source</th>
+                    <th>X dest</th>
+                    <th>Y dest</th>
+                  </tr>
+                </thead>
+                <tbody id="georefTiepointBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <label for="georefOpacity">Opacity</label>
+          <input type="range" id="georefOpacity" min="0.1" max="1" step="0.05" value="0.75" />
+
+          <div id="georefModalActions">
+            <button id="georefApply">Add to Map</button>
+            <button id="georefClose">Cancel</button>
+          </div>
+        </div>
+      </div>
 
       <div id="xyModal">
         <div id="xyModalContent">

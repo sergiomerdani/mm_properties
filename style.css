@@ -975,6 +975,159 @@ button.fa-button.active {
   font-size: 12px;
 }
 
+/* Georeference Image */
+
+#georefModal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  border: 1px solid #c3ccd4;
+  border-radius: 6px;
+  padding: 10px;
+  width: 430px;
+  max-height: 86vh;
+  overflow: auto;
+  font-size: 12px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.28);
+  z-index: 1200;
+  display: none;
+}
+
+#georefModal h4 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  text-align: center;
+}
+
+#georefModal label {
+  display: block;
+  margin-top: 7px;
+  font-weight: 700;
+}
+
+#georefModal input,
+#georefModal select {
+  width: 100%;
+  padding: 4px;
+  font-size: 12px;
+}
+
+.georef-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.georef-map-note {
+  padding: 6px 8px;
+  margin-top: 8px;
+  border: 1px solid #c9d5de;
+  border-radius: 4px;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.georef-image-tools {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.georef-image-tools button {
+  margin-left: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+#georefImageViewport,
+.georef-image-viewport {
+  position: relative;
+  height: 240px;
+  margin-top: 8px;
+  overflow: auto;
+  border: 1px solid #c9d5de;
+  background: #f8fafc;
+  cursor: crosshair;
+}
+
+#georefImageViewport.georef-panning,
+.georef-image-viewport.georef-panning {
+  cursor: grabbing;
+}
+
+#georefImagePreview,
+#georefAbsoluteImagePreview {
+  display: block;
+  max-width: none;
+  transform-origin: top left;
+  user-select: none;
+}
+
+.georef-image-point {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #111827;
+  border-radius: 50%;
+  background: #ffd60a;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.georef-image-point span {
+  position: absolute;
+  left: 10px;
+  top: 6px;
+  color: #111827;
+  font-weight: 700;
+  text-shadow: 0 1px 2px white;
+}
+
+.georef-map-cursor-label {
+  padding: 2px 6px;
+  border: 2px solid #111827;
+  border-radius: 999px;
+  background: #ffd60a;
+  color: #111827;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.georef-table-wrap {
+  max-height: 150px;
+  margin-top: 8px;
+  overflow: auto;
+  border: 1px solid #d5dde5;
+}
+
+#georefTiepointTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+#georefTiepointTable th,
+#georefTiepointTable td {
+  padding: 4px;
+  border: 1px solid #d5dde5;
+  white-space: nowrap;
+}
+
+#georefModalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+#georefModalActions button {
+  margin-left: 0;
+  font-size: 12px;
+}
+
 /* EDIT BUTTONS */
 
 #editToolbar {

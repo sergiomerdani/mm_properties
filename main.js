@@ -63,6 +63,7 @@ import DragAndDrop from "ol/interaction/DragAndDrop";
 import { GPX, GeoJSON, IGC, KML, TopoJSON } from "ol/format";
 import JSZip from "jszip";
 import ImageWMS from "ol/source/ImageWMS";
+import ImageStatic from "ol/source/ImageStatic.js";
 import { Image as ImageLayer } from "ol/layer.js";
 import ol_control_Graticule from "ol-ext/control/Graticule";
 import ol_control_FeatureList from "ol-ext/control/FeatureList";
@@ -915,6 +916,42 @@ const attributeSelectionLayer = new VectorLayer({
 });
 
 map.addLayer(attributeSelectionLayer);
+
+const georefDestinationSource = new VectorSource();
+const georefDestinationLayer = new VectorLayer({
+  source: georefDestinationSource,
+  title: "Georeference Tie Points",
+  displayInLayerSwitcher: false,
+  style: (feature) =>
+    new Style({
+      image: new CircleStyle({
+        radius: 8,
+        fill: new Fill({ color: "#ffd60a" }),
+        stroke: new Stroke({ color: "#111827", width: 2 }),
+      }),
+      text: new Text({
+        text: String(feature.get("label") || ""),
+        offsetX: 14,
+        offsetY: -10,
+        fill: new Fill({ color: "#111827" }),
+        stroke: new Stroke({ color: "#ffffff", width: 3 }),
+        font: "bold 13px Arial, sans-serif",
+      }),
+    }),
+});
+
+map.addLayer(georefDestinationLayer);
+
+const georefCursorLabel = document.createElement("div");
+georefCursorLabel.className = "georef-map-cursor-label";
+const georefCursorOverlay = new Overlay({
+  element: georefCursorLabel,
+  positioning: "bottom-left",
+  offset: [12, -12],
+});
+
+map.addOverlay(georefCursorOverlay);
+georefCursorOverlay.setPosition(undefined);
 
 //DragRotate Interaction
 const dragRotateInteraction = new DragRotate({
@@ -5864,6 +5901,600 @@ document.getElementById("add-xy").addEventListener("click", () => {
 // close modal
 document.getElementById("xyClose").addEventListener("click", () => {
   document.getElementById("xyModal").style.display = "none";
+});
+
+// GEOREFERENCE IMAGE
+let georefImageUrl = null;
+let georefImageSize = null;
+let georefImageScale = 1;
+let georefTiepoints = [];
+let georefActiveTiepointIndex = null;
+let georefPickingMapPoint = false;
+let georefPanState = null;
+let georefAbsolutePoint = null;
+let georefAbsolutePoints = [];
+
+function readGeorefNumber(id) {
+  const value = Number(document.getElementById(id).value);
+  if (Number.isNaN(value)) {
+    throw new Error(`Missing or invalid value: ${id}`);
+  }
+
+  return value;
+}
+
+function transformGeorefCoordinate(coord, inputProjection) {
+  const mapProjection = map.getView().getProjection().getCode();
+  return inputProjection === mapProjection
+    ? coord
+    : transform(coord, inputProjection, mapProjection);
+}
+
+function getGeorefExtentFromAbsolute(inputProjection) {
+  if (!georefImageSize) {
+    throw new Error("Upload an image first so its pixel size can be read.");
+  }
+
+  if (georefAbsolutePoints.length < 2) {
+    throw new Error("Absolute mode needs at least two added point pairs.");
+  }
+
+  const [point1, point2] = georefAbsolutePoints;
+  const map1 = transformGeorefCoordinate(
+    [point1.destX, point1.destY],
+    inputProjection,
+  );
+  const map2 = transformGeorefCoordinate(
+    [point2.destX, point2.destY],
+    inputProjection,
+  );
+  const resolutionX = (map2[0] - map1[0]) / (point2.sourceX - point1.sourceX);
+  const resolutionY = (map1[1] - map2[1]) / (point2.sourceY - point1.sourceY);
+
+  if (!Number.isFinite(resolutionX) || !Number.isFinite(resolutionY)) {
+    throw new Error("Use two points with different source X and Y values.");
+  }
+
+  const minX = map1[0] - point1.sourceX * resolutionX;
+  const maxY = map1[1] + point1.sourceY * resolutionY;
+  const maxX = minX + georefImageSize.width * resolutionX;
+  const minY = maxY - georefImageSize.height * resolutionY;
+
+  return [
+    Math.min(minX, maxX),
+    Math.min(minY, maxY),
+    Math.max(minX, maxX),
+    Math.max(minY, maxY),
+  ];
+}
+
+function getGeorefExtentFromTiepoints(inputProjection) {
+  if (!georefImageSize) {
+    throw new Error("Upload an image first so its pixel size can be read.");
+  }
+
+  const completeTiepoints = georefTiepoints.filter(
+    (point) =>
+      Number.isFinite(point.sourceX) &&
+      Number.isFinite(point.sourceY) &&
+      Number.isFinite(point.destX) &&
+      Number.isFinite(point.destY),
+  );
+
+  if (completeTiepoints.length < 2) {
+    throw new Error("Tie point mode needs at least two complete point pairs.");
+  }
+
+  const [point1, point2] = completeTiepoints;
+  const px1 = point1.sourceX;
+  const py1 = point1.sourceY;
+  const map1 = transformGeorefCoordinate(
+    [point1.destX, point1.destY],
+    inputProjection,
+  );
+
+  const px2 = point2.sourceX;
+  const py2 = point2.sourceY;
+  const map2 = transformGeorefCoordinate(
+    [point2.destX, point2.destY],
+    inputProjection,
+  );
+
+  const resolutionX = (map2[0] - map1[0]) / (px2 - px1);
+  const resolutionY = (map1[1] - map2[1]) / (py2 - py1);
+
+  if (!Number.isFinite(resolutionX) || !Number.isFinite(resolutionY)) {
+    throw new Error("Tie points must use different pixel X and Y values.");
+  }
+
+  const minX = map1[0] - px1 * resolutionX;
+  const maxY = map1[1] + py1 * resolutionY;
+  const maxX = minX + georefImageSize.width * resolutionX;
+  const minY = maxY - georefImageSize.height * resolutionY;
+
+  return [
+    Math.min(minX, maxX),
+    Math.min(minY, maxY),
+    Math.max(minX, maxX),
+    Math.max(minY, maxY),
+  ];
+}
+
+function addGeoreferencedImageLayer(extent) {
+  const layerName =
+    document.getElementById("georefLayerName").value.trim() ||
+    "Georeferenced image";
+  const opacity = Number(document.getElementById("georefOpacity").value);
+  const imageLayer = new ImageLayer({
+    source: new ImageStatic({
+      url: georefImageUrl,
+      imageExtent: extent,
+      projection: map.getView().getProjection(),
+    }),
+    opacity,
+    title: layerName,
+    displayInLayerSwitcher: true,
+  });
+
+  imageLayer.set("georeferencedImage", true);
+  map.addLayer(imageLayer);
+  map.getView().fit(extent, { duration: 600, padding: [40, 40, 40, 40] });
+}
+
+function formatGeorefValue(value) {
+  return Number.isFinite(value) ? value.toFixed(3) : "";
+}
+
+function renderGeorefTiepoints() {
+  const body = document.getElementById("georefTiepointBody");
+  const viewport = document.getElementById("georefImageViewport");
+  body.innerHTML = "";
+  viewport
+    .querySelectorAll(".georef-image-point")
+    .forEach((pointEl) => pointEl.remove());
+
+  georefTiepoints.forEach((point, index) => {
+    const row = body.insertRow();
+    row.insertCell().textContent = String(index + 1);
+    row.insertCell().textContent = formatGeorefValue(point.sourceX);
+    row.insertCell().textContent = formatGeorefValue(point.sourceY);
+    row.insertCell().textContent = formatGeorefValue(point.destX);
+    row.insertCell().textContent = formatGeorefValue(point.destY);
+    row.addEventListener("click", () => {
+      georefActiveTiepointIndex = index;
+    });
+
+    if (Number.isFinite(point.sourceX) && Number.isFinite(point.sourceY)) {
+      const marker = document.createElement("div");
+      marker.className = "georef-image-point";
+      marker.style.left = `${point.sourceX * georefImageScale}px`;
+      marker.style.top = `${point.sourceY * georefImageScale}px`;
+      marker.innerHTML = `<span>${index + 1}</span>`;
+      viewport.appendChild(marker);
+    }
+  });
+}
+
+function addGeorefTiepoint() {
+  georefTiepoints.push({
+    sourceX: null,
+    sourceY: null,
+    destX: null,
+    destY: null,
+  });
+  georefActiveTiepointIndex = georefTiepoints.length - 1;
+  renderGeorefTiepoints();
+}
+
+function setGeorefImageScale(nextScale) {
+  georefImageScale = Math.max(0.25, Math.min(nextScale, 6));
+  document.getElementById(
+    "georefImagePreview",
+  ).style.transform = `scale(${georefImageScale})`;
+  document.getElementById(
+    "georefAbsoluteImagePreview",
+  ).style.transform = `scale(${georefImageScale})`;
+  renderGeorefTiepoints();
+  renderGeorefAbsolutePoint();
+}
+
+function zoomGeorefImageAt(
+  nextScale,
+  clientX,
+  clientY,
+  viewportId = "georefImageViewport",
+) {
+  const viewport = document.getElementById(viewportId);
+  const rect = viewport.getBoundingClientRect();
+  const oldScale = georefImageScale;
+  const clampedScale = Math.max(0.25, Math.min(nextScale, 6));
+  const imageX = (viewport.scrollLeft + clientX - rect.left) / oldScale;
+  const imageY = (viewport.scrollTop + clientY - rect.top) / oldScale;
+
+  setGeorefImageScale(clampedScale);
+  viewport.scrollLeft = imageX * clampedScale - (clientX - rect.left);
+  viewport.scrollTop = imageY * clampedScale - (clientY - rect.top);
+}
+
+function startGeorefImagePan(event, viewportId) {
+  if (!event.shiftKey) return;
+
+  const viewport = document.getElementById(viewportId);
+  georefPanState = {
+    viewportId,
+    startX: event.clientX,
+    startY: event.clientY,
+    scrollLeft: viewport.scrollLeft,
+    scrollTop: viewport.scrollTop,
+  };
+  viewport.classList.add("georef-panning");
+  event.preventDefault();
+}
+
+function resetGeorefTiepoints() {
+  georefTiepoints = [];
+  georefActiveTiepointIndex = null;
+  georefPickingMapPoint = false;
+  georefDestinationSource.clear();
+  georefCursorOverlay.setPosition(undefined);
+  renderGeorefTiepoints();
+}
+
+function ensureActiveGeorefTiepoint() {
+  if (georefActiveTiepointIndex === null) {
+    addGeorefTiepoint();
+  }
+
+  return georefTiepoints[georefActiveTiepointIndex];
+}
+
+function setGeorefSourcePoint(event) {
+  const preview = document.getElementById("georefImagePreview");
+  if (!georefImageUrl || !georefImageSize) return;
+
+  const rect = preview.getBoundingClientRect();
+  const sourceX = (event.clientX - rect.left) / georefImageScale;
+  const sourceY = (event.clientY - rect.top) / georefImageScale;
+
+  if (
+    sourceX < 0 ||
+    sourceY < 0 ||
+    sourceX > georefImageSize.width ||
+    sourceY > georefImageSize.height
+  ) {
+    return;
+  }
+
+  const point = ensureActiveGeorefTiepoint();
+  point.sourceX = sourceX;
+  point.sourceY = sourceY;
+  renderGeorefTiepoints();
+}
+
+function setGeorefDestinationPoint(coordinate) {
+  if (georefActiveTiepointIndex === null) {
+    alert("Add or select a tie point first.");
+    return;
+  }
+
+  const inputProjection = document.getElementById("georefProjection").value;
+  const mapProjection = map.getView().getProjection().getCode();
+  const destination =
+    inputProjection === mapProjection
+      ? coordinate
+      : transform(coordinate, mapProjection, inputProjection);
+  const point = georefTiepoints[georefActiveTiepointIndex];
+
+  point.destX = destination[0];
+  point.destY = destination[1];
+  const existingFeature = georefDestinationSource
+    .getFeatures()
+    .find((feature) => feature.get("tiepointIndex") === georefActiveTiepointIndex);
+
+  if (existingFeature) {
+    existingFeature.getGeometry().setCoordinates(coordinate);
+  } else {
+    georefDestinationSource.addFeature(
+      new Feature({
+        geometry: new Point(coordinate),
+        label: georefActiveTiepointIndex + 1,
+        tiepointIndex: georefActiveTiepointIndex,
+      }),
+    );
+  }
+
+  georefPickingMapPoint = false;
+  georefCursorOverlay.setPosition(undefined);
+  renderGeorefTiepoints();
+}
+
+function renderGeorefAbsolutePoint() {
+  const viewport = document.getElementById("georefAbsoluteImageViewport");
+  const body = document.getElementById("georefAbsolutePointBody");
+  body.innerHTML = "";
+  viewport
+    .querySelectorAll(".georef-image-point")
+    .forEach((pointEl) => pointEl.remove());
+
+  georefAbsolutePoints.forEach((point, index) => {
+    const row = body.insertRow();
+    row.insertCell().textContent = String(index + 1);
+    row.insertCell().textContent = formatGeorefValue(point.sourceX);
+    row.insertCell().textContent = formatGeorefValue(point.sourceY);
+    row.insertCell().textContent = formatGeorefValue(point.destX);
+    row.insertCell().textContent = formatGeorefValue(point.destY);
+
+    const marker = document.createElement("div");
+    marker.className = "georef-image-point";
+    marker.style.left = `${point.sourceX * georefImageScale}px`;
+    marker.style.top = `${point.sourceY * georefImageScale}px`;
+    marker.innerHTML = `<span>${index + 1}</span>`;
+    viewport.appendChild(marker);
+  });
+
+  if (georefAbsolutePoint) {
+    const marker = document.createElement("div");
+    marker.className = "georef-image-point";
+    marker.style.left = `${georefAbsolutePoint.sourceX * georefImageScale}px`;
+    marker.style.top = `${georefAbsolutePoint.sourceY * georefImageScale}px`;
+    marker.innerHTML = "<span>+</span>";
+    viewport.appendChild(marker);
+  }
+}
+
+function setGeorefAbsoluteSourcePoint(event) {
+  if (!georefImageUrl || !georefImageSize) return;
+
+  const preview = document.getElementById("georefAbsoluteImagePreview");
+  const rect = preview.getBoundingClientRect();
+  const sourceX = (event.clientX - rect.left) / georefImageScale;
+  const sourceY = (event.clientY - rect.top) / georefImageScale;
+
+  if (
+    sourceX < 0 ||
+    sourceY < 0 ||
+    sourceX > georefImageSize.width ||
+    sourceY > georefImageSize.height
+  ) {
+    return;
+  }
+
+  georefAbsolutePoint = { sourceX, sourceY };
+  document.getElementById("georefAbsPx").value = sourceX.toFixed(3);
+  document.getElementById("georefAbsPy").value = sourceY.toFixed(3);
+  renderGeorefAbsolutePoint();
+}
+
+function resetGeorefAbsolutePoint() {
+  georefAbsolutePoint = null;
+  georefAbsolutePoints = [];
+  document.getElementById("georefAbsPx").value = "";
+  document.getElementById("georefAbsPy").value = "";
+  document.getElementById("georefAbsMapX").value = "";
+  document.getElementById("georefAbsMapY").value = "";
+  renderGeorefAbsolutePoint();
+}
+
+function addGeorefAbsolutePoint() {
+  if (!georefAbsolutePoint) {
+    throw new Error("Click one source point on the uploaded image first.");
+  }
+
+  const destX = readGeorefNumber("georefAbsMapX");
+  const destY = readGeorefNumber("georefAbsMapY");
+
+  georefAbsolutePoints.push({
+    sourceX: georefAbsolutePoint.sourceX,
+    sourceY: georefAbsolutePoint.sourceY,
+    destX,
+    destY,
+  });
+  georefAbsolutePoint = null;
+  document.getElementById("georefAbsPx").value = "";
+  document.getElementById("georefAbsPy").value = "";
+  document.getElementById("georefAbsMapX").value = "";
+  document.getElementById("georefAbsMapY").value = "";
+  renderGeorefAbsolutePoint();
+}
+
+document.getElementById("georef-image").addEventListener("click", () => {
+  document.getElementById("georefModal").style.display = "block";
+});
+
+document.getElementById("georefClose").addEventListener("click", () => {
+  document.getElementById("georefModal").style.display = "none";
+  georefPickingMapPoint = false;
+  georefCursorOverlay.setPosition(undefined);
+});
+
+document.getElementById("georefMode").addEventListener("change", (event) => {
+  const useTiepoints = event.target.value === "tiepoints";
+  document.getElementById("georefExtentFields").hidden = useTiepoints;
+  document.getElementById("georefTiepointFields").hidden = !useTiepoints;
+});
+
+document
+  .getElementById("georefImageFile")
+  .addEventListener("change", (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (georefImageUrl) {
+      URL.revokeObjectURL(georefImageUrl);
+    }
+
+    georefImageUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      georefImageSize = {
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+      };
+      const preview = document.getElementById("georefImagePreview");
+      preview.src = georefImageUrl;
+      preview.style.width = `${image.naturalWidth}px`;
+      preview.style.height = `${image.naturalHeight}px`;
+      const absolutePreview = document.getElementById(
+        "georefAbsoluteImagePreview",
+      );
+      absolutePreview.src = georefImageUrl;
+      absolutePreview.style.width = `${image.naturalWidth}px`;
+      absolutePreview.style.height = `${image.naturalHeight}px`;
+      resetGeorefTiepoints();
+      resetGeorefAbsolutePoint();
+    };
+    image.src = georefImageUrl;
+  });
+
+document
+  .getElementById("georefImagePreview")
+  .addEventListener("click", (event) => {
+    if (event.shiftKey) return;
+    setGeorefSourcePoint(event);
+  });
+
+document
+  .getElementById("georefImageViewport")
+  .addEventListener("wheel", (event) => {
+    event.preventDefault();
+    const zoomFactor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
+    zoomGeorefImageAt(
+      georefImageScale * zoomFactor,
+      event.clientX,
+      event.clientY,
+      "georefImageViewport",
+    );
+  });
+
+document
+  .getElementById("georefImageViewport")
+  .addEventListener("mousedown", (event) => {
+    startGeorefImagePan(event, "georefImageViewport");
+  });
+
+document
+  .getElementById("georefAbsoluteImagePreview")
+  .addEventListener("click", (event) => {
+    if (event.shiftKey) return;
+    setGeorefAbsoluteSourcePoint(event);
+  });
+
+document
+  .getElementById("georefAbsoluteImageViewport")
+  .addEventListener("wheel", (event) => {
+    event.preventDefault();
+    const zoomFactor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
+    zoomGeorefImageAt(
+      georefImageScale * zoomFactor,
+      event.clientX,
+      event.clientY,
+      "georefAbsoluteImageViewport",
+    );
+  });
+
+document
+  .getElementById("georefAbsoluteImageViewport")
+  .addEventListener("mousedown", (event) => {
+    startGeorefImagePan(event, "georefAbsoluteImageViewport");
+  });
+
+window.addEventListener("mousemove", (event) => {
+  if (!georefPanState) return;
+
+  const viewport = document.getElementById(georefPanState.viewportId);
+  viewport.scrollLeft =
+    georefPanState.scrollLeft - (event.clientX - georefPanState.startX);
+  viewport.scrollTop =
+    georefPanState.scrollTop - (event.clientY - georefPanState.startY);
+});
+
+window.addEventListener("mouseup", () => {
+  if (!georefPanState) return;
+
+  const viewport = document.getElementById(georefPanState.viewportId);
+  georefPanState = null;
+  viewport.classList.remove("georef-panning");
+});
+
+document.getElementById("georefAddPoint").addEventListener("click", () => {
+  addGeorefTiepoint();
+});
+
+document.getElementById("georefPickMapPoint").addEventListener("click", () => {
+  if (georefActiveTiepointIndex === null) {
+    alert("Add or select a tie point first.");
+    return;
+  }
+
+  georefPickingMapPoint = true;
+  georefCursorLabel.textContent = String(georefActiveTiepointIndex + 1);
+  georefCursorOverlay.setPosition(map.getView().getCenter());
+  document.getElementById("georefModal").style.display = "none";
+});
+
+document.getElementById("georefResetPoints").addEventListener("click", () => {
+  resetGeorefTiepoints();
+});
+
+document.getElementById("georefZoomIn").addEventListener("click", () => {
+  setGeorefImageScale(georefImageScale * 1.25);
+});
+
+document.getElementById("georefZoomOut").addEventListener("click", () => {
+  setGeorefImageScale(georefImageScale / 1.25);
+});
+
+document.getElementById("georefAbsZoomIn").addEventListener("click", () => {
+  setGeorefImageScale(georefImageScale * 1.25);
+});
+
+document.getElementById("georefAbsZoomOut").addEventListener("click", () => {
+  setGeorefImageScale(georefImageScale / 1.25);
+});
+
+document
+  .getElementById("georefAbsResetPoint")
+  .addEventListener("click", resetGeorefAbsolutePoint);
+
+document.getElementById("georefAbsAddPoint").addEventListener("click", () => {
+  try {
+    addGeorefAbsolutePoint();
+  } catch (error) {
+    alert(error.message);
+  }
+});
+
+map.on("click", (event) => {
+  if (!georefPickingMapPoint) return;
+
+  setGeorefDestinationPoint(event.coordinate);
+  document.getElementById("georefModal").style.display = "block";
+});
+
+map.on("pointermove", (event) => {
+  if (!georefPickingMapPoint) return;
+
+  georefCursorOverlay.setPosition(event.coordinate);
+});
+
+document.getElementById("georefApply").addEventListener("click", () => {
+  try {
+    if (!georefImageUrl) {
+      throw new Error("Choose a PNG or JPEG image first.");
+    }
+
+    const inputProjection = document.getElementById("georefProjection").value;
+    const mode = document.getElementById("georefMode").value;
+    const extent =
+      mode === "tiepoints"
+        ? getGeorefExtentFromTiepoints(inputProjection)
+        : getGeorefExtentFromAbsolute(inputProjection);
+
+    addGeoreferencedImageLayer(extent);
+    document.getElementById("georefModal").style.display = "none";
+  } catch (error) {
+    alert(error.message);
+  }
 });
 
 // add point
