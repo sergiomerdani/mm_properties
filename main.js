@@ -817,6 +817,42 @@ const roadsAdr = new Tile({
   displayInLayerSwitcher: true,
 });
 
+const asigAkptWmsUrl = "https://geoportal.asig.gov.al/service/akpt/wms";
+
+const kategoritePropozuaraLayer = new ImageLayer({
+  title: "Kategorite propozuara perdorimit te tokes",
+  visible: false,
+  displayInLayerSwitcher: true,
+  source: new ImageWMS({
+    url: asigAkptWmsUrl,
+    params: {
+      LAYERS: "kategorite_propozuara_perdorimit_te_tokes",
+      FORMAT: "image/png",
+      TRANSPARENT: true,
+      VERSION: "1.1.1",
+    },
+    serverType: "geoserver",
+    crossOrigin: "anonymous",
+  }),
+});
+
+const kufiNjesieStrukturoreLayer = new ImageLayer({
+  title: "Kufi njesie strukturore dhe perdorimi i tokes INSPIRE",
+  visible: false,
+  displayInLayerSwitcher: true,
+  source: new ImageWMS({
+    url: asigAkptWmsUrl,
+    params: {
+      LAYERS: "kufi_njesie_strukturore_dhe_perdorimi_i_tokes_inspire",
+      FORMAT: "image/png",
+      TRANSPARENT: true,
+      VERSION: "1.1.1",
+    },
+    serverType: "geoserver",
+    crossOrigin: "anonymous",
+  }),
+});
+
 //EXTRA LAYER FOR CRUD
 const wfsLayerUrl = `http://${host}:${port}/geoserver/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=`;
 const wfsLayerUrlEnd = "&maxFeatures=50&outputFormat=application/json";
@@ -880,6 +916,12 @@ const addressSystem = new LayerGroup({
   displayInLayerSwitcher: true,
 });
 
+const planifikimiLayers = new LayerGroup({
+  layers: [kategoritePropozuaraLayer, kufiNjesieStrukturoreLayer],
+  title: "Planifikimi",
+  displayInLayerSwitcher: true,
+});
+
 const center_4326 = [19.80835, 41.310824];
 const center_3857 = [2206185.65, 5060810.15];
 const saranda_center = [2226806.503832, 4847588.560703];
@@ -887,7 +929,7 @@ const saranda_center = [2226806.503832, 4847588.560703];
 const map = new Map({
   target: "map",
   controls: defaults({ attribution: false }).extend(mapControls),
-  layers: [baseLayerGroup, asigLayers, addressSystem],
+  layers: [baseLayerGroup, asigLayers, addressSystem, planifikimiLayers],
   view: new View({
     projection: "EPSG:3857",
     center: center_3857,
@@ -6088,12 +6130,10 @@ function addGeorefTiepoint() {
 
 function setGeorefImageScale(nextScale) {
   georefImageScale = Math.max(0.25, Math.min(nextScale, 6));
-  document.getElementById(
-    "georefImagePreview",
-  ).style.transform = `scale(${georefImageScale})`;
-  document.getElementById(
-    "georefAbsoluteImagePreview",
-  ).style.transform = `scale(${georefImageScale})`;
+  document.getElementById("georefImagePreview").style.transform =
+    `scale(${georefImageScale})`;
+  document.getElementById("georefAbsoluteImagePreview").style.transform =
+    `scale(${georefImageScale})`;
   renderGeorefTiepoints();
   renderGeorefAbsolutePoint();
 }
@@ -6189,7 +6229,9 @@ function setGeorefDestinationPoint(coordinate) {
   point.destY = destination[1];
   const existingFeature = georefDestinationSource
     .getFeatures()
-    .find((feature) => feature.get("tiepointIndex") === georefActiveTiepointIndex);
+    .find(
+      (feature) => feature.get("tiepointIndex") === georefActiveTiepointIndex,
+    );
 
   if (existingFeature) {
     existingFeature.getGeometry().setCoordinates(coordinate);
@@ -7547,3 +7589,69 @@ if (chatSidebarToggle && gridContainer) {
     }, 250);
   });
 }
+
+const kadasterLayer = new TileLayer({
+  title: "Kadaster Layers",
+
+  source: new TileWMS({
+    url: "https://apps.kadaster.al/himarewms",
+
+    params: {
+      LAYERS: "ndertesa,pasuri",
+      FORMAT: "image/png",
+      TRANSPARENT: true,
+      VERSION: "1.1.1",
+      SRS: "EPSG:3857",
+    },
+
+    crossOrigin: "anonymous",
+  }),
+});
+
+map.addLayer(kadasterLayer);
+
+const dhermiNdertesaLayer = new TileLayer({
+  title: "Dhermi - Pasuri",
+  visible: true,
+  source: new TileWMS({
+    url: "https://apps.kadaster.al/dhermiwms",
+    params: {
+      VERSION: "1.1.1",
+      LAYERS: "ndertesa,pasuri",
+      STYLES: "",
+      FORMAT: "image/png",
+      TRANSPARENT: true,
+      SRS: "EPSG:3857",
+    },
+    crossOrigin: "anonymous",
+  }),
+});
+
+map.addLayer(dhermiNdertesaLayer);
+
+const ndertesaLayer = new TileLayer({
+  title: "Ndertesa",
+  source: new TileWMS({
+    url: "https://apps.kadaster.al/palasewms",
+    params: {
+      LAYERS: "ndertesa",
+      FORMAT: "image/png",
+      TRANSPARENT: true,
+    },
+  }),
+});
+
+const pasuriLayer = new TileLayer({
+  title: "Pasuri",
+  source: new TileWMS({
+    url: "https://apps.kadaster.al/palasewms",
+    params: {
+      LAYERS: "pasuri",
+      FORMAT: "image/png",
+      TRANSPARENT: true,
+    },
+  }),
+});
+
+map.addLayer(ndertesaLayer);
+map.addLayer(pasuriLayer);
