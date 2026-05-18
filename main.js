@@ -860,6 +860,8 @@ const wfsLayerUrl = `http://${host}:${port}/geoserver/${workspaceName}/ows?servi
 const wfsLayerUrlEnd = "&maxFeatures=50&outputFormat=application/json";
 
 let wfsVectorLayer, wfsVectorSource;
+let isLocalVectorEdit = false;
+let originalVectorLayerStyle = null;
 
 function getGeoServerProxyOwsUrl(workspace = workspaceName) {
   return `http://localhost:8000/geoserver-proxy/${workspace}/ows`;
@@ -2645,6 +2647,20 @@ function fetchLayerPropertiesFromWFS(url, layerParam) {
     });
 }
 
+function getEditableLayerType(layer) {
+  const feature = layer
+    ?.getSource?.()
+    ?.getFeatures?.()
+    ?.find((item) => item.getGeometry?.());
+  const geometryType = feature?.getGeometry?.()?.getType?.();
+
+  if (!geometryType) return "Polygon";
+  if (geometryType.includes("Point")) return "Point";
+  if (geometryType.includes("LineString")) return "LineString";
+  if (geometryType.includes("Polygon")) return "Polygon";
+  return "Polygon";
+}
+
 layerSwitcher.on("select", (e) => {
   map.removeInteraction(drawInteraction);
   selectedLayer = e.layer;
@@ -2680,8 +2696,17 @@ layerSwitcher.on("select", (e) => {
       return layerGroup;
     }
     const selectedLayerGroup = getLayerGroup(selectedLayer);
-  } else {
-    fetchLayerPropertiesFromWFS(url, layerParam);
+  } else if (selectedLayer instanceof VectorLayer) {
+    if (selectedLayer.get("editableVector")) {
+      layerTitle = selectedLayer.get("title") || "Vector layer";
+      layerName = layerTitle;
+      layerParam = null;
+      layerType = getEditableLayerType(selectedLayer);
+      vectorLayer = selectedLayer;
+      source = selectedLayer.getSource();
+      wfsVectorLayer = selectedLayer;
+      wfsVectorSource = source;
+    }
   }
 });
 
@@ -3244,6 +3269,32 @@ editLayerButton.addEventListener("click", () => {
   }
 
   if (!isEditing) {
+    if (selectedLayer instanceof VectorLayer && selectedLayer.get("editableVector")) {
+      isLocalVectorEdit = true;
+      originalLayer = selectedLayer;
+      wfsVectorLayer = selectedLayer;
+      wfsVectorSource = selectedLayer.getSource();
+      source = wfsVectorSource;
+      vectorLayer = selectedLayer;
+      layerTitle = selectedLayer.get("title") || "Vector layer";
+      layerName = layerTitle;
+      layerType = getEditableLayerType(selectedLayer);
+      originalVectorLayerStyle = selectedLayer.getStyle();
+      selectedLayer.setStyle(styleWithVertices);
+
+      editToolbar.style.display = "flex";
+      editLayerButton.classList.add("active");
+      isEditing = true;
+      console.log("✏️ Local vector edit mode enabled");
+      return;
+    }
+
+    if (!layerParam) {
+      alert("This layer cannot be edited with the current editor.");
+      return;
+    }
+
+    isLocalVectorEdit = false;
     // --- Enable edit mode ---
     const intExtent = extentBbox.map((c) => Math.trunc(c));
     const bboxParam = intExtent.join(",");
@@ -3283,7 +3334,9 @@ editLayerButton.addEventListener("click", () => {
     btnTranslate.disabled = true;
     btnSelect.textContent = "🖱️";
 
-    if (wfsVectorLayer && originalLayer) {
+    if (isLocalVectorEdit && originalLayer) {
+      originalLayer.setStyle(originalVectorLayerStyle);
+    } else if (wfsVectorLayer && originalLayer) {
       replaceLayer(wfsVectorLayer, originalLayer);
       originalLayer.getSource().refresh(); // refresh WMS after edits
     }
@@ -3294,6 +3347,8 @@ editLayerButton.addEventListener("click", () => {
     // 🔹 Reset selection so user must pick again next time
     selectedLayer = null;
     originalLayer = null;
+    originalVectorLayerStyle = null;
+    isLocalVectorEdit = false;
     layerParam = null;
     layerTitle = null;
     console.log("✅ Edit mode disabled");
@@ -3419,6 +3474,25 @@ modifyFeature.addEventListener("click", (e) => {
     updateSaveButtonState(); // ✅
   });
 });
+
+function queueEditedFeature(feature, actionMessage) {
+  if (isLocalVectorEdit) {
+    if (!updates.includes(feature) && !inserts.includes(feature)) {
+      updates.push(feature);
+    }
+    console.log(actionMessage);
+    return;
+  }
+
+  if (feature.getId()) {
+    if (!updates.includes(feature)) {
+      updates.push(feature);
+      console.log(actionMessage);
+    }
+  } else {
+    console.log("Edited unsaved feature (still in inserts).");
+  }
+}
 
 //SELECT FEATURE
 const btnSelect = document.getElementById("btnSelect");
@@ -3597,6 +3671,9 @@ addNewFeature.addEventListener("click", (e) => {
 
     // ✅ Don’t clone, just use the real feature in wfsVectorSource
     feature.set("geom", feature.getGeometry());
+    if (isLocalVectorEdit && !feature.getId()) {
+      feature.setId(`local.${Date.now()}.${inserts.length + 1}`);
+    }
 
     if (!inserts.includes(feature)) {
       inserts.push(feature);
@@ -3613,6 +3690,19 @@ function saveFeature() {
     alert("No features to save!");
     return;
   }
+
+  if (isLocalVectorEdit) {
+    deletes.forEach((item) => {
+      wfsVectorSource.removeFeature(item.feature);
+    });
+    inserts = [];
+    updates = [];
+    deletes = [];
+    updateSaveButtonState();
+    alert("Vector layer edits saved in this map session.");
+    return;
+  }
+
   // Create WFS format instance
   const wfsFormat = new WFS();
   const deleteFeatures = deletes.map((item) => item.feature);
@@ -3689,6 +3779,16 @@ deleteFeature.addEventListener("click", (e) => {
 
   // Add to deletion queue with visual feedback
   selectedFeatures.forEach((feature) => {
+    if (isLocalVectorEdit) {
+      if (!deletes.some((item) => item.feature === feature)) {
+        deletes.push({
+          feature: feature,
+          featureID: feature.getId?.() || null,
+        });
+      }
+      return;
+    }
+
     // Skip if already queued
     if (!inserts.some((f) => f.featureID === feature.get("fid"))) {
       deletes.push({
@@ -3754,6 +3854,8 @@ function createBufferLayer(bufferFeatures, distance, units, scope, outputLayerNa
     displayInLayerSwitcher: true,
     style: bufferStyle,
   });
+  bufferLayer.set("editableVector", true);
+  bufferLayer.set("bufferLayer", true);
 
   map.addLayer(bufferLayer);
   map.getView().fit(bufferSource.getExtent(), {
@@ -3851,6 +3953,7 @@ function bufferFeatures(features, distance, units, scope, outputLayerName) {
       buffer_distance: distance,
       buffer_units: units,
     });
+    olFeature.setId(`buffer.${Date.now()}.${bufferedFeatures.length + 1}`);
     bufferedFeatures.push(olFeature);
   });
 
@@ -3918,6 +4021,219 @@ bufferLayerNameInput.addEventListener("input", () => {
 bufferModal.addEventListener("click", (event) => {
   if (event.target === bufferModal) {
     closeBufferDialog();
+  }
+});
+
+const mergeFeatureButton = document.getElementById("btnMerge");
+const mergeModal = document.getElementById("mergeModal");
+const mergeModalClose = document.getElementById("mergeModalClose");
+const mergeCancel = document.getElementById("mergeCancel");
+const mergeApply = document.getElementById("mergeApply");
+const mergeStartSelect = document.getElementById("mergeStartSelect");
+const mergeSelectedHelp = document.getElementById("mergeSelectedHelp");
+
+function openMergeDialog() {
+  if (!isEditing || !wfsVectorSource) {
+    alert("Open the editor for a layer before merging features.");
+    return;
+  }
+
+  mergeModal.classList.add("open");
+  mergeModal.setAttribute("aria-hidden", "false");
+  updateMergeDialogHelp();
+}
+
+function closeMergeDialog() {
+  mergeModal.classList.remove("open");
+  mergeModal.setAttribute("aria-hidden", "true");
+}
+
+function getSelectedMergeScope() {
+  return (
+    document.querySelector('input[name="mergeScope"]:checked')?.value ||
+    "selected"
+  );
+}
+
+function updateMergeDialogHelp() {
+  const scope = getSelectedMergeScope();
+  const selectedCount = selectedFeatures.getLength();
+  const layerCount = wfsVectorSource?.getFeatures?.().length || 0;
+
+  if (scope === "layer") {
+    mergeSelectedHelp.textContent = `This will merge all ${layerCount} loaded features in the active editable layer.`;
+    mergeStartSelect.style.display = "none";
+    return;
+  }
+
+  mergeSelectedHelp.textContent = selectedCount
+    ? `${selectedCount} selected feature${selectedCount === 1 ? "" : "s"} will be merged.`
+    : "Use the editor select tool, then merge the selected features.";
+  mergeStartSelect.style.display = "block";
+}
+
+function getMergeFeatures(scope) {
+  if (scope === "layer") {
+    return (wfsVectorSource?.getFeatures?.() || []).filter((feature) =>
+      feature.getGeometry(),
+    );
+  }
+
+  return selectedFeatures
+    .getArray()
+    .filter((feature) => feature.getGeometry());
+}
+
+function getBaseGeometryType(feature) {
+  const type = feature.getGeometry()?.getType?.();
+  if (type?.includes("Point")) return "Point";
+  if (type?.includes("LineString")) return "LineString";
+  if (type?.includes("Polygon")) return "Polygon";
+  return type || "";
+}
+
+function createMergedGeoJsonFeature(features, scope) {
+  const turfApi = getTurf();
+
+  if (!turfApi?.featureCollection) {
+    alert("Turf.js is not loaded. Check your internet connection and try again.");
+    return null;
+  }
+
+  const baseType = getBaseGeometryType(features[0]);
+  const hasMixedTypes = features.some(
+    (feature) => getBaseGeometryType(feature) !== baseType,
+  );
+
+  if (hasMixedTypes) {
+    alert("Merge needs features with the same geometry type.");
+    return null;
+  }
+
+  const format = new GeoJSON();
+  const mapProjection = map.getView().getProjection().getCode();
+  const geojsonFeatures = features.map((feature) =>
+    format.writeFeatureObject(feature, {
+      featureProjection: mapProjection,
+      dataProjection: "EPSG:4326",
+    }),
+  );
+  const featureCollection = turfApi.featureCollection(geojsonFeatures);
+  let mergedGeoJson = null;
+
+  if (baseType === "Polygon") {
+    if (!turfApi.union) {
+      alert("Turf union is not available.");
+      return null;
+    }
+
+    try {
+      mergedGeoJson = turfApi.union(featureCollection);
+    } catch (error) {
+      try {
+        mergedGeoJson = geojsonFeatures.reduce((merged, feature) =>
+          merged ? turfApi.union(merged, feature) : feature,
+        );
+      } catch (fallbackError) {
+        console.error("Merge failed:", fallbackError);
+        alert("The selected polygons could not be merged.");
+        return null;
+      }
+    }
+  } else if (turfApi.combine) {
+    const combined = turfApi.combine(featureCollection);
+    mergedGeoJson = combined.features?.[0] || null;
+  }
+
+  if (!mergedGeoJson) {
+    alert("No merged geometry was created.");
+    return null;
+  }
+
+  mergedGeoJson.properties = {
+    ...(mergedGeoJson.properties || {}),
+    merged_count: features.length,
+    merge_scope: scope,
+  };
+  return mergedGeoJson;
+}
+
+function trackMergedSourceChanges(originalFeatures, mergedFeature) {
+  originalFeatures.forEach((feature) => {
+    feature.setStyle(null);
+    wfsVectorSource.removeFeature(feature);
+
+    const insertIndex = inserts.indexOf(feature);
+    if (insertIndex > -1) {
+      inserts.splice(insertIndex, 1);
+    } else if (!deletes.some((item) => item.feature === feature)) {
+      deletes.push({
+        feature,
+        featureID: feature.getId?.() || feature.get("fid") || null,
+      });
+    }
+
+    const updateIndex = updates.indexOf(feature);
+    if (updateIndex > -1) {
+      updates.splice(updateIndex, 1);
+    }
+  });
+
+  mergedFeature.set("geom", mergedFeature.getGeometry());
+  mergedFeature.setId(`merge.${Date.now()}`);
+  wfsVectorSource.addFeature(mergedFeature);
+  inserts.push(mergedFeature);
+
+  selectedFeatures.clear();
+  activeSelectInteraction?.getFeatures?.().clear?.();
+  updateSaveButtonState();
+}
+
+function applyMergeFromDialog() {
+  const scope = getSelectedMergeScope();
+  const features = getMergeFeatures(scope);
+
+  if (features.length < 2) {
+    if (scope === "selected") {
+      alert("Select at least two features from the editor toolbar first.");
+      activateSingleSelect();
+      updateMergeDialogHelp();
+      return;
+    }
+
+    alert("The active editable layer needs at least two loaded features to merge.");
+    return;
+  }
+
+  const mergedGeoJson = createMergedGeoJsonFeature(features, scope);
+  if (!mergedGeoJson) return;
+
+  const format = new GeoJSON();
+  const mapProjection = map.getView().getProjection().getCode();
+  const mergedFeature = format.readFeature(mergedGeoJson, {
+    dataProjection: "EPSG:4326",
+    featureProjection: mapProjection,
+  });
+
+  trackMergedSourceChanges(features, mergedFeature);
+  closeMergeDialog();
+}
+
+mergeFeatureButton.addEventListener("click", openMergeDialog);
+mergeModalClose.addEventListener("click", closeMergeDialog);
+mergeCancel.addEventListener("click", closeMergeDialog);
+mergeApply.addEventListener("click", applyMergeFromDialog);
+mergeStartSelect.addEventListener("click", () => {
+  activateSingleSelect();
+  updateMergeDialogHelp();
+  closeMergeDialog();
+});
+document.querySelectorAll('input[name="mergeScope"]').forEach((input) => {
+  input.addEventListener("change", updateMergeDialogHelp);
+});
+mergeModal.addEventListener("click", (event) => {
+  if (event.target === mergeModal) {
+    closeMergeDialog();
   }
 });
 
