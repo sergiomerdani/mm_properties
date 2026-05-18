@@ -3702,6 +3702,225 @@ deleteFeature.addEventListener("click", (e) => {
   console.log(`Queued ${selectedFeatures.length} features for deletion`);
 });
 
+const bufferFeatureButton = document.getElementById("btnBuffer");
+const bufferModal = document.getElementById("bufferModal");
+const bufferModalClose = document.getElementById("bufferModalClose");
+const bufferCancel = document.getElementById("bufferCancel");
+const bufferApply = document.getElementById("bufferApply");
+const bufferDistanceInput = document.getElementById("bufferDistance");
+const bufferUnitsSelect = document.getElementById("bufferUnits");
+const bufferLayerNameInput = document.getElementById("bufferLayerName");
+const bufferStartSelect = document.getElementById("bufferStartSelect");
+const bufferSelectedHelp = document.getElementById("bufferSelectedHelp");
+let bufferLayerNameEdited = false;
+
+const bufferStyle = new Style({
+  stroke: new Stroke({
+    color: "#f97316",
+    width: 3,
+  }),
+  fill: new Fill({
+    color: "rgba(249, 115, 22, 0.24)",
+  }),
+});
+
+function getTurf() {
+  return window.turf;
+}
+
+function getDefaultBufferLayerName(distance, units, scope) {
+  const unitLabel = units === "kilometers" ? "km" : "m";
+  const scopeLabel = scope === "layer" ? "Layer" : "Selected";
+  return `Buffer ${scopeLabel} ${distance || 0} ${unitLabel}`;
+}
+
+function updateDefaultBufferLayerName(force = false) {
+  if (!force && bufferLayerNameEdited) return;
+
+  bufferLayerNameInput.value = getDefaultBufferLayerName(
+    bufferDistanceInput.value,
+    bufferUnitsSelect.value,
+    getSelectedBufferScope(),
+  );
+}
+
+function createBufferLayer(bufferFeatures, distance, units, scope, outputLayerName) {
+  const bufferSource = new VectorSource({
+    features: bufferFeatures,
+  });
+  const bufferLayer = new VectorLayer({
+    source: bufferSource,
+    title: outputLayerName || getDefaultBufferLayerName(distance, units, scope),
+    displayInLayerSwitcher: true,
+    style: bufferStyle,
+  });
+
+  map.addLayer(bufferLayer);
+  map.getView().fit(bufferSource.getExtent(), {
+    duration: 600,
+    padding: [50, 50, 50, 50],
+    maxZoom: 18,
+  });
+}
+
+function openBufferDialog() {
+  if (!isEditing || !wfsVectorSource) {
+    alert("Open the editor for a layer before creating a buffer.");
+    return;
+  }
+
+  bufferModal.classList.add("open");
+  bufferModal.setAttribute("aria-hidden", "false");
+  bufferLayerNameEdited = false;
+  updateDefaultBufferLayerName(true);
+  bufferDistanceInput.focus();
+  bufferDistanceInput.select();
+  updateBufferDialogHelp();
+}
+
+function closeBufferDialog() {
+  bufferModal.classList.remove("open");
+  bufferModal.setAttribute("aria-hidden", "true");
+}
+
+function getSelectedBufferScope() {
+  return (
+    document.querySelector('input[name="bufferScope"]:checked')?.value ||
+    "selected"
+  );
+}
+
+function updateBufferDialogHelp() {
+  const scope = getSelectedBufferScope();
+  const selectedCount = selectedFeatures.getLength();
+  const layerCount = wfsVectorSource?.getFeatures?.().length || 0;
+
+  if (scope === "layer") {
+    bufferSelectedHelp.textContent = `This will buffer all ${layerCount} loaded features in the active editable layer.`;
+    bufferStartSelect.style.display = "none";
+    return;
+  }
+
+  bufferSelectedHelp.textContent = selectedCount
+    ? `${selectedCount} selected feature${selectedCount === 1 ? "" : "s"} will be buffered.`
+    : "Use the editor select tool, then run the buffer for the selected features.";
+  bufferStartSelect.style.display = "block";
+}
+
+function getBufferFeatures(scope) {
+  if (scope === "layer") {
+    return (wfsVectorSource?.getFeatures?.() || []).filter((feature) =>
+      feature.getGeometry(),
+    );
+  }
+
+  return selectedFeatures
+    .getArray()
+    .filter((feature) => feature.getGeometry());
+}
+
+function bufferFeatures(features, distance, units, scope, outputLayerName) {
+  const turfApi = getTurf();
+
+  if (!turfApi?.buffer) {
+    alert("Turf.js is not loaded. Check your internet connection and try again.");
+    return false;
+  }
+
+  const format = new GeoJSON();
+  const mapProjection = map.getView().getProjection().getCode();
+  const bufferedFeatures = [];
+
+  features.forEach((feature) => {
+    const geojsonFeature = format.writeFeatureObject(feature, {
+      featureProjection: mapProjection,
+      dataProjection: "EPSG:4326",
+    });
+    const buffered = turfApi.buffer(geojsonFeature, distance, {
+      units,
+    });
+
+    if (!buffered) return;
+
+    const olFeature = format.readFeature(buffered, {
+      dataProjection: "EPSG:4326",
+      featureProjection: mapProjection,
+    });
+    olFeature.setProperties({
+      sourceId: feature.getId?.() || feature.get("fid") || null,
+      buffer_distance: distance,
+      buffer_units: units,
+    });
+    bufferedFeatures.push(olFeature);
+  });
+
+  if (!bufferedFeatures.length) {
+    alert("No buffer geometry was created.");
+    return false;
+  }
+
+  createBufferLayer(bufferedFeatures, distance, units, scope, outputLayerName);
+  return true;
+}
+
+function applyBufferFromDialog() {
+  const distance = Number(bufferDistanceInput.value);
+  const units = bufferUnitsSelect.value;
+  const scope = getSelectedBufferScope();
+  const outputLayerName =
+    bufferLayerNameInput.value.trim() ||
+    getDefaultBufferLayerName(bufferDistanceInput.value, units, scope);
+
+  if (!Number.isFinite(distance) || distance <= 0) {
+    alert("Please enter a positive buffer distance.");
+    bufferDistanceInput.focus();
+    return;
+  }
+
+  const features = getBufferFeatures(scope);
+  if (!features.length) {
+    if (scope === "selected") {
+      alert("Select one or more features from the editor toolbar first.");
+      activateSingleSelect();
+      updateBufferDialogHelp();
+      return;
+    }
+
+    alert("No loaded features were found in the active editable layer.");
+    return;
+  }
+
+  if (bufferFeatures(features, distance, units, scope, outputLayerName)) {
+    closeBufferDialog();
+  }
+}
+
+bufferFeatureButton.addEventListener("click", openBufferDialog);
+bufferModalClose.addEventListener("click", closeBufferDialog);
+bufferCancel.addEventListener("click", closeBufferDialog);
+bufferApply.addEventListener("click", applyBufferFromDialog);
+bufferStartSelect.addEventListener("click", () => {
+  activateSingleSelect();
+  updateBufferDialogHelp();
+  closeBufferDialog();
+});
+document.querySelectorAll('input[name="bufferScope"]').forEach((input) => {
+  input.addEventListener("change", () => {
+    updateDefaultBufferLayerName();
+    updateBufferDialogHelp();
+  });
+});
+bufferDistanceInput.addEventListener("input", () => updateDefaultBufferLayerName());
+bufferUnitsSelect.addEventListener("change", () => updateDefaultBufferLayerName());
+bufferLayerNameInput.addEventListener("input", () => {
+  bufferLayerNameEdited = bufferLayerNameInput.value.trim().length > 0;
+});
+bufferModal.addEventListener("click", (event) => {
+  if (event.target === bufferModal) {
+    closeBufferDialog();
+  }
+});
+
 // SAVE FEATURE EVENT
 const saveFeatureButton = document.getElementById("btnSave");
 saveFeatureButton.addEventListener("click", () => {
