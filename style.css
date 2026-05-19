@@ -1129,7 +1129,9 @@ button.fa-button.active {
 }
 
 #bufferModal,
-#mergeModal {
+#mergeModal,
+#intersectModal,
+#mergeLayersModal {
   display: none;
   position: fixed;
   inset: 0;
@@ -1141,12 +1143,16 @@ button.fa-button.active {
 }
 
 #bufferModal.open,
-#mergeModal.open {
+#mergeModal.open,
+#intersectModal.open,
+#mergeLayersModal.open {
   display: flex;
 }
 
 #bufferModalContent,
-#mergeModalContent {
+#mergeModalContent,
+#intersectModalContent,
+#mergeLayersModalContent {
   width: min(360px, 100%);
   background: #ffffff;
   border: 1px solid #cbd5e1;
@@ -1175,7 +1181,9 @@ button.fa-button.active {
 }
 
 #bufferModalClose,
-#mergeModalClose {
+#mergeModalClose,
+#intersectModalClose,
+#mergeLayersModalClose {
   width: 28px;
   height: 28px;
   border: 0;
@@ -1187,7 +1195,9 @@ button.fa-button.active {
 }
 
 #bufferModalContent label,
-#mergeModalContent label {
+#mergeModalContent label,
+#intersectModalContent label,
+#mergeLayersModalContent label {
   display: block;
   margin: 10px 0 5px;
   font-size: 12px;
@@ -1196,7 +1206,13 @@ button.fa-button.active {
 
 #bufferDistance,
 #bufferLayerName,
-#bufferUnits {
+#bufferUnits,
+#intersectLayerA,
+#intersectLayerB,
+#intersectLayerName,
+#mergeLayerA,
+#mergeLayerB,
+#mergeLayersName {
   height: 32px;
   border: 1px solid #bfccd8;
   border-radius: 4px;
@@ -1211,6 +1227,16 @@ button.fa-button.active {
 
 #bufferLayerName {
   width: 100%;
+}
+
+#intersectLayerA,
+#intersectLayerB,
+#intersectLayerName,
+#mergeLayerA,
+#mergeLayerB,
+#mergeLayersName {
+  width: 100%;
+  background: white;
 }
 
 #bufferUnits {
@@ -1269,7 +1295,9 @@ button.fa-button.active {
 }
 
 #bufferApply,
-#mergeApply {
+#mergeApply,
+#intersectApply,
+#mergeLayersApply {
   background: #2563eb;
   border-color: #2563eb;
   color: white;
@@ -1367,6 +1395,21 @@ button.fa-button.active {
 
 .dropdown-show {
   display: flex;
+}
+
+.navbar-tool-group .dropdown-content {
+  position: fixed;
+  top: 62px;
+  bottom: auto;
+  left: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  z-index: 7000;
+  min-width: 72px;
+}
+
+.navbar-tool-group .dropdown-arrow {
+  height: 30px;
 }
 
 .grid-container.chat-collapsed #editToolbar {

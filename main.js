@@ -4237,6 +4237,414 @@ mergeModal.addEventListener("click", (event) => {
   }
 });
 
+const btnGeoprocess = document.getElementById("btnGeoprocess");
+const btnGeoprocessDropdown = document.getElementById("btnGeoprocessDropdown");
+const geoprocessOptions = document.getElementById("geoprocessOptions");
+const btnIntersectLayers = document.getElementById("btnIntersectLayers");
+const btnMergeLayers = document.getElementById("btnMergeLayers");
+const intersectModal = document.getElementById("intersectModal");
+const intersectModalClose = document.getElementById("intersectModalClose");
+const intersectCancel = document.getElementById("intersectCancel");
+const intersectApply = document.getElementById("intersectApply");
+const intersectLayerA = document.getElementById("intersectLayerA");
+const intersectLayerB = document.getElementById("intersectLayerB");
+const intersectLayerName = document.getElementById("intersectLayerName");
+const mergeLayersModal = document.getElementById("mergeLayersModal");
+const mergeLayersModalClose = document.getElementById("mergeLayersModalClose");
+const mergeLayersCancel = document.getElementById("mergeLayersCancel");
+const mergeLayersApply = document.getElementById("mergeLayersApply");
+const mergeLayerA = document.getElementById("mergeLayerA");
+const mergeLayerB = document.getElementById("mergeLayerB");
+const mergeLayersName = document.getElementById("mergeLayersName");
+let currentGeoprocessLayerItems = [];
+
+const geoprocessResultStyle = new Style({
+  stroke: new Stroke({ color: "#06b6d4", width: 3 }),
+  fill: new Fill({ color: "rgba(6, 182, 212, 0.26)" }),
+  image: new CircleStyle({
+    radius: 7,
+    fill: new Fill({ color: "rgba(6, 182, 212, 0.85)" }),
+    stroke: new Stroke({ color: "#ffffff", width: 2 }),
+  }),
+});
+
+function getGeoprocessLayerItems() {
+  const items = [];
+
+  function visitLayer(layer) {
+    if (layer instanceof LayerGroup) {
+      layer.getLayers().forEach(visitLayer);
+      return;
+    }
+
+    if (layer instanceof VectorLayer) {
+      const layerSource = layer.getSource?.();
+      const layerFeatures = layerSource?.getFeatures?.() || [];
+      const firstFeature = layerFeatures.find((feature) => feature.getGeometry?.());
+      items.push({
+        layer,
+        source: layerSource,
+        title: layer.get("title") || `Vector layer ${items.length + 1}`,
+        features: layerFeatures.filter((feature) => feature.getGeometry?.()),
+        geometryType: firstFeature ? getBaseGeometryType(firstFeature) : "",
+        typeName: "",
+        sourceType: "vector",
+      });
+      return;
+    }
+
+    const params = layer.getSource?.()?.getParams?.();
+    const typeName = params?.LAYERS || params?.layers;
+    if (!typeName) return;
+
+    items.push({
+      layer,
+      source: layer.getSource?.(),
+      title: layer.get("title") || typeName,
+      features: null,
+      geometryType: "",
+      typeName,
+      sourceType: "wfs",
+    });
+  }
+
+  map.getLayers().forEach(visitLayer);
+  return items;
+}
+
+function fillLayerSelect(selectElement, items) {
+  selectElement.innerHTML = "";
+  items.forEach((item, index) => {
+    const option = document.createElement("option");
+    option.value = String(index);
+    const sourceLabel = item.sourceType === "wfs" ? "WFS" : item.geometryType || "Vector";
+    option.textContent = `${item.title} (${sourceLabel})`;
+    selectElement.appendChild(option);
+  });
+
+  if (!items.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No processable layers found";
+    option.disabled = true;
+    option.selected = true;
+    selectElement.appendChild(option);
+  }
+}
+
+function getSelectedLayerItem(selectElement, items) {
+  const index = Number(selectElement.value);
+  return Number.isInteger(index) ? items[index] : null;
+}
+
+function prepareLayerDialog(selectA, selectB) {
+  currentGeoprocessLayerItems = getGeoprocessLayerItems();
+  fillLayerSelect(selectA, currentGeoprocessLayerItems);
+  fillLayerSelect(selectB, currentGeoprocessLayerItems);
+
+  if (currentGeoprocessLayerItems.length > 1) {
+    selectB.value = "1";
+  }
+
+  return currentGeoprocessLayerItems.length;
+}
+
+async function loadGeoprocessFeatures(layerItem) {
+  if (layerItem.sourceType === "vector") {
+    layerItem.features = (layerItem.source?.getFeatures?.() || []).filter(
+      (feature) => feature.getGeometry?.(),
+    );
+    const firstFeature = layerItem.features[0];
+    layerItem.geometryType = firstFeature ? getBaseGeometryType(firstFeature) : "";
+    return layerItem;
+  }
+
+  const typeName = layerItem.typeName;
+  if (!typeName) {
+    throw new Error(`Layer "${layerItem.title}" has no WFS type name.`);
+  }
+
+  const [layerWorkspace = workspaceName] = typeName.includes(":")
+    ? typeName.split(":")
+    : [workspaceName];
+  const wfsUrl = getWfsGetFeatureUrl({
+    workspace: layerWorkspace,
+    typeName,
+    version: "1.1.0",
+    maxFeatures: 1000,
+  });
+  const response = await fetch(wfsUrl);
+  if (!response.ok) {
+    throw new Error(`Could not load ${layerItem.title}: HTTP ${response.status}`);
+  }
+
+  const geojson = await response.json();
+  const format = new GeoJSON();
+  layerItem.features = format.readFeatures(geojson, {
+    dataProjection: "EPSG:3857",
+    featureProjection: map.getView().getProjection().getCode(),
+  });
+  const firstFeature = layerItem.features.find((feature) => feature.getGeometry?.());
+  layerItem.geometryType = firstFeature ? getBaseGeometryType(firstFeature) : "";
+  return layerItem;
+}
+
+function createEditableResultLayer(features, title) {
+  const resultSource = new VectorSource({ features });
+  const resultLayer = new VectorLayer({
+    source: resultSource,
+    title,
+    displayInLayerSwitcher: true,
+    visible: true,
+    style: geoprocessResultStyle,
+  });
+
+  resultLayer.set("editableVector", true);
+  resultLayer.set("geoprocessLayer", true);
+  map.addLayer(resultLayer);
+
+  const extent = resultSource.getExtent();
+  if (features.length && extent.every(Number.isFinite)) {
+    map.getView().fit(extent, {
+      duration: 600,
+      padding: [60, 60, 60, 60],
+      maxZoom: 18,
+    });
+  }
+
+  return resultLayer;
+}
+
+function showFeaturesInAttributeTable(features) {
+  const tableContainer = document.getElementById("attribute-table-container");
+  tableContainer.hidden = false;
+  populateAttributeTable(features);
+  selectedAttributeFeatures = [...features];
+  document
+    .querySelectorAll("#attribute-table tbody tr")
+    .forEach((row) => row.classList.add("highlighted-row"));
+  updateAttributeZoomButton();
+  syncAttributeSelectionLayer();
+}
+
+function openIntersectionDialog() {
+  prepareLayerDialog(intersectLayerA, intersectLayerB);
+  geoprocessOptions.classList.remove("dropdown-show");
+  intersectModal.classList.add("open");
+  intersectModal.setAttribute("aria-hidden", "false");
+}
+
+function closeIntersectionDialog() {
+  intersectModal.classList.remove("open");
+  intersectModal.setAttribute("aria-hidden", "true");
+}
+
+function createIntersectionFeatures(layerItemA, layerItemB) {
+  const turfApi = getTurf();
+  if (!turfApi?.intersect || !turfApi?.featureCollection) {
+    alert("Turf intersection is not loaded. Check your internet connection and try again.");
+    return [];
+  }
+
+  const format = new GeoJSON();
+  const mapProjection = map.getView().getProjection().getCode();
+  const results = [];
+
+  layerItemA.features.forEach((featureA) => {
+    const geojsonA = format.writeFeatureObject(featureA, {
+      featureProjection: mapProjection,
+      dataProjection: "EPSG:4326",
+    });
+
+    layerItemB.features.forEach((featureB) => {
+      const geojsonB = format.writeFeatureObject(featureB, {
+        featureProjection: mapProjection,
+        dataProjection: "EPSG:4326",
+      });
+      let intersection = null;
+
+      try {
+        intersection = turfApi.intersect(
+          turfApi.featureCollection([geojsonA, geojsonB]),
+        );
+      } catch (error) {
+        try {
+          intersection = turfApi.intersect(geojsonA, geojsonB);
+        } catch (fallbackError) {
+          intersection = null;
+        }
+      }
+
+      if (!intersection) return;
+
+      intersection.properties = {
+        ...(intersection.properties || {}),
+        layer_a: layerItemA.title,
+        layer_b: layerItemB.title,
+        source_a: featureA.getId?.() || featureA.get("fid") || "",
+        source_b: featureB.getId?.() || featureB.get("fid") || "",
+      };
+
+      const resultFeature = format.readFeature(intersection, {
+        dataProjection: "EPSG:4326",
+        featureProjection: mapProjection,
+      });
+      resultFeature.setId(`intersection.${Date.now()}.${results.length + 1}`);
+      results.push(resultFeature);
+    });
+  });
+
+  return results;
+}
+
+async function applyIntersectionDialog() {
+  const layerItemA = getSelectedLayerItem(intersectLayerA, currentGeoprocessLayerItems);
+  const layerItemB = getSelectedLayerItem(intersectLayerB, currentGeoprocessLayerItems);
+
+  if (!layerItemA || !layerItemB || layerItemA === layerItemB) {
+    alert("Choose two different layers.");
+    return;
+  }
+
+  intersectApply.disabled = true;
+  intersectApply.textContent = "Processing...";
+  let loadedLayerA;
+  let loadedLayerB;
+  try {
+    loadedLayerA = await loadGeoprocessFeatures(layerItemA);
+    loadedLayerB = await loadGeoprocessFeatures(layerItemB);
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "Failed to load selected layers.");
+    intersectApply.disabled = false;
+    intersectApply.textContent = "Apply";
+    return;
+  }
+
+  const results = createIntersectionFeatures(loadedLayerA, loadedLayerB);
+  intersectApply.disabled = false;
+  intersectApply.textContent = "Apply";
+  if (!results.length) {
+    alert("No intersections were found.");
+    return;
+  }
+
+  createEditableResultLayer(
+    results,
+    intersectLayerName.value.trim() || "Intersection result",
+  );
+  showFeaturesInAttributeTable(results);
+  closeIntersectionDialog();
+}
+
+function openMergeLayersDialog() {
+  prepareLayerDialog(mergeLayerA, mergeLayerB);
+  geoprocessOptions.classList.remove("dropdown-show");
+  mergeLayersModal.classList.add("open");
+  mergeLayersModal.setAttribute("aria-hidden", "false");
+}
+
+function closeMergeLayersDialog() {
+  mergeLayersModal.classList.remove("open");
+  mergeLayersModal.setAttribute("aria-hidden", "true");
+}
+
+async function applyMergeLayersDialog() {
+  const layerItemA = getSelectedLayerItem(mergeLayerA, currentGeoprocessLayerItems);
+  const layerItemB = getSelectedLayerItem(mergeLayerB, currentGeoprocessLayerItems);
+
+  if (!layerItemA || !layerItemB || layerItemA === layerItemB) {
+    alert("Choose two different layers.");
+    return;
+  }
+
+  mergeLayersApply.disabled = true;
+  mergeLayersApply.textContent = "Processing...";
+  let loadedLayerA;
+  let loadedLayerB;
+  try {
+    loadedLayerA = await loadGeoprocessFeatures(layerItemA);
+    loadedLayerB = await loadGeoprocessFeatures(layerItemB);
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "Failed to load selected layers.");
+    mergeLayersApply.disabled = false;
+    mergeLayersApply.textContent = "Merge";
+    return;
+  }
+
+  mergeLayersApply.disabled = false;
+  mergeLayersApply.textContent = "Merge";
+
+  if (loadedLayerA.geometryType !== loadedLayerB.geometryType) {
+    alert("The two layers must have the same geometry type.");
+    return;
+  }
+
+  const mergedFeatures = [...loadedLayerA.features, ...loadedLayerB.features].map(
+    (feature, index) => {
+      const clone = feature.clone();
+      clone.setProperties(feature.getProperties());
+      clone.setId(`merged-layer.${Date.now()}.${index + 1}`);
+      return clone;
+    },
+  );
+
+  if (!mergedFeatures.length) {
+    alert("No features were found to merge.");
+    return;
+  }
+
+  createEditableResultLayer(
+    mergedFeatures,
+    mergeLayersName.value.trim() || "Merged layer",
+  );
+  closeMergeLayersDialog();
+}
+
+function positionGeoprocessDropdown() {
+  const anchorRect = btnGeoprocess.getBoundingClientRect();
+  geoprocessOptions.style.left = `${anchorRect.left}px`;
+  geoprocessOptions.style.top = `${anchorRect.bottom + 6}px`;
+}
+
+function toggleGeoprocessDropdown(event) {
+  event.stopPropagation();
+  positionGeoprocessDropdown();
+  geoprocessOptions.classList.toggle("dropdown-show");
+}
+
+btnGeoprocess.addEventListener("click", toggleGeoprocessDropdown);
+btnGeoprocessDropdown.addEventListener("click", toggleGeoprocessDropdown);
+window.addEventListener("resize", () => {
+  if (geoprocessOptions.classList.contains("dropdown-show")) {
+    positionGeoprocessDropdown();
+  }
+});
+document.addEventListener("click", (event) => {
+  if (
+    !geoprocessOptions.contains(event.target) &&
+    !btnGeoprocess.contains(event.target) &&
+    !btnGeoprocessDropdown.contains(event.target)
+  ) {
+    geoprocessOptions.classList.remove("dropdown-show");
+  }
+});
+btnIntersectLayers.addEventListener("click", openIntersectionDialog);
+btnMergeLayers.addEventListener("click", openMergeLayersDialog);
+intersectModalClose.addEventListener("click", closeIntersectionDialog);
+intersectCancel.addEventListener("click", closeIntersectionDialog);
+intersectApply.addEventListener("click", applyIntersectionDialog);
+mergeLayersModalClose.addEventListener("click", closeMergeLayersDialog);
+mergeLayersCancel.addEventListener("click", closeMergeLayersDialog);
+mergeLayersApply.addEventListener("click", applyMergeLayersDialog);
+intersectModal.addEventListener("click", (event) => {
+  if (event.target === intersectModal) closeIntersectionDialog();
+});
+mergeLayersModal.addEventListener("click", (event) => {
+  if (event.target === mergeLayersModal) closeMergeLayersDialog();
+});
+
 // SAVE FEATURE EVENT
 const saveFeatureButton = document.getElementById("btnSave");
 saveFeatureButton.addEventListener("click", () => {

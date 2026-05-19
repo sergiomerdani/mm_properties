@@ -13,8 +13,8 @@
       crossorigin="anonymous"
     ></script>
     <title>INOVACIONI</title>
-    <script type="module" crossorigin src="/assets/index-3lf9yvQs.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-cN1uhh5_.css">
+    <script type="module" crossorigin src="/assets/index-BsTCPOFX.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-C3z3OaWV.css">
   </head>
   <body>
     <div class="grid-container">
@@ -105,6 +105,22 @@
           <button class="fa-button" id="heatmap" title="Create Heatmap">
             🔥
           </button>
+          <div class="btn-group navbar-tool-group">
+            <button id="btnGeoprocess" class="fa-button" title="Geoprocessing">
+              <i class="fa-solid fa-diagram-project"></i>
+            </button>
+            <div class="dropdown">
+              <button id="btnGeoprocessDropdown" class="dropdown-arrow" title="Geoprocessing tools">⏷</button>
+              <div id="geoprocessOptions" class="dropdown-content navbar-dropdown-content">
+                <button id="btnIntersectLayers" title="Intersect Layers">
+                  <i class="fa-solid fa-vector-square"></i>
+                </button>
+                <button id="btnMergeLayers" title="Merge Layers">
+                  <i class="fa-solid fa-layer-group"></i>
+                </button>
+              </div>
+            </div>
+          </div>
           <button id="reachabilityBtn" class="fa-button" title="Reachability">
             🗺️
           </button>
@@ -158,6 +174,60 @@
           <i class="fa-regular fa-copy"></i>
         </button>
         <button id="btnPin" title="Pin Shared Vertices Together">📌</button>
+      </div>
+
+      <div id="intersectModal" aria-hidden="true">
+        <div id="intersectModalContent">
+          <div class="buffer-modal-header">
+            <h4>Intersection</h4>
+            <button id="intersectModalClose" type="button" title="Close">×</button>
+          </div>
+
+          <label for="intersectLayerA">Input Layer</label>
+          <select id="intersectLayerA"></select>
+
+          <label for="intersectLayerB">Overlay Layer</label>
+          <select id="intersectLayerB"></select>
+
+          <label for="intersectLayerName">Output Layer Name</label>
+          <input type="text" id="intersectLayerName" value="Intersection result" />
+
+          <div class="buffer-help">
+            The result will be added to the map and opened in the attribute table.
+          </div>
+
+          <div class="buffer-modal-actions">
+            <button id="intersectCancel" type="button">Cancel</button>
+            <button id="intersectApply" type="button">Apply</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="mergeLayersModal" aria-hidden="true">
+        <div id="mergeLayersModalContent">
+          <div class="buffer-modal-header">
+            <h4>Merge Layers</h4>
+            <button id="mergeLayersModalClose" type="button" title="Close">×</button>
+          </div>
+
+          <label for="mergeLayerA">Layer 1</label>
+          <select id="mergeLayerA"></select>
+
+          <label for="mergeLayerB">Layer 2</label>
+          <select id="mergeLayerB"></select>
+
+          <label for="mergeLayersName">Output Layer Name</label>
+          <input type="text" id="mergeLayersName" value="Merged layer" />
+
+          <div class="buffer-help">
+            Choose two layers with the same geometry type. A new editable layer will be created.
+          </div>
+
+          <div class="buffer-modal-actions">
+            <button id="mergeLayersCancel" type="button">Cancel</button>
+            <button id="mergeLayersApply" type="button">Merge</button>
+          </div>
+        </div>
       </div>
 
       <div id="mergeModal" aria-hidden="true">
@@ -784,7 +854,7 @@
       </div>
     </div>
     <script src="/node_modules/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"></script>
     <script src="node_modules/shpjs/dist/shp.min.js"></script>
   </body>
 </html>
