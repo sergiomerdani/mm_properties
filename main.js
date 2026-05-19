@@ -873,6 +873,7 @@ function getWfsGetFeatureUrl({
   version = "1.1.0",
   maxFeatures,
   outputFormat = "application/json",
+  srsName,
 }) {
   const params = new URLSearchParams({
     service: "WFS",
@@ -884,6 +885,10 @@ function getWfsGetFeatureUrl({
 
   if (maxFeatures) {
     params.set("maxFeatures", String(maxFeatures));
+  }
+
+  if (srsName) {
+    params.set("srsName", srsName);
   }
 
   return `${getGeoServerProxyOwsUrl(workspace)}?${params}`;
@@ -4248,7 +4253,6 @@ const intersectCancel = document.getElementById("intersectCancel");
 const intersectApply = document.getElementById("intersectApply");
 const intersectLayerA = document.getElementById("intersectLayerA");
 const intersectLayerB = document.getElementById("intersectLayerB");
-const intersectLayerName = document.getElementById("intersectLayerName");
 const mergeLayersModal = document.getElementById("mergeLayersModal");
 const mergeLayersModalClose = document.getElementById("mergeLayersModalClose");
 const mergeLayersCancel = document.getElementById("mergeLayersCancel");
@@ -4372,6 +4376,7 @@ async function loadGeoprocessFeatures(layerItem) {
     typeName,
     version: "1.1.0",
     maxFeatures: 1000,
+    srsName: map.getView().getProjection().getCode(),
   });
   const response = await fetch(wfsUrl);
   if (!response.ok) {
@@ -4439,9 +4444,9 @@ function closeIntersectionDialog() {
   intersectModal.setAttribute("aria-hidden", "true");
 }
 
-function createIntersectionFeatures(layerItemA, layerItemB) {
+function createIntersectingOverlayFeatures(inputLayerItem, overlayLayerItem) {
   const turfApi = getTurf();
-  if (!turfApi?.intersect || !turfApi?.featureCollection) {
+  if (!turfApi?.booleanIntersects || !turfApi?.featureCollection) {
     alert("Turf intersection is not loaded. Check your internet connection and try again.");
     return [];
   }
@@ -4449,49 +4454,42 @@ function createIntersectionFeatures(layerItemA, layerItemB) {
   const format = new GeoJSON();
   const mapProjection = map.getView().getProjection().getCode();
   const results = [];
+  const inputGeoJsonFeatures = inputLayerItem.features.map((feature) =>
+    format.writeFeatureObject(feature, {
+      featureProjection: mapProjection,
+      dataProjection: "EPSG:4326",
+    }),
+  );
 
-  layerItemA.features.forEach((featureA) => {
-    const geojsonA = format.writeFeatureObject(featureA, {
+  overlayLayerItem.features.forEach((overlayFeature) => {
+    const overlayGeoJson = format.writeFeatureObject(overlayFeature, {
       featureProjection: mapProjection,
       dataProjection: "EPSG:4326",
     });
 
-    layerItemB.features.forEach((featureB) => {
-      const geojsonB = format.writeFeatureObject(featureB, {
-        featureProjection: mapProjection,
-        dataProjection: "EPSG:4326",
-      });
-      let intersection = null;
-
+    const intersectsInput = inputGeoJsonFeatures.some((inputGeoJson) => {
       try {
-        intersection = turfApi.intersect(
-          turfApi.featureCollection([geojsonA, geojsonB]),
-        );
+        return turfApi.booleanIntersects(inputGeoJson, overlayGeoJson);
       } catch (error) {
-        try {
-          intersection = turfApi.intersect(geojsonA, geojsonB);
-        } catch (fallbackError) {
-          intersection = null;
-        }
+        console.warn("Intersection check failed:", error);
+        return false;
       }
-
-      if (!intersection) return;
-
-      intersection.properties = {
-        ...(intersection.properties || {}),
-        layer_a: layerItemA.title,
-        layer_b: layerItemB.title,
-        source_a: featureA.getId?.() || featureA.get("fid") || "",
-        source_b: featureB.getId?.() || featureB.get("fid") || "",
-      };
-
-      const resultFeature = format.readFeature(intersection, {
-        dataProjection: "EPSG:4326",
-        featureProjection: mapProjection,
-      });
-      resultFeature.setId(`intersection.${Date.now()}.${results.length + 1}`);
-      results.push(resultFeature);
     });
+
+    if (intersectsInput) {
+      const selectedFeature = overlayFeature.clone();
+      selectedFeature.setProperties({
+        ...overlayFeature.getProperties(),
+        selected_from_layer: overlayLayerItem.title,
+        intersects_layer: inputLayerItem.title,
+        source_id: overlayFeature.getId?.() || overlayFeature.get("fid") || "",
+      });
+      selectedFeature.setId(
+        overlayFeature.getId?.() ||
+          `selected-intersection.${Date.now()}.${results.length + 1}`,
+      );
+      results.push(selectedFeature);
+    }
   });
 
   return results;
@@ -4521,18 +4519,14 @@ async function applyIntersectionDialog() {
     return;
   }
 
-  const results = createIntersectionFeatures(loadedLayerA, loadedLayerB);
+  const results = createIntersectingOverlayFeatures(loadedLayerA, loadedLayerB);
   intersectApply.disabled = false;
   intersectApply.textContent = "Apply";
   if (!results.length) {
-    alert("No intersections were found.");
+    alert("No overlay features intersect the input layer.");
     return;
   }
 
-  createEditableResultLayer(
-    results,
-    intersectLayerName.value.trim() || "Intersection result",
-  );
   showFeaturesInAttributeTable(results);
   closeIntersectionDialog();
 }
