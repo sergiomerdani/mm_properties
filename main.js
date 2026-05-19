@@ -581,9 +581,15 @@ const zoomExtentBtn = document.getElementById("zoom-extent");
 zoomExtentBtn.addEventListener("click", function () {
   const view = map.getView();
   const savedView = getInitialMapViewState();
+  const viewProjection = view.getProjection().getCode();
+  const savedProjection = savedView.projection || defaultMapProjection;
+  const center =
+    savedProjection === viewProjection
+      ? savedView.center
+      : transform(savedView.center, savedProjection, viewProjection);
 
   view.animate({
-    center: savedView.center,
+    center,
     zoom: savedView.zoom,
     duration: 500,
   });
@@ -599,11 +605,24 @@ const fullScreenControl = new FullScreen({
 //Zoom Slider
 // const zoomSlider = new ZoomSlider();
 
+const projectionDisplayNames = {
+  "EPSG:3857": "Web Mercator",
+  "EPSG:4326": "WGS84",
+  "EPSG:6870": "KRGJSH",
+  "EPSG:32634": "UTM 34N",
+};
+
+function formatMapCoordinate(coordinate) {
+  const projectionCode =
+    map?.getView?.().getProjection?.().getCode?.() || defaultMapProjection;
+  const decimals = projectionCode === "EPSG:4326" ? 6 : 2;
+  const label = projectionDisplayNames[projectionCode] || projectionCode;
+  return `${label} (${projectionCode}) : ${toStringXY(coordinate, decimals)}`;
+}
+
 //MousePosition Coordinates
 const mousePositionControl = new MousePosition({
-  coordinateFormat: function (coordinate) {
-    return "KRGJSH : " + toStringXY(coordinate, 2);
-  },
+  coordinateFormat: formatMapCoordinate,
   className: "custom-mouse-position",
 });
 
@@ -935,10 +954,12 @@ const center_4326 = [19.80835, 41.310824];
 const center_3857 = [2206185.65, 5060810.15];
 const saranda_center = [2226806.503832, 4847588.560703];
 const mapSessionViewKey = "mmPropertiesMapView";
+const defaultMapProjection = "EPSG:3857";
 
 function getInitialMapViewState() {
   try {
     const savedView = JSON.parse(sessionStorage.getItem(mapSessionViewKey));
+    const projection = savedView?.projection || defaultMapProjection;
     if (
       Array.isArray(savedView?.center) &&
       savedView.center.length === 2 &&
@@ -946,7 +967,11 @@ function getInitialMapViewState() {
       Number.isFinite(savedView.center[1]) &&
       Number.isFinite(savedView.zoom)
     ) {
-      return savedView;
+      return {
+        center: savedView.center,
+        zoom: savedView.zoom,
+        projection,
+      };
     }
   } catch (error) {
     console.warn("Could not read saved map view:", error);
@@ -955,6 +980,7 @@ function getInitialMapViewState() {
   return {
     center: [0, 0],
     zoom: 2,
+    projection: defaultMapProjection,
   };
 }
 
@@ -965,7 +991,7 @@ const map = new Map({
   controls: defaults({ attribution: false }).extend(mapControls),
   layers: [baseLayerGroup, asigLayers, addressSystem, planifikimiLayers],
   view: new View({
-    projection: "EPSG:3857",
+    projection: initialMapViewState.projection,
     center: initialMapViewState.center,
     zoom: initialMapViewState.zoom,
     maxZoom: 20,
@@ -979,9 +1005,48 @@ function saveCurrentMapViewForSession() {
     JSON.stringify({
       center: view.getCenter(),
       zoom: view.getZoom(),
+      projection: view.getProjection().getCode(),
     }),
   );
 }
+
+const mapProjectionSelect = document.getElementById("mapProjectionSelect");
+const setMapProjectionButton = document.getElementById("setMapProjection");
+
+if (mapProjectionSelect) {
+  mapProjectionSelect.value = map.getView().getProjection().getCode();
+}
+
+function setMapProjection(projectionCode) {
+  const oldView = map.getView();
+  const oldProjection = oldView.getProjection().getCode();
+
+  if (projectionCode === oldProjection) return;
+
+  const oldCenter = oldView.getCenter() || [0, 0];
+  let nextCenter = oldCenter;
+  try {
+    nextCenter = transform(oldCenter, oldProjection, projectionCode);
+  } catch (error) {
+    console.warn("Could not transform map center:", error);
+  }
+
+  map.setView(
+    new View({
+      projection: projectionCode,
+      center: nextCenter,
+      zoom: oldView.getZoom(),
+      rotation: oldView.getRotation(),
+      maxZoom: 20,
+    }),
+  );
+  calculateScale();
+  map.updateSize();
+}
+
+setMapProjectionButton?.addEventListener("click", () => {
+  setMapProjection(mapProjectionSelect.value);
+});
 
 document
   .getElementById("save-session-view")
@@ -5001,6 +5066,8 @@ function populateAttributeSelect(selectElement) {
 let ft, featuresInView;
 
 const attributeLayerSelect = document.getElementById("attribute-layer-select");
+const attributeVisibleOnly = document.getElementById("attribute-visible-only");
+const attributeRecordCount = document.getElementById("attribute-record-count");
 
 // Listen for layer selection changes
 selectLayers.addEventListener("change", (event) => {
@@ -5028,6 +5095,37 @@ function getLayers2() {
 }
 
 let layerIndex, selectedLayer2, tableLayerSelected;
+let attributeTableFeatures = [];
+
+function getVisibleAttributeFeatures(features) {
+  const view = map.getView();
+  const size = map.getSize();
+  if (!size) return features;
+
+  const extent = view.calculateExtent(size);
+  return features.filter((feature) => feature.getGeometry()?.intersectsExtent(extent));
+}
+
+function refreshAttributeTableView() {
+  const featuresToShow = attributeVisibleOnly.checked
+    ? getVisibleAttributeFeatures(attributeTableFeatures)
+    : attributeTableFeatures;
+  populateAttributeTable(featuresToShow);
+  attributeRecordCount.textContent = `${featuresToShow.length} / ${attributeTableFeatures.length} records`;
+}
+
+map.on("moveend", () => {
+  const tableContainer = document.getElementById("attribute-table-container");
+  if (
+    tableContainer.hidden ||
+    !attributeVisibleOnly.checked ||
+    !attributeTableFeatures.length
+  ) {
+    return;
+  }
+
+  refreshAttributeTableView();
+});
 
 document
   .getElementById("attributeTable")
@@ -5050,12 +5148,16 @@ attributeLayerSelect.addEventListener("change", (event) => {
   selectedLayer2 = layersArray[layerIndex];
   getSelectedLayerTable(selectedLayer2);
 });
+
+attributeVisibleOnly.addEventListener("change", refreshAttributeTableView);
+
 function getSelectedLayerTable(selectedLayer) {
   const layerParams = selectedLayer.getSource()?.getParams?.();
   tableLayerSelected = layerParams?.LAYERS;
 
   if (!tableLayerSelected) {
     console.warn("Selected layer does not expose WMS LAYERS params.");
+    attributeTableFeatures = [];
     populateAttributeTable([]);
     return;
   }
@@ -5078,6 +5180,7 @@ function getSelectedLayerTable(selectedLayer) {
       // Parse the JSON data
       const data = await response.json();
       featuresInView = [];
+      attributeTableFeatures = [];
       if (data.features && data.features.length > 0) {
         const features = data.features.map((feature) => {
           const olFeature = new GeoJSON().readFeature(feature, {
@@ -5091,16 +5194,11 @@ function getSelectedLayerTable(selectedLayer) {
           features: features,
         });
         ft = vectorSource2.getFeatures();
-
-        const view = map.getView();
-        const size = map.getSize();
-        const extent = view.calculateExtent(size);
-
-        // 5. Filter
-        featuresInView = vectorSource2.getFeaturesInExtent(extent);
+        attributeTableFeatures = ft;
+        featuresInView = getVisibleAttributeFeatures(attributeTableFeatures);
       }
 
-      populateAttributeTable(featuresInView);
+      refreshAttributeTableView();
 
       // You can now work with the data object
     } catch (error) {

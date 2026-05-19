@@ -135,6 +135,17 @@
           <button id="georef-image" class="fa-button" title="Georeference Image">
             <i class="fa-solid fa-image"></i>
           </button>
+          <div class="map-projection-control" title="Map Projection">
+            <select id="mapProjectionSelect">
+              <option value="EPSG:3857">EPSG:3857 Web Mercator</option>
+              <option value="EPSG:4326">EPSG:4326 WGS84</option>
+              <option value="EPSG:6870">EPSG:6870 Albania TM 2010</option>
+              <option value="EPSG:32634">EPSG:32634 UTM 34N</option>
+            </select>
+            <button id="setMapProjection" class="fa-button" title="Set Map Projection">
+              Set
+            </button>
+          </div>
         </div>
       </div>
 
@@ -656,8 +667,13 @@
           <div class="left-controls">
             <label for="attribute-layer-select">Select Layer:</label>
             <select id="attribute-layer-select"></select>
+            <span id="attribute-record-count">0 / 0 records</span>
           </div>
           <div class="right-controls">
+            <label class="attribute-visible-toggle" for="attribute-visible-only">
+              <input type="checkbox" id="attribute-visible-only" checked />
+              Visible extent
+            </label>
             <button id="zoom-btn" disabled title="Zoom to selected features">
               Zoom to Feature
             </button>

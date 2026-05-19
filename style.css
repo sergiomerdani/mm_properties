@@ -235,6 +235,33 @@ td {
   margin: 0 4px 0 0;
 }
 
+.map-projection-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 34px;
+  padding: 3px 4px;
+  border: 1px solid #c4d0d8;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+#mapProjectionSelect {
+  width: 178px;
+  height: 28px;
+  border: 1px solid #b9c6cf;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #263647;
+  font-size: 12px;
+  padding: 3px 6px;
+}
+
+#setMapProjection {
+  width: 42px;
+  font-size: 12px;
+}
+
 .ol-ext-print-dialog .ol-print-param {
   position: absolute;
   overflow-x: hidden;
@@ -620,10 +647,39 @@ button {
   gap: 10px;
 }
 
+#attribute-record-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .right-controls {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.attribute-visible-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  font-size: 12px;
+  color: #263647;
+  white-space: nowrap;
+}
+
+.attribute-visible-toggle input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
 }
 
 #highlight-selected-btn,
