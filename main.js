@@ -881,6 +881,8 @@ const wfsLayerUrlEnd = "&maxFeatures=50&outputFormat=application/json";
 let wfsVectorLayer, wfsVectorSource;
 let isLocalVectorEdit = false;
 let originalVectorLayerStyle = null;
+let editLayerProjection = "EPSG:3857";
+let editMapProjection = "EPSG:3857";
 
 function getGeoServerProxyOwsUrl(workspace = workspaceName) {
   return `http://localhost:8000/geoserver-proxy/${workspace}/ows`;
@@ -2722,6 +2724,74 @@ function fetchLayerPropertiesFromWFS(url, layerParam) {
     });
 }
 
+function getLayerDeclaredProjection(layer) {
+  const params = layer?.getSource?.()?.getParams?.() || {};
+  return (
+    layer?.get("projection") ||
+    layer?.get("srsName") ||
+    params.SRS ||
+    params.CRS ||
+    params.srsName ||
+    "EPSG:3857"
+  );
+}
+
+async function getLayerNativeProjection(layerParam) {
+  const [layerWorkspace = workspaceName] = layerParam.split(":");
+  const capabilitiesUrl = `${getGeoServerProxyOwsUrl(layerWorkspace)}?service=WFS&version=1.1.0&request=GetCapabilities`;
+
+  try {
+    const response = await fetch(capabilitiesUrl);
+    if (!response.ok) throw new Error(`WFS capabilities HTTP ${response.status}`);
+
+    const text = await response.text();
+    const doc = new DOMParser().parseFromString(text, "text/xml");
+    const featureTypes = Array.from(doc.getElementsByTagNameNS("*", "FeatureType"));
+
+    for (const featureType of featureTypes) {
+      const name = featureType.getElementsByTagNameNS("*", "Name")[0]?.textContent;
+      if (name !== layerParam && name?.split(":").pop() !== layerParam.split(":").pop()) {
+        continue;
+      }
+
+      const defaultSrs =
+        featureType.getElementsByTagNameNS("*", "DefaultSRS")[0]?.textContent ||
+        featureType.getElementsByTagNameNS("*", "DefaultCRS")[0]?.textContent ||
+        featureType.getElementsByTagNameNS("*", "SRS")[0]?.textContent;
+
+      if (defaultSrs) {
+        const epsgMatch = defaultSrs.match(/EPSG[:/]*([0-9]+)/i);
+        return epsgMatch ? `EPSG:${epsgMatch[1]}` : defaultSrs;
+      }
+    }
+  } catch (error) {
+    console.warn("Could not detect native layer projection:", error);
+  }
+
+  return getLayerDeclaredProjection(selectedLayer);
+}
+
+function cloneFeaturesForProjection(featuresToClone, sourceProjection, targetProjection) {
+  return featuresToClone.map((feature) => {
+    const clone = feature.clone();
+    clone.setId(feature.getId());
+    clone.setGeometryName(feature.getGeometryName?.() || "geom");
+    const geometry = clone.getGeometry();
+    if (geometry && sourceProjection !== targetProjection) {
+      geometry.transform(sourceProjection, targetProjection);
+    }
+    return clone;
+  });
+}
+
+function cloneFeaturesForTransaction(featuresToClone) {
+  return cloneFeaturesForProjection(
+    featuresToClone,
+    editMapProjection,
+    editLayerProjection,
+  );
+}
+
 function getEditableLayerType(layer) {
   const feature = layer
     ?.getSource?.()
@@ -3337,7 +3407,7 @@ const editToolbar = document.getElementById("editToolbar");
 let isEditing = false;
 let originalLayer = null;
 
-editLayerButton.addEventListener("click", () => {
+editLayerButton.addEventListener("click", async () => {
   if (!selectedLayer && !isEditing) {
     alert("Please select a layer!");
     return;
@@ -3370,13 +3440,40 @@ editLayerButton.addEventListener("click", () => {
     }
 
     isLocalVectorEdit = false;
+    editMapProjection = map.getView().getProjection().getCode();
+    editLayerProjection = await getLayerNativeProjection(layerParam);
     // --- Enable edit mode ---
     const intExtent = extentBbox.map((c) => Math.trunc(c));
-    const bboxParam = intExtent.join(",");
+    const [editWorkspace = workspaceName] = layerParam.split(":");
+    const bboxExtent =
+      editMapProjection === editLayerProjection
+        ? intExtent
+        : (() => {
+            const min = transform(
+              [intExtent[0], intExtent[1]],
+              editMapProjection,
+              editLayerProjection,
+            );
+            const max = transform(
+              [intExtent[2], intExtent[3]],
+              editMapProjection,
+              editLayerProjection,
+            );
+            return [
+              Math.min(min[0], max[0]),
+              Math.min(min[1], max[1]),
+              Math.max(min[0], max[0]),
+              Math.max(min[1], max[1]),
+            ];
+          })();
+    const bboxParam = bboxExtent.map((c) => Math.trunc(c)).join(",");
 
     wfsVectorSource = new VectorSource({
-      url: `http://localhost:8000/geoserver-proxy/${workspaceName}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParam}&outputFormat=application/json&maxFeatures=500&bbox=${bboxParam},EPSG:3857`,
-      format: new GeoJSON(),
+      url: `${getGeoServerProxyOwsUrl(editWorkspace)}?service=WFS&version=1.1.0&request=GetFeature&typeName=${layerParam}&outputFormat=application/json&maxFeatures=500&bbox=${bboxParam},${editLayerProjection}&srsName=${editMapProjection}`,
+      format: new GeoJSON({
+        dataProjection: editMapProjection,
+        featureProjection: editMapProjection,
+      }),
       strategy: bboxStrategy,
     });
 
@@ -3780,10 +3877,18 @@ function saveFeature() {
 
   // Create WFS format instance
   const wfsFormat = new WFS();
+  const insertFeatures = cloneFeaturesForTransaction(inserts);
+  const updateFeatures = cloneFeaturesForTransaction(updates);
   const deleteFeatures = deletes.map((item) => item.feature);
-  console.log(inserts);
+  console.log(insertFeatures);
 
-  updates.forEach((f) => {
+  [...insertFeatures, ...updateFeatures].forEach((f) => {
+    const keepGeom = f.getGeometry();
+    f.set("geom", keepGeom);
+    f.setGeometryName("geom");
+  });
+
+  updateFeatures.forEach((f) => {
     // 🔹 Drop all non-geometry properties (like fid) before saving
     const keepGeom = f.getGeometry();
     f.getKeys().forEach((key) => {
@@ -3801,14 +3906,14 @@ function saveFeature() {
 
   // Prepare the transaction
   const transaction = wfsFormat.writeTransaction(
-    inserts,
-    updates,
+    insertFeatures,
+    updateFeatures,
     deleteFeatures,
     {
       featureNS: `${workspace}@org`,
       featurePrefix: workspace,
       featureType: layerName,
-      srsName: "EPSG:3857",
+      srsName: editLayerProjection,
     },
   );
   // Serialize to XML
@@ -5472,7 +5577,7 @@ saveBtn.addEventListener("click", () => {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.json();
     })
-    .then((json) => {
+    .then(async (json) => {
       const fmt = new GeoJSON();
       const mapSrs =
         map?.getView?.().getProjection?.().getCode?.() || "EPSG:3857";
@@ -5543,17 +5648,27 @@ saveBtn.addEventListener("click", () => {
         return;
       }
 
+      const layerNativeProjection = await getLayerNativeProjection(tableLayerSelected);
+      const transactionUpdates = cloneFeaturesForProjection(
+        updatedFeatures,
+        mapSrs,
+        layerNativeProjection,
+      );
+      transactionUpdates.forEach((feature) => {
+        feature.setGeometryName(GEOM_NAME);
+      });
+
       // 4) Write WFS-T Update
       const wfs = new WFS();
       const node = wfs.writeTransaction(
         [], // inserts
-        updatedFeatures, // updates
+        transactionUpdates, // updates
         [], // deletes
         {
           featureNS: `${workspace}@org`,
           featurePrefix: workspace,
           featureType: layerName,
-          srsName: "EPSG:3857",
+          srsName: layerNativeProjection,
         },
       );
 

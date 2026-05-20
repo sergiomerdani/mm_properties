@@ -210,6 +210,17 @@ td {
   margin-right: 0;
 }
 
+.app-logo {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  object-fit: contain;
+  padding: 2px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid #d5e1e8;
+}
+
 .measurement {
   display: inline-flex;
   align-items: center;
