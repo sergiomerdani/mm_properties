@@ -1042,6 +1042,11 @@ function setMapProjection(projectionCode) {
   );
   calculateScale();
   map.updateSize();
+  syncAttributeSelectionLayer();
+  const tableContainer = document.getElementById("attribute-table-container");
+  if (!tableContainer?.hidden && attributeTableFeatures.length) {
+    refreshAttributeTableView();
+  }
 }
 
 setMapProjectionButton?.addEventListener("click", () => {
@@ -5103,14 +5108,24 @@ function getVisibleAttributeFeatures(features) {
   if (!size) return features;
 
   const extent = view.calculateExtent(size);
-  return features.filter((feature) => feature.getGeometry()?.intersectsExtent(extent));
+  const mapProjection = view.getProjection().getCode();
+  return features.filter((feature) => {
+    const geometry = getFeatureGeometryInMapProjection(feature, mapProjection);
+    return geometry?.intersectsExtent(extent);
+  });
 }
 
 function refreshAttributeTableView() {
+  const previousSelectionKeys = new Set(
+    selectedAttributeFeatures.map((feature) => getAttributeFeatureKey(feature)),
+  );
   const featuresToShow = attributeVisibleOnly.checked
     ? getVisibleAttributeFeatures(attributeTableFeatures)
     : attributeTableFeatures;
   populateAttributeTable(featuresToShow);
+  if (previousSelectionKeys.size) {
+    restoreAttributeSelection(featuresToShow, previousSelectionKeys);
+  }
   attributeRecordCount.textContent = `${featuresToShow.length} / ${attributeTableFeatures.length} records`;
 }
 
@@ -5163,9 +5178,11 @@ function getSelectedLayerTable(selectedLayer) {
   }
 
   const [selectedWorkspace = workspaceName] = tableLayerSelected.split(":");
+  const tableFeatureProjection = map.getView().getProjection().getCode();
   const layerWFS = getWfsGetFeatureUrl({
     workspace: selectedWorkspace,
     typeName: tableLayerSelected,
+    srsName: tableFeatureProjection,
   });
 
   async function fetchData() {
@@ -5184,9 +5201,10 @@ function getSelectedLayerTable(selectedLayer) {
       if (data.features && data.features.length > 0) {
         const features = data.features.map((feature) => {
           const olFeature = new GeoJSON().readFeature(feature, {
-            dataProjection: "EPSG:3857",
-            featureProjection: map.getView().getProjection().getCode(),
+            dataProjection: tableFeatureProjection,
+            featureProjection: tableFeatureProjection,
           });
+          olFeature.set("_featureProjection", tableFeatureProjection, true);
           return olFeature;
         });
 
@@ -5219,11 +5237,43 @@ function updateAttributeZoomButton() {
   document.getElementById("highlight-selected-btn").disabled = !hasSelection;
 }
 
+function getAttributeFeatureKey(feature) {
+  return (
+    feature.getId?.() ||
+    feature.get("fid") ||
+    feature.get("id") ||
+    feature.get("gid") ||
+    JSON.stringify(feature.getProperties())
+  );
+}
+
+function restoreAttributeSelection(visibleFeatures, selectionKeys) {
+  selectedAttributeFeatures = visibleFeatures.filter((feature) =>
+    selectionKeys.has(getAttributeFeatureKey(feature)),
+  );
+
+  const rows = document.querySelectorAll("#attribute-table tbody tr");
+  visibleFeatures.forEach((feature, index) => {
+    if (selectionKeys.has(getAttributeFeatureKey(feature))) {
+      rows[index]?.classList.add("highlighted-row");
+    }
+  });
+
+  updateAttributeZoomButton();
+  syncAttributeSelectionLayer();
+}
+
 function syncAttributeSelectionLayer() {
   attributeSelectionSource.clear();
+  const mapProjection = map.getView().getProjection().getCode();
   selectedAttributeFeatures.forEach((feature) => {
     const clone = feature.clone();
     clone.setProperties(feature.getProperties());
+    const featureProjection = feature.get("_featureProjection") || mapProjection;
+    if (featureProjection !== mapProjection) {
+      clone.getGeometry()?.transform(featureProjection, mapProjection);
+      clone.set("_featureProjection", mapProjection, true);
+    }
     attributeSelectionSource.addFeature(clone);
   });
 }
@@ -5361,11 +5411,14 @@ editBtn.addEventListener("click", () => {
   [workspace, layerName] = tableLayerSelected.split(":");
 
   // Build WFS GetFeature URL (GeoJSON output)
+  const tableEditProjection =
+    map?.getView?.().getProjection?.().getCode?.() || "EPSG:3857";
   const wfsUrl = getWfsGetFeatureUrl({
     workspace,
     typeName: tableLayerSelected,
     version: "1.0.0",
     maxFeatures: 500,
+    srsName: tableEditProjection,
   });
 
   // Load features (manual fetch avoids OL loader event quirks)
@@ -5377,8 +5430,8 @@ editBtn.addEventListener("click", () => {
     .then((json) => {
       const fmt = new GeoJSON();
       loadedFeatures = fmt.readFeatures(json, {
-        dataProjection: "EPSG:3857", // adapt if your data CRS differs
-        featureProjection: mapProj, // map/view projection
+        dataProjection: tableEditProjection,
+        featureProjection: tableEditProjection,
       });
       saveBtn.disabled = loadedFeatures.length === 0;
       if (loadedFeatures.length === 0) {
@@ -5411,6 +5464,7 @@ saveBtn.addEventListener("click", () => {
     typeName: tableLayerSelected,
     version: "1.0.0",
     maxFeatures: 1000,
+    srsName: map?.getView?.().getProjection?.().getCode?.() || "EPSG:3857",
   });
 
   fetch(wfsUrl)
@@ -5423,7 +5477,7 @@ saveBtn.addEventListener("click", () => {
       const mapSrs =
         map?.getView?.().getProjection?.().getCode?.() || "EPSG:3857";
       const features = fmt.readFeatures(json, {
-        dataProjection: "EPSG:3857", // change if your data CRS differs
+        dataProjection: mapSrs,
         featureProjection: mapSrs,
       });
 
@@ -5534,13 +5588,26 @@ saveBtn.addEventListener("click", () => {
     });
 });
 
+function getFeatureGeometryInMapProjection(feature, mapProjection) {
+  const geometry = feature.getGeometry();
+  if (!geometry) return null;
+
+  const featureProjection = feature.get("_featureProjection") || mapProjection;
+  if (featureProjection === mapProjection) {
+    return geometry;
+  }
+
+  return geometry.clone().transform(featureProjection, mapProjection);
+}
+
 // Function to zoom to a feature's extent
 function zoomToFeatureExtent(featureOrFeatures) {
   const features = Array.isArray(featureOrFeatures)
     ? featureOrFeatures
     : [featureOrFeatures];
+  const mapProjection = map.getView().getProjection().getCode();
   const extent = features.reduce((combinedExtent, feature) => {
-    const geometry = feature.getGeometry();
+    const geometry = getFeatureGeometryInMapProjection(feature, mapProjection);
     if (!geometry) return combinedExtent;
 
     const featureExtent = geometry.getExtent();
