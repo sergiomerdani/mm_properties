@@ -39,7 +39,17 @@ import {
   RegularShape,
   Icon,
 } from "ol/style";
-import { LineString, Point, Circle } from "ol/geom.js";
+import {
+  GeometryCollection,
+  LinearRing,
+  LineString,
+  MultiLineString,
+  MultiPoint,
+  MultiPolygon,
+  Point,
+  Polygon,
+  Circle,
+} from "ol/geom.js";
 import { getLength, getArea } from "ol/sphere";
 import { Modify, Draw, Select } from "ol/interaction";
 import Snap from "ol/interaction/Snap";
@@ -3981,6 +3991,210 @@ deleteFeature.addEventListener("click", (e) => {
   updateSaveButtonState(); // ✅
   console.log(`Queued ${selectedFeatures.length} features for deletion`);
 });
+
+const splitFeatureButton = document.getElementById("btnSplit");
+
+function getSelectedFeatureForSplit() {
+  const selectedArray = selectedFeatures.getArray();
+
+  if (selectedArray.length !== 1) {
+    alert("Select exactly one feature to split.");
+    activateSingleSelect();
+    return null;
+  }
+
+  return selectedArray[0];
+}
+
+function createSplitParts(targetFeature, cutterFeature) {
+  const turfApi = getTurf();
+  if (!turfApi) {
+    alert("Turf.js is not loaded. Check your internet connection and try again.");
+    return [];
+  }
+
+  const format = new GeoJSON();
+  const mapProjection = map.getView().getProjection().getCode();
+  const targetGeoJson = format.writeFeatureObject(targetFeature, {
+    featureProjection: mapProjection,
+    dataProjection: "EPSG:4326",
+  });
+  const cutterGeoJson = format.writeFeatureObject(cutterFeature, {
+    featureProjection: mapProjection,
+    dataProjection: "EPSG:4326",
+  });
+  const targetType = getBaseGeometryType(targetFeature);
+  let splitGeoJson = null;
+
+  if (targetType === "LineString") {
+    if (!turfApi.lineSplit) {
+      alert("Line split is not available in Turf.js.");
+      return [];
+    }
+    splitGeoJson = turfApi.lineSplit(targetGeoJson, cutterGeoJson);
+  } else if (targetType === "Polygon") {
+    return splitPolygonWithJsts(targetFeature, cutterFeature);
+  } else {
+    alert("Split supports line and polygon features.");
+    return [];
+  }
+
+  return format
+    .readFeatures(splitGeoJson, {
+      dataProjection: "EPSG:4326",
+      featureProjection: mapProjection,
+    })
+    .filter((feature) => feature.getGeometry?.());
+}
+
+function splitPolygonWithJsts(targetFeature, cutterFeature) {
+  const jstsApi = window.jsts;
+  const turfApi = getTurf();
+
+  if (!jstsApi?.io?.OL3Parser || !jstsApi?.operation?.polygonize?.Polygonizer) {
+    alert("JSTS is not loaded. Check your internet connection and try again.");
+    return [];
+  }
+
+  const parser = new jstsApi.io.OL3Parser();
+  parser.inject(
+    Point,
+    LineString,
+    LinearRing,
+    Polygon,
+    MultiPoint,
+    MultiLineString,
+    MultiPolygon,
+    GeometryCollection,
+  );
+
+  const targetGeometry = targetFeature.getGeometry();
+  const cutterGeometry = cutterFeature.getGeometry();
+  const boundary = targetGeometry.getLinearRing
+    ? targetGeometry.getLinearRing(0)
+    : targetGeometry.getBoundary?.();
+
+  if (!boundary) {
+    alert("This polygon cannot be split because its boundary could not be read.");
+    return [];
+  }
+
+  const polygonBoundary = parser.read(boundary);
+  const cutterLine = parser.read(cutterGeometry);
+  const nodedLinework = polygonBoundary.union(cutterLine);
+  const polygonizer = new jstsApi.operation.polygonize.Polygonizer();
+  polygonizer.add(nodedLinework);
+
+  const polygonized = polygonizer.getPolygons();
+  const splitParts = [];
+  const format = new GeoJSON();
+  const mapProjection = map.getView().getProjection().getCode();
+  const originalGeoJson = format.writeFeatureObject(targetFeature, {
+    featureProjection: mapProjection,
+    dataProjection: "EPSG:4326",
+  });
+
+  for (let i = 0; i < polygonized.size(); i++) {
+    const candidateGeometry = parser.write(polygonized.get(i));
+    const candidateFeature = new Feature({ geometry: candidateGeometry });
+    const candidateGeoJson = format.writeFeatureObject(candidateFeature, {
+      featureProjection: mapProjection,
+      dataProjection: "EPSG:4326",
+    });
+    const pointInCandidate = turfApi?.pointOnFeature?.(candidateGeoJson);
+
+    if (
+      !pointInCandidate ||
+      !turfApi?.booleanPointInPolygon?.(pointInCandidate, originalGeoJson)
+    ) {
+      continue;
+    }
+
+    splitParts.push(candidateFeature);
+  }
+
+  return splitParts;
+}
+
+function queueSplitResult(targetFeature, splitParts) {
+  if (splitParts.length < 2) {
+    alert("The split line did not create multiple parts.");
+    return false;
+  }
+
+  targetFeature.setStyle(null);
+  wfsVectorSource.removeFeature(targetFeature);
+
+  const insertIndex = inserts.indexOf(targetFeature);
+  if (insertIndex > -1) {
+    inserts.splice(insertIndex, 1);
+  } else if (!deletes.some((item) => item.feature === targetFeature)) {
+    deletes.push({
+      feature: targetFeature,
+      featureID: targetFeature.getId?.() || targetFeature.get("fid") || null,
+    });
+  }
+
+  const updateIndex = updates.indexOf(targetFeature);
+  if (updateIndex > -1) {
+    updates.splice(updateIndex, 1);
+  }
+
+  splitParts.forEach((part, index) => {
+    const partGeometry = part.getGeometry();
+    part.setProperties(targetFeature.getProperties());
+    ["geometry", "geom", "the_geom", "wkb_geometry"].forEach((key) => {
+      part.unset(key, true);
+    });
+    part.setGeometry(partGeometry);
+    part.set("geom", partGeometry);
+    if (isLocalVectorEdit) {
+      part.setId(`split.${Date.now()}.${index + 1}`);
+    }
+    wfsVectorSource.addFeature(part);
+    inserts.push(part);
+  });
+
+  selectedFeatures.clear();
+  activeSelectInteraction?.getFeatures?.().clear?.();
+  updateSaveButtonState();
+  return true;
+}
+
+function activateSplitTool() {
+  if (!wfsVectorSource || !vectorLayer) {
+    alert("Open the editor for a layer before splitting features.");
+    return;
+  }
+
+  const targetFeature = getSelectedFeatureForSplit();
+  if (!targetFeature) return;
+
+  clearInteractions();
+  clearToolbarButtons();
+  btnSelect.textContent = "🖱️";
+
+  const splitSketchSource = new VectorSource();
+  drawInteraction = new Draw({
+    source: splitSketchSource,
+    type: "LineString",
+  });
+
+  map.addInteraction(drawInteraction);
+  splitFeatureButton.classList.add("active");
+
+  drawInteraction.once("drawend", (event) => {
+    const splitParts = createSplitParts(targetFeature, event.feature);
+    if (queueSplitResult(targetFeature, splitParts)) {
+      console.log("Feature split into", splitParts.length, "parts.");
+    }
+    map.removeInteraction(drawInteraction);
+    drawInteraction = null;
+    splitFeatureButton.classList.remove("active");
+  });
+}
+
+splitFeatureButton.addEventListener("click", activateSplitTool);
 
 const bufferFeatureButton = document.getElementById("btnBuffer");
 const bufferModal = document.getElementById("bufferModal");
@@ -8232,6 +8446,7 @@ function clearToolbarButtons() {
     btnRotate,
     btnScale,
     btnClone,
+    splitFeatureButton,
   ];
 
   buttons.forEach((btn) => btn.classList.remove("active"));
