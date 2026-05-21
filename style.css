@@ -164,6 +164,126 @@ hr {
   opacity: 0.9;
 }
 
+.add-data-modal {
+  width: min(420px, calc(100vw - 28px));
+  min-height: 0;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  background: #ffffff;
+  color: #334155;
+  opacity: 1;
+  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.24);
+  overflow: hidden;
+}
+
+#uploadModal {
+  z-index: 3000;
+}
+
+.add-data-modal .modal-header,
+.add-data-modal .modal-footer {
+  border-color: #e5edf5;
+  padding: 16px 18px;
+}
+
+.add-data-modal .modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.add-data-modal .modal-body {
+  padding: 0;
+}
+
+.add-data-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid #e5edf5;
+}
+
+.add-data-tabs .nav-link {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  color: #6b7280;
+  font-weight: 700;
+}
+
+.add-data-tabs .nav-link.active {
+  color: #00a6c8;
+  border-bottom: 2px solid #00a6c8;
+}
+
+.add-data-tab-content {
+  padding: 16px;
+}
+
+.add-service-url-row {
+  display: grid;
+  grid-template-columns: 1fr 42px;
+  gap: 8px;
+}
+
+.add-service-url-row button {
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #64748b;
+}
+
+.add-data-primary {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.add-data-status {
+  min-height: 18px;
+  margin-top: 10px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.external-service-layers {
+  display: grid;
+  gap: 8px;
+  max-height: 300px;
+  overflow: auto;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.external-service-layer-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.external-service-layer-title {
+  color: #1f2937;
+  font-weight: 700;
+}
+
+.external-service-layer-meta {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.external-service-layer-row button {
+  height: 30px;
+  border: 1px solid #bfccd8;
+  border-radius: 6px;
+  background: #eef6fb;
+  color: #19364a;
+}
+
 /* The Close Button */
 .close {
   color: #aaaaaa;

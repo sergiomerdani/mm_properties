@@ -105,6 +105,13 @@
             📊
           </button>
           <button class="fa-button" id="add-data" title="Add Data">📥</button>
+          <button
+            class="fa-button"
+            id="add-service"
+            title="Add external service"
+          >
+            <i class="fa-solid fa-link"></i>
+          </button>
           <button class="fa-button" id="add-chart" title="Add Graphic">
             🥧
           </button>
@@ -618,12 +625,11 @@
         </form>
       </dialog>
 
-      <!-- modal markup (paste anywhere in your page) -->
       <div class="modal fade" id="uploadModal" tabindex="-1">
-        <div class="modal-dialog">
-          <form id="uploadForm" class="modal-content">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content add-data-modal">
             <div class="modal-header">
-              <h5 class="modal-title">Upload Shapefile</h5>
+              <h5 class="modal-title">Add Data</h5>
               <button
                 type="button"
                 class="btn-close"
@@ -631,42 +637,112 @@
               ></button>
             </div>
             <div class="modal-body">
-              <div class="mb-3">
-                <label for="shpFile" class="form-label"
-                  >Zipped .shp/.shx/.dbf</label
-                >
-                <input
-                  class="form-control"
-                  type="file"
-                  id="shpFile"
-                  accept=".zip"
-                  required
-                />
-              </div>
-              <div class="mb-3">
-                <label for="layerName" class="form-label">Layer Name</label>
-                <input
-                  class="form-control"
-                  type="text"
-                  id="layerName"
-                  placeholder="my_new_layer"
-                  required
-                />
+              <ul class="nav nav-tabs add-data-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link active" id="service-tab" data-bs-toggle="tab" data-bs-target="#servicePane" type="button" role="tab">
+                    Service
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" id="upload-tab" data-bs-toggle="tab" data-bs-target="#uploadPane" type="button" role="tab">
+                    Upload
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" id="service-layers-tab" data-bs-toggle="tab" data-bs-target="#serviceLayersPane" type="button" role="tab">
+                    Layers
+                  </button>
+                </li>
+              </ul>
+              <div class="tab-content add-data-tab-content">
+                <div class="tab-pane fade show active" id="servicePane" role="tabpanel">
+                  <form id="externalServiceForm">
+                    <label for="externalServiceType" class="form-label">Service Type</label>
+                    <select id="externalServiceType" class="form-select">
+                      <option value="arcgis-feature">ArcGIS Feature Service</option>
+                      <option value="arcgis-map">ArcGIS Map Service</option>
+                      <option value="arcgis-image">ArcGIS Image Service</option>
+                      <option value="wms">WMS (OGC Web Service)</option>
+                    </select>
+                    <label for="externalServiceUrl" class="form-label mt-3">Service URL</label>
+                    <div class="add-service-url-row">
+                      <input
+                        class="form-control"
+                        type="url"
+                        id="externalServiceUrl"
+                        placeholder="https://.../arcgis/rest/services/.../FeatureServer"
+                        required
+                      />
+                      <button type="submit" id="loadExternalService" title="Load service">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                      </button>
+                    </div>
+                    <label for="externalServiceLayerName" class="form-label mt-3">Layer Name</label>
+                    <input
+                      class="form-control"
+                      type="text"
+                      id="externalServiceLayerName"
+                      placeholder="Use service title"
+                    />
+                    <label for="externalWmsLayerName" class="form-label mt-3 external-wms-only">WMS Layer</label>
+                    <input
+                      class="form-control external-wms-only"
+                      type="text"
+                      id="externalWmsLayerName"
+                      placeholder="workspace:layer_name"
+                    />
+                    <button type="button" id="addExternalServiceLayer" class="btn btn-primary add-data-primary" disabled>
+                      Add Layer
+                    </button>
+                    <div id="externalServiceStatus" class="add-data-status" aria-live="polite"></div>
+                  </form>
+                </div>
+                <div class="tab-pane fade" id="uploadPane" role="tabpanel">
+                  <form id="uploadForm">
+                    <div class="mb-3">
+                      <label for="shpFile" class="form-label"
+                        >Zipped .shp/.shx/.dbf</label
+                      >
+                      <input
+                        class="form-control"
+                        type="file"
+                        id="shpFile"
+                        accept=".zip"
+                        required
+                      />
+                    </div>
+                    <div class="mb-3">
+                      <label for="layerName" class="form-label">Layer Name</label>
+                      <input
+                        class="form-control"
+                        type="text"
+                        id="layerName"
+                        placeholder="my_new_layer"
+                        required
+                      />
+                    </div>
+                    <button type="submit" class="btn btn-primary add-data-primary">
+                      Upload & Publish
+                    </button>
+                  </form>
+                </div>
+                <div class="tab-pane fade" id="serviceLayersPane" role="tabpanel">
+                  <div id="externalServiceLayers" class="external-service-layers">
+                    Load an ArcGIS service to see its layers here.
+                  </div>
+                </div>
               </div>
             </div>
             <div class="modal-footer">
-              <button type="submit" class="btn btn-primary">
-                Upload & Publish
-              </button>
               <button
                 type="button"
                 class="btn btn-secondary"
                 data-bs-dismiss="modal"
               >
-                Cancel
+                Close
               </button>
             </div>
-          </form>
+          </div>
         </div>
       </div>
 

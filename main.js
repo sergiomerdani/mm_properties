@@ -88,6 +88,7 @@ import MVT from "ol/format/MVT";
 import WFS from "ol/format/WFS";
 import ol_style_Chart from "ol-ext/style/Chart";
 import TileArcGISRest from "ol/source/TileArcGISRest.js";
+import ImageArcGISRest from "ol/source/ImageArcGISRest.js";
 import Heatmap from "ol/layer/Heatmap.js";
 import { toLonLat } from "ol/proj";
 import ol_interaction_SnapGuides from "ol-ext/interaction/SnapGuides";
@@ -6191,7 +6192,7 @@ async function addArcgisTileLayer(map, mapServerUrl, includedNames) {
 const mapServerUrl =
   "https://sampleserver6.arcgisonline.com/arcgis/rest/services/Census/MapServer";
 
-addArcgisTileLayer(map, mapServerUrl, ["states", "Detailed Counties"]);
+// addArcgisTileLayer(map, mapServerUrl, ["states", "Detailed Counties"]);
 
 //GET LAYER VISIBILITY AT CURRENT SCALE (TEMPORARILY)
 
@@ -6396,9 +6397,425 @@ map.on("moveend", () => {
 });
 
 //ADD/UPLOAD DATA
-// show the modal when the button is clicked
-document.getElementById("add-data").addEventListener("click", () => {
+let loadedExternalService = null;
+
+const externalServiceTypeInput = document.getElementById("externalServiceType");
+const externalServiceUrlInput = document.getElementById("externalServiceUrl");
+const externalServiceLayerNameInput = document.getElementById(
+  "externalServiceLayerName",
+);
+const externalWmsLayerNameInput = document.getElementById("externalWmsLayerName");
+const externalServiceForm = document.getElementById("externalServiceForm");
+const externalServiceStatus = document.getElementById("externalServiceStatus");
+const externalServiceLayers = document.getElementById("externalServiceLayers");
+const addExternalServiceLayerButton = document.getElementById(
+  "addExternalServiceLayer",
+);
+
+const externalArcgisVectorStyle = new Style({
+  image: new CircleStyle({
+    radius: 5,
+    fill: new Fill({ color: "rgba(0, 166, 200, 0.85)" }),
+    stroke: new Stroke({ color: "#ffffff", width: 1.5 }),
+  }),
+  stroke: new Stroke({ color: "rgba(0, 166, 200, 0.9)", width: 2 }),
+  fill: new Fill({ color: "rgba(0, 166, 200, 0.18)" }),
+});
+
+function setExternalServiceStatus(message, isError = false) {
+  externalServiceStatus.textContent = message || "";
+  externalServiceStatus.style.color = isError ? "#b91c1c" : "#64748b";
+}
+
+function normalizeExternalServiceUrl(url) {
+  return url.trim().replace(/[?#].*$/, "").replace(/\/+$/, "");
+}
+
+function getArcgisServiceParts(url) {
+  const match = normalizeExternalServiceUrl(url).match(
+    /\/(FeatureServer|MapServer|ImageServer)(?:\/(\d+))?$/i,
+  );
+  if (!match) return null;
+
+  return {
+    serverType: match[1],
+    layerId: match[2] ?? null,
+    serviceUrl: normalizeExternalServiceUrl(url),
+    rootUrl: normalizeExternalServiceUrl(url).replace(/\/\d+$/, ""),
+  };
+}
+
+function inferExternalServiceType(url, selectedType) {
+  const parts = getArcgisServiceParts(url);
+  if (!parts) return selectedType;
+
+  const typeName = parts.serverType.toLowerCase();
+  if (typeName === "featureserver") return "arcgis-feature";
+  if (typeName === "mapserver") return "arcgis-map";
+  if (typeName === "imageserver") return "arcgis-image";
+  return selectedType;
+}
+
+async function fetchArcgisServiceMetadata(serviceUrl) {
+  const response = await fetch(`${normalizeExternalServiceUrl(serviceUrl)}?f=pjson`);
+  if (!response.ok) {
+    throw new Error(`ArcGIS metadata failed with status ${response.status}`);
+  }
+
+  const metadata = await response.json();
+  if (metadata.error) {
+    throw new Error(metadata.error.message || "ArcGIS returned an error.");
+  }
+  return metadata;
+}
+
+function getExternalServicesGroup() {
+  const existing = map
+    .getLayers()
+    .getArray()
+    .find(
+      (layer) =>
+        layer instanceof LayerGroup && layer.get("title") === "External Services",
+    );
+
+  if (existing) return existing;
+
+  const group = new LayerGroup({
+    title: "External Services",
+    displayInLayerSwitcher: true,
+    layers: [],
+  });
+  map.addLayer(group);
+  return group;
+}
+
+function addExternalLayerToMap(layer) {
+  layer.set("displayInLayerSwitcher", true);
+  getExternalServicesGroup().getLayers().push(layer);
+}
+
+function getServiceLayerTitle(metadata, fallbackUrl, customName = "") {
+  return (
+    customName.trim() ||
+    metadata?.name ||
+    metadata?.mapName ||
+    metadata?.serviceDescription ||
+    normalizeExternalServiceUrl(fallbackUrl).split("/").at(-2) ||
+    "External service"
+  );
+}
+
+function getCurrentMapProjectionCode() {
+  return map.getView().getProjection().getCode();
+}
+
+async function addArcgisFeatureLayer(serviceUrl, titleOverride = "") {
+  const parts = getArcgisServiceParts(serviceUrl);
+  const layerUrl = parts?.serviceUrl || normalizeExternalServiceUrl(serviceUrl);
+  const metadata = await fetchArcgisServiceMetadata(layerUrl);
+  const params = new URLSearchParams({
+    where: "1=1",
+    outFields: "*",
+    returnGeometry: "true",
+    f: "json",
+    resultRecordCount: "2000",
+    outSR: "4326",
+  });
+  const response = await fetch(`${layerUrl}/query?${params}`);
+  if (!response.ok) {
+    throw new Error(`ArcGIS feature query failed with status ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (data.error) {
+    throw new Error(data.error.message || "ArcGIS feature query returned an error.");
+  }
+
+  const featureProjection = getCurrentMapProjectionCode();
+  const features = new EsriJSON().readFeatures(data, {
+    dataProjection: "EPSG:4326",
+    featureProjection,
+  });
+  features.forEach((feature) => feature.set("_featureProjection", featureProjection));
+
+  const source = new VectorSource({ features });
+  const layer = new VectorLayer({
+    title: getServiceLayerTitle(metadata, layerUrl, titleOverride),
+    source,
+    style: externalArcgisVectorStyle,
+    displayInLayerSwitcher: true,
+  });
+  layer.set("editableVector", true);
+  layer.set("externalServiceType", "arcgis-feature");
+  layer.set("arcgisFeatureServiceUrl", layerUrl);
+  layer.set("arcgisMetadata", metadata);
+  layer.set("featureProjection", featureProjection);
+  addExternalLayerToMap(layer);
+
+  const extent = source.getExtent();
+  if (features.length && extent.every(Number.isFinite)) {
+    map.getView().fit(extent, {
+      duration: 600,
+      padding: [50, 50, 50, 50],
+      maxZoom: 18,
+    });
+  }
+
+  return layer;
+}
+
+async function addArcgisMapLayer(serviceUrl, titleOverride = "") {
+  const parts = getArcgisServiceParts(serviceUrl);
+  const rootUrl = parts?.rootUrl || normalizeExternalServiceUrl(serviceUrl);
+  const metadataUrl = parts?.serviceUrl || rootUrl;
+  const metadata = await fetchArcgisServiceMetadata(metadataUrl);
+  const params = {
+    FORMAT: "png32",
+    TRANSPARENT: true,
+  };
+  if (parts?.layerId) {
+    params.LAYERS = `show:${parts.layerId}`;
+  }
+
+  const layer = new TileLayer({
+    title: getServiceLayerTitle(metadata, metadataUrl, titleOverride),
+    visible: true,
+    source: new TileArcGISRest({
+      url: rootUrl,
+      params,
+      crossOrigin: "anonymous",
+    }),
+    displayInLayerSwitcher: true,
+  });
+  layer.set("externalServiceType", "arcgis-map");
+  layer.set("arcgisServiceUrl", metadataUrl);
+  layer.set("arcgisMetadata", metadata);
+  addExternalLayerToMap(layer);
+  return layer;
+}
+
+async function addArcgisImageLayer(serviceUrl, titleOverride = "") {
+  const imageUrl = normalizeExternalServiceUrl(serviceUrl);
+  const metadata = await fetchArcgisServiceMetadata(imageUrl);
+  const layer = new ImageLayer({
+    title: getServiceLayerTitle(metadata, imageUrl, titleOverride),
+    visible: true,
+    source: new ImageArcGISRest({
+      url: imageUrl,
+      params: {
+        FORMAT: "png32",
+        TRANSPARENT: true,
+      },
+      ratio: 1,
+      crossOrigin: "anonymous",
+    }),
+    displayInLayerSwitcher: true,
+  });
+  layer.set("externalServiceType", "arcgis-image");
+  layer.set("arcgisServiceUrl", imageUrl);
+  layer.set("arcgisMetadata", metadata);
+  addExternalLayerToMap(layer);
+  return layer;
+}
+
+function addExternalWmsLayer(serviceUrl, layerName, titleOverride = "") {
+  const layer = new TileLayer({
+    title: titleOverride.trim() || layerName,
+    visible: true,
+    source: new TileWMS({
+      url: serviceUrl.trim(),
+      params: {
+        LAYERS: layerName.trim(),
+        TILED: true,
+        FORMAT: "image/png",
+        TRANSPARENT: true,
+      },
+      serverType: "geoserver",
+      crossOrigin: "anonymous",
+    }),
+    displayInLayerSwitcher: true,
+  });
+  layer.set("externalServiceType", "wms");
+  layer.set("externalServiceUrl", serviceUrl.trim());
+  addExternalLayerToMap(layer);
+  return layer;
+}
+
+async function addLoadedExternalServiceLayer(serviceUrl, type, titleOverride = "") {
+  if (type === "arcgis-feature") {
+    const parts = getArcgisServiceParts(serviceUrl);
+    const metadata = loadedExternalService?.metadata;
+    if (!parts?.layerId && Array.isArray(metadata?.layers) && metadata.layers.length) {
+      for (const serviceLayer of metadata.layers) {
+        await addArcgisFeatureLayer(
+          `${parts.rootUrl}/${serviceLayer.id}`,
+          serviceLayer.name,
+        );
+      }
+      return null;
+    }
+    return addArcgisFeatureLayer(serviceUrl, titleOverride);
+  }
+
+  if (type === "arcgis-map") {
+    return addArcgisMapLayer(serviceUrl, titleOverride);
+  }
+
+  if (type === "arcgis-image") {
+    return addArcgisImageLayer(serviceUrl, titleOverride);
+  }
+
+  const wmsLayerName = externalWmsLayerNameInput.value.trim();
+  if (!wmsLayerName) {
+    throw new Error("Type the WMS layer name before adding it.");
+  }
+  return addExternalWmsLayer(serviceUrl, wmsLayerName, titleOverride);
+}
+
+function renderExternalServiceLayers(serviceUrl, serviceType, metadata) {
+  const serviceLayers = metadata.layers || [];
+  externalServiceLayers.innerHTML = "";
+
+  if (!serviceLayers.length) {
+    externalServiceLayers.textContent =
+      serviceType === "arcgis-image"
+        ? "This Image Service can be added directly from the Service tab."
+        : "No child layers were returned. You can add the service directly.";
+    return;
+  }
+
+  const parts = getArcgisServiceParts(serviceUrl);
+  serviceLayers.forEach((serviceLayer) => {
+    const row = document.createElement("div");
+    row.className = "external-service-layer-row";
+
+    const info = document.createElement("div");
+    const title = document.createElement("div");
+    title.className = "external-service-layer-title";
+    title.textContent = serviceLayer.name || `Layer ${serviceLayer.id}`;
+    const meta = document.createElement("div");
+    meta.className = "external-service-layer-meta";
+    meta.textContent = `ID ${serviceLayer.id}${
+      serviceLayer.geometryType ? ` - ${serviceLayer.geometryType}` : ""
+    }`;
+    info.append(title, meta);
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Add";
+    button.addEventListener("click", async () => {
+      try {
+        setExternalServiceStatus(`Adding ${serviceLayer.name}...`);
+        const childUrl = `${parts.rootUrl}/${serviceLayer.id}`;
+        if (serviceType === "arcgis-feature") {
+          await addArcgisFeatureLayer(childUrl, serviceLayer.name);
+        } else {
+          await addArcgisMapLayer(childUrl, serviceLayer.name);
+        }
+        setExternalServiceStatus(`${serviceLayer.name} added to the map.`);
+      } catch (error) {
+        console.error(error);
+        setExternalServiceStatus(error.message, true);
+      }
+    });
+
+    row.append(info, button);
+    externalServiceLayers.append(row);
+  });
+}
+
+function updateExternalServiceInputs() {
+  const isWms = externalServiceTypeInput.value === "wms";
+  document.querySelectorAll(".external-wms-only").forEach((element) => {
+    element.style.display = isWms ? "" : "none";
+  });
+  addExternalServiceLayerButton.disabled = !externalServiceUrlInput.value.trim();
+}
+
+externalServiceTypeInput.addEventListener("change", updateExternalServiceInputs);
+externalServiceUrlInput.addEventListener("input", () => {
+  loadedExternalService = null;
+  addExternalServiceLayerButton.disabled = !externalServiceUrlInput.value.trim();
+});
+
+externalServiceForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const serviceUrl = normalizeExternalServiceUrl(externalServiceUrlInput.value);
+  if (!serviceUrl) return;
+
+  try {
+    setExternalServiceStatus("Reading service metadata...");
+    const serviceType = inferExternalServiceType(
+      serviceUrl,
+      externalServiceTypeInput.value,
+    );
+    externalServiceTypeInput.value = serviceType;
+    updateExternalServiceInputs();
+
+    if (serviceType === "wms") {
+      loadedExternalService = { serviceUrl, serviceType, metadata: null };
+      addExternalServiceLayerButton.disabled = false;
+      setExternalServiceStatus("Type the WMS layer name, then add the layer.");
+      externalServiceLayers.textContent =
+        "WMS layer listing is not loaded here yet. Add one layer by name from the Service tab.";
+      return;
+    }
+
+    const metadata = await fetchArcgisServiceMetadata(serviceUrl);
+    loadedExternalService = { serviceUrl, serviceType, metadata };
+    externalServiceLayerNameInput.value =
+      externalServiceLayerNameInput.value || getServiceLayerTitle(metadata, serviceUrl);
+    renderExternalServiceLayers(serviceUrl, serviceType, metadata);
+    addExternalServiceLayerButton.disabled = false;
+    setExternalServiceStatus("Service loaded. Add it directly or choose a child layer.");
+
+    const layersTab = document.getElementById("service-layers-tab");
+    bootstrap.Tab.getOrCreateInstance(layersTab).show();
+  } catch (error) {
+    console.error(error);
+    loadedExternalService = null;
+    addExternalServiceLayerButton.disabled = true;
+    setExternalServiceStatus(error.message, true);
+  }
+});
+
+addExternalServiceLayerButton.addEventListener("click", async () => {
+  const serviceUrl =
+    loadedExternalService?.serviceUrl ||
+    normalizeExternalServiceUrl(externalServiceUrlInput.value);
+  const serviceType = inferExternalServiceType(
+    serviceUrl,
+    loadedExternalService?.serviceType || externalServiceTypeInput.value,
+  );
+
+  try {
+    setExternalServiceStatus("Adding service to map...");
+    await addLoadedExternalServiceLayer(
+      serviceUrl,
+      serviceType,
+      externalServiceLayerNameInput.value,
+    );
+    setExternalServiceStatus("Layer added to the map.");
+  } catch (error) {
+    console.error(error);
+    setExternalServiceStatus(error.message, true);
+  }
+});
+
+updateExternalServiceInputs();
+
+function openAddDataModal(tabId = "service-tab") {
+  const tabButton = document.getElementById(tabId);
+  if (tabButton) bootstrap.Tab.getOrCreateInstance(tabButton).show();
   new bootstrap.Modal(document.getElementById("uploadModal")).show();
+}
+
+document.getElementById("add-data").addEventListener("click", () => {
+  openAddDataModal("service-tab");
+});
+
+document.getElementById("add-service").addEventListener("click", () => {
+  openAddDataModal("service-tab");
 });
 
 const uploadForm = document.getElementById("uploadForm");
