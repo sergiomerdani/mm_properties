@@ -13,8 +13,8 @@
       crossorigin="anonymous"
     ></script>
     <title>INOVACIONI</title>
-    <script type="module" crossorigin src="/assets/index-D1S_SMO1.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CPKRZFSe.css">
+    <script type="module" crossorigin src="/assets/index-BGoyBsT8.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BNZsK2P3.css">
   </head>
   <body>
     <div class="grid-container">
@@ -451,11 +451,32 @@
             <option value="EPSG:32634">UTM Zone 34N (EPSG:32634)</option>
           </select>
 
+          <label for="xyLayerName">Layer Name:</label>
+          <input type="text" id="xyLayerName" placeholder="XY points" />
+
           <label for="xyX">X:</label>
           <input type="number" id="xyX" step="any" />
 
           <label for="xyY">Y:</label>
           <input type="number" id="xyY" step="any" />
+
+          <div id="xyCsvPanel">
+            <label for="xyCsvFile">CSV Table:</label>
+            <input type="file" id="xyCsvFile" accept=".csv,text/csv" />
+
+            <div id="xyCsvColumns" hidden>
+              <label for="xyCsvXColumn">X Column:</label>
+              <select id="xyCsvXColumn"></select>
+
+              <label for="xyCsvYColumn">Y Column:</label>
+              <select id="xyCsvYColumn"></select>
+
+              <button id="xyLoadCsvPoints" type="button">
+                Add CSV Points
+              </button>
+            </div>
+            <div id="xyCsvStatus"></div>
+          </div>
 
           <div id="xyModalActions">
             <button id="xyAddPoint">➕ Add Point</button>

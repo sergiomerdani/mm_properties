@@ -7825,17 +7825,165 @@ runBtn.addEventListener("click", () => {
 
 // X/Y POINTS INPUT
 let xyPoints = [];
+let xyCsvRows = [];
+let xyCsvHeaders = [];
+
+function parseCsvText(text) {
+  const rows = [];
+  let row = [];
+  let value = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    const nextChar = text[index + 1];
+
+    if (char === '"' && inQuotes && nextChar === '"') {
+      value += '"';
+      index++;
+    } else if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === "," && !inQuotes) {
+      row.push(value.trim());
+      value = "";
+    } else if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && nextChar === "\n") index++;
+      row.push(value.trim());
+      if (row.some((cell) => cell !== "")) rows.push(row);
+      row = [];
+      value = "";
+    } else {
+      value += char;
+    }
+  }
+
+  row.push(value.trim());
+  if (row.some((cell) => cell !== "")) rows.push(row);
+  return rows;
+}
+
+function setXyCsvStatus(message, isError = false) {
+  const status = document.getElementById("xyCsvStatus");
+  status.textContent = message || "";
+  status.style.color = isError ? "#b91c1c" : "#64748b";
+}
+
+function populateXyCsvColumns(headers) {
+  const xSelect = document.getElementById("xyCsvXColumn");
+  const ySelect = document.getElementById("xyCsvYColumn");
+  xSelect.innerHTML = "";
+  ySelect.innerHTML = "";
+
+  headers.forEach((header) => {
+    const xOption = new Option(header, header);
+    const yOption = new Option(header, header);
+    xSelect.add(xOption);
+    ySelect.add(yOption);
+  });
+
+  const findColumn = (patterns) =>
+    headers.find((header) =>
+      patterns.some((pattern) => header.toLowerCase().includes(pattern)),
+    );
+  const xColumn = findColumn(["x", "lon", "lng", "east"]);
+  const yColumn = findColumn(["y", "lat", "north"]);
+
+  if (xColumn) xSelect.value = xColumn;
+  if (yColumn) ySelect.value = yColumn;
+}
+
+function renderXyPointList() {
+  const list = document.getElementById("xyPointList");
+  list.innerHTML = "";
+  xyPoints.forEach((point, index) => {
+    const li = document.createElement("li");
+    li.textContent = `${index + 1}. X: ${point.x}, Y: ${point.y}`;
+    list.appendChild(li);
+  });
+}
 
 // open modal when button clicked
 document.getElementById("add-xy").addEventListener("click", () => {
   xyPoints = [];
+  xyCsvRows = [];
+  xyCsvHeaders = [];
   document.getElementById("xyPointList").innerHTML = "";
+  document.getElementById("xyCsvFile").value = "";
+  document.getElementById("xyCsvColumns").hidden = true;
+  document.getElementById("xyLayerName").value = "";
+  setXyCsvStatus("");
   document.getElementById("xyModal").style.display = "block";
 });
 
 // close modal
 document.getElementById("xyClose").addEventListener("click", () => {
   document.getElementById("xyModal").style.display = "none";
+});
+
+document.getElementById("xyCsvFile").addEventListener("change", async (event) => {
+  const file = event.target.files[0];
+  xyCsvRows = [];
+  xyCsvHeaders = [];
+  document.getElementById("xyCsvColumns").hidden = true;
+
+  if (!file) {
+    setXyCsvStatus("");
+    return;
+  }
+
+  try {
+    const text = await file.text();
+    const rows = parseCsvText(text);
+    if (rows.length < 2) {
+      throw new Error("CSV must contain a header row and at least one data row.");
+    }
+
+    xyCsvHeaders = rows[0].map((header, index) => header || `Column ${index + 1}`);
+    xyCsvRows = rows.slice(1).map((row) =>
+      xyCsvHeaders.reduce((record, header, index) => {
+        record[header] = row[index] ?? "";
+        return record;
+      }, {}),
+    );
+
+    populateXyCsvColumns(xyCsvHeaders);
+    document.getElementById("xyCsvColumns").hidden = false;
+    document.getElementById("xyLayerName").value ||= file.name.replace(/\.csv$/i, "");
+    setXyCsvStatus(`${xyCsvRows.length} CSV rows loaded.`);
+  } catch (error) {
+    console.error(error);
+    setXyCsvStatus(error.message, true);
+  }
+});
+
+document.getElementById("xyLoadCsvPoints").addEventListener("click", () => {
+  const xColumn = document.getElementById("xyCsvXColumn").value;
+  const yColumn = document.getElementById("xyCsvYColumn").value;
+
+  if (!xyCsvRows.length || !xColumn || !yColumn) {
+    setXyCsvStatus("Load a CSV and choose X/Y columns first.", true);
+    return;
+  }
+
+  let skipped = 0;
+  const csvPoints = xyCsvRows
+    .map((row) => {
+      const x = Number(String(row[xColumn]).replace(",", "."));
+      const y = Number(String(row[yColumn]).replace(",", "."));
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        skipped++;
+        return null;
+      }
+      return { x, y, properties: row };
+    })
+    .filter(Boolean);
+
+  xyPoints.push(...csvPoints);
+  renderXyPointList();
+  setXyCsvStatus(
+    `Added ${csvPoints.length} CSV points${skipped ? `, skipped ${skipped}` : ""}.`,
+    skipped > 0 && csvPoints.length === 0,
+  );
 });
 
 // GEOREFERENCE IMAGE
@@ -8442,11 +8590,8 @@ document.getElementById("xyAddPoint").addEventListener("click", () => {
     return;
   }
 
-  xyPoints.push({ x, y });
-
-  const li = document.createElement("li");
-  li.textContent = `X: ${x}, Y: ${y}`;
-  document.getElementById("xyPointList").appendChild(li);
+  xyPoints.push({ x, y, properties: {} });
+  renderXyPointList();
 
   // clear inputs
   document.getElementById("xyX").value = "";
@@ -8479,6 +8624,8 @@ projectionSelect.addEventListener("change", updateXYLabels);
 // create layer
 document.getElementById("xyCreateLayer").addEventListener("click", () => {
   const inputCrs = document.getElementById("xyProjection").value;
+  const layerName =
+    document.getElementById("xyLayerName").value.trim() || "XY points";
 
   const mapCrs = map.getView().getProjection(); // usually EPSG:3857
 
@@ -8490,9 +8637,15 @@ document.getElementById("xyCreateLayer").addEventListener("click", () => {
   // Build point features
   const pointFeatures = xyPoints.map((c) => {
     const coords = transform([c.x, c.y], inputCrs, mapCrs);
-    return new Feature({
+    const feature = new Feature({
+      ...c.properties,
+      source_x: c.x,
+      source_y: c.y,
+      source_crs: inputCrs,
       geometry: new Point(coords),
     });
+    feature.set("_featureProjection", mapCrs.getCode());
+    return feature;
   });
 
   // Vector source
@@ -8513,7 +8666,12 @@ document.getElementById("xyCreateLayer").addEventListener("click", () => {
   const pointLayer = new VectorLayer({
     source: vectorSource,
     style: pointStyle,
+    title: layerName,
+    displayInLayerSwitcher: true,
   });
+  pointLayer.set("editableVector", true);
+  pointLayer.set("featureProjection", mapCrs.getCode());
+  pointLayer.set("sourceProjection", inputCrs);
 
   // Add to map
   map.addLayer(pointLayer);
@@ -8521,6 +8679,7 @@ document.getElementById("xyCreateLayer").addEventListener("click", () => {
   // Zoom to extent
   map.getView().fit(vectorSource.getExtent(), {
     padding: [20, 20, 20, 20],
+    maxZoom: 18,
   });
 
   console.log("✅ Point layer added with", xyPoints.length, "points");

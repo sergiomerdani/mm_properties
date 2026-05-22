@@ -1056,7 +1056,9 @@ button.fa-button.active {
   border: 1px solid #ccc;
   border-radius: 6px;
   padding: 10px;
-  width: 240px;
+  width: 330px;
+  max-height: 86vh;
+  overflow: auto;
   font-size: 12px;
   box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
   z-index: 1000;
@@ -1160,6 +1162,34 @@ button.fa-button.active {
 #xyModalActions button {
   margin-left: 6px;
   font-size: 12px;
+}
+
+#xyCsvPanel {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid #d8e1ea;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+#xyCsvColumns {
+  margin-top: 6px;
+}
+
+#xyLoadCsvPoints {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid #bfccd8;
+  border-radius: 4px;
+  background: #eef6fb;
+  color: #19364a;
+}
+
+#xyCsvStatus {
+  min-height: 16px;
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 11px;
 }
 
 /* Georeference Image */
