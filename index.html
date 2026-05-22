@@ -132,6 +132,9 @@
                 <button id="btnMergeLayers" title="Merge Layers">
                   <i class="fa-solid fa-layer-group"></i>
                 </button>
+                <button id="btnVerticesLayer" title="Feature vertices to points">
+                  <i class="fa-solid fa-circle-nodes"></i>
+                </button>
               </div>
             </div>
           </div>
@@ -144,20 +147,16 @@
           <button id="add-xy" class="fa-button" title="Add XY Coordinates">
             🎯
           </button>
+          <button
+            id="create-vector-layer"
+            class="fa-button"
+            title="Create vector layer"
+          >
+            <i class="fa-solid fa-draw-polygon"></i>
+          </button>
           <button id="georef-image" class="fa-button" title="Georeference Image">
             <i class="fa-solid fa-image"></i>
           </button>
-          <div class="map-projection-control" title="Map Projection">
-            <select id="mapProjectionSelect">
-              <option value="EPSG:3857">EPSG:3857 Web Mercator</option>
-              <option value="EPSG:4326">EPSG:4326 WGS84</option>
-              <option value="EPSG:6870">EPSG:6870 Albania TM 2010</option>
-              <option value="EPSG:32634">EPSG:32634 UTM 34N</option>
-            </select>
-            <button id="setMapProjection" class="fa-button" title="Set Map Projection">
-              Set
-            </button>
-          </div>
         </div>
       </div>
 
@@ -251,6 +250,30 @@
           <div class="buffer-modal-actions">
             <button id="mergeLayersCancel" type="button">Cancel</button>
             <button id="mergeLayersApply" type="button">Merge</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="verticesModal" aria-hidden="true">
+        <div id="verticesModalContent">
+          <div class="buffer-modal-header">
+            <h4>Vertices To Points</h4>
+            <button id="verticesModalClose" type="button" title="Close">Ã—</button>
+          </div>
+
+          <label for="verticesLayerSelect">Vector Layer</label>
+          <select id="verticesLayerSelect"></select>
+
+          <label for="verticesLayerName">Output Layer Name</label>
+          <input type="text" id="verticesLayerName" value="Feature vertices" />
+
+          <div class="buffer-help">
+            Creates a new point layer from every vertex of the selected layer.
+          </div>
+
+          <div class="buffer-modal-actions">
+            <button id="verticesCancel" type="button">Cancel</button>
+            <button id="verticesApply" type="button">Create Points</button>
           </div>
         </div>
       </div>
@@ -488,6 +511,73 @@
 
           <h4>📍 Added Points</h4>
           <ul id="xyPointList"></ul>
+        </div>
+      </div>
+
+      <div id="vectorLayerModal">
+        <div id="vectorLayerModalContent">
+          <div class="vector-layer-modal-header">
+            <h4>Create Vector Layer</h4>
+            <button id="vectorLayerClose" type="button" title="Close">
+              &times;
+            </button>
+          </div>
+
+          <label for="vectorLayerName">Layer Name:</label>
+          <input id="vectorLayerName" type="text" placeholder="New layer" />
+
+          <label for="vectorGeometryType">Geometry Type:</label>
+          <select id="vectorGeometryType">
+            <option value="Point">Point</option>
+            <option value="LineString">Line</option>
+            <option value="Polygon">Polygon</option>
+          </select>
+
+          <div class="vector-style-grid">
+            <div>
+              <label for="vectorStrokeColor">Stroke:</label>
+              <input id="vectorStrokeColor" type="color" value="#2563eb" />
+            </div>
+            <div>
+              <label for="vectorFillColor">Fill:</label>
+              <input id="vectorFillColor" type="color" value="#60a5fa" />
+            </div>
+            <div>
+              <label for="vectorStrokeWidth">Width:</label>
+              <input
+                id="vectorStrokeWidth"
+                type="number"
+                min="1"
+                max="12"
+                step="1"
+                value="2"
+              />
+            </div>
+            <div>
+              <label for="vectorPointSize">Point Size:</label>
+              <input
+                id="vectorPointSize"
+                type="number"
+                min="3"
+                max="28"
+                step="1"
+                value="7"
+              />
+            </div>
+          </div>
+
+          <div class="vector-fields-header">
+            <h5>Fields</h5>
+            <button id="addVectorField" type="button">Add Field</button>
+          </div>
+          <div id="vectorFieldsList"></div>
+
+          <div id="vectorLayerModalActions">
+            <button id="createVectorLayerApply" type="button">
+              Create Layer
+            </button>
+            <button id="createVectorLayerCancel" type="button">Cancel</button>
+          </div>
         </div>
       </div>
 
@@ -860,6 +950,17 @@
       </div>
 
       <div id="map">
+        <div class="map-projection-control" title="Map Projection">
+          <select id="mapProjectionSelect">
+            <option value="EPSG:3857">EPSG:3857 Web Mercator</option>
+            <option value="EPSG:4326">EPSG:4326 WGS84</option>
+            <option value="EPSG:6870">EPSG:6870 Albania TM 2010</option>
+            <option value="EPSG:32634">EPSG:32634 UTM 34N</option>
+          </select>
+          <button id="setMapProjection" class="fa-button" title="Set Map Projection">
+            Set
+          </button>
+        </div>
         <div class="form-container" style="display: none">
           <span class="close-form">&times;</span>
         </div>

@@ -2804,6 +2804,11 @@ function cloneFeaturesForTransaction(featuresToClone) {
 }
 
 function getEditableLayerType(layer) {
+  const configuredType = layer?.get?.("geometryType");
+  if (["Point", "LineString", "Polygon"].includes(configuredType)) {
+    return configuredType;
+  }
+
   const feature = layer
     ?.getSource?.()
     ?.getFeatures?.()
@@ -2815,6 +2820,22 @@ function getEditableLayerType(layer) {
   if (geometryType.includes("LineString")) return "LineString";
   if (geometryType.includes("Polygon")) return "Polygon";
   return "Polygon";
+}
+
+function getDefaultFieldValue(fieldType) {
+  if (fieldType === "number") return 0;
+  if (fieldType === "boolean") return false;
+  if (fieldType === "date") return new Date().toISOString().slice(0, 10);
+  return "";
+}
+
+function applyLayerSchemaToFeature(feature, layer) {
+  const fields = layer?.get?.("attributeSchema") || [];
+  fields.forEach((field) => {
+    if (!feature.getKeys().includes(field.name)) {
+      feature.set(field.name, getDefaultFieldValue(field.type));
+    }
+  });
 }
 
 layerSwitcher.on("select", (e) => {
@@ -3427,6 +3448,9 @@ editLayerButton.addEventListener("click", async () => {
   if (!isEditing) {
     if (selectedLayer instanceof VectorLayer && selectedLayer.get("editableVector")) {
       isLocalVectorEdit = true;
+      inserts = [];
+      updates = [];
+      deletes = [];
       originalLayer = selectedLayer;
       wfsVectorLayer = selectedLayer;
       wfsVectorSource = selectedLayer.getSource();
@@ -3853,6 +3877,7 @@ addNewFeature.addEventListener("click", (e) => {
     const feature = event.feature;
 
     // ✅ Don’t clone, just use the real feature in wfsVectorSource
+    applyLayerSchemaToFeature(feature, wfsVectorLayer);
     feature.set("geom", feature.getGeometry());
     if (isLocalVectorEdit && !feature.getId()) {
       feature.setId(`local.${Date.now()}.${inserts.length + 1}`);
@@ -4637,6 +4662,7 @@ const btnGeoprocessDropdown = document.getElementById("btnGeoprocessDropdown");
 const geoprocessOptions = document.getElementById("geoprocessOptions");
 const btnIntersectLayers = document.getElementById("btnIntersectLayers");
 const btnMergeLayers = document.getElementById("btnMergeLayers");
+const btnVerticesLayer = document.getElementById("btnVerticesLayer");
 const intersectModal = document.getElementById("intersectModal");
 const intersectModalClose = document.getElementById("intersectModalClose");
 const intersectCancel = document.getElementById("intersectCancel");
@@ -4650,6 +4676,12 @@ const mergeLayersApply = document.getElementById("mergeLayersApply");
 const mergeLayerA = document.getElementById("mergeLayerA");
 const mergeLayerB = document.getElementById("mergeLayerB");
 const mergeLayersName = document.getElementById("mergeLayersName");
+const verticesModal = document.getElementById("verticesModal");
+const verticesModalClose = document.getElementById("verticesModalClose");
+const verticesCancel = document.getElementById("verticesCancel");
+const verticesApply = document.getElementById("verticesApply");
+const verticesLayerSelect = document.getElementById("verticesLayerSelect");
+const verticesLayerName = document.getElementById("verticesLayerName");
 let currentGeoprocessLayerItems = [];
 
 const geoprocessResultStyle = new Style({
@@ -4810,6 +4842,43 @@ function createEditableResultLayer(features, title) {
   return resultLayer;
 }
 
+function createVerticesResultLayer(features, title) {
+  const resultSource = new VectorSource({ features });
+  const resultLayer = new VectorLayer({
+    source: resultSource,
+    title,
+    displayInLayerSwitcher: true,
+    visible: true,
+    style: verticesResultStyle,
+  });
+
+  const mapProjection = map.getView().getProjection().getCode();
+  features.forEach((feature) => feature.set("_featureProjection", mapProjection));
+  resultLayer.set("editableVector", true);
+  resultLayer.set("geoprocessLayer", true);
+  resultLayer.set("geometryType", "Point");
+  resultLayer.set("featureProjection", mapProjection);
+  resultLayer.set("sourceProjection", mapProjection);
+  resultLayer.set("attributeSchema", [
+    { name: "source_layer", type: "text" },
+    { name: "source_feature", type: "text" },
+    { name: "vertex_index", type: "number" },
+  ]);
+
+  map.addLayer(resultLayer);
+
+  const extent = resultSource.getExtent();
+  if (features.length && extent.every(Number.isFinite)) {
+    map.getView().fit(extent, {
+      duration: 600,
+      padding: [60, 60, 60, 60],
+      maxZoom: 18,
+    });
+  }
+
+  return resultLayer;
+}
+
 function showFeaturesInAttributeTable(features) {
   const tableContainer = document.getElementById("attribute-table-container");
   tableContainer.hidden = false;
@@ -4827,6 +4896,95 @@ function openIntersectionDialog() {
   geoprocessOptions.classList.remove("dropdown-show");
   intersectModal.classList.add("open");
   intersectModal.setAttribute("aria-hidden", "false");
+}
+
+function getVerticesLayerItems() {
+  return getGeoprocessLayerItems().filter((item) => item.sourceType === "vector");
+}
+
+function openVerticesDialog() {
+  currentGeoprocessLayerItems = getVerticesLayerItems();
+  fillLayerSelect(verticesLayerSelect, currentGeoprocessLayerItems);
+  verticesLayerName.value = "Feature vertices";
+  geoprocessOptions.classList.remove("dropdown-show");
+  verticesModal.classList.add("open");
+  verticesModal.setAttribute("aria-hidden", "false");
+}
+
+function closeVerticesDialog() {
+  verticesModal.classList.remove("open");
+  verticesModal.setAttribute("aria-hidden", "true");
+}
+
+async function createVerticesFromLayer() {
+  const layerItem = getSelectedLayerItem(
+    verticesLayerSelect,
+    currentGeoprocessLayerItems,
+  );
+  if (!layerItem) {
+    alert("Choose a vector layer first.");
+    return;
+  }
+
+  const turfApi = getTurf();
+  if (!turfApi?.explode) {
+    alert("Turf explode is not loaded.");
+    return;
+  }
+
+  await loadGeoprocessFeatures(layerItem);
+  if (!layerItem.features?.length) {
+    alert("The selected layer has no features.");
+    return;
+  }
+
+  const mapProjection = map.getView().getProjection().getCode();
+  const format = new GeoJSON();
+  const vertexFeatures = [];
+
+  layerItem.features.forEach((feature, featureIndex) => {
+    const geoJsonFeature = format.writeFeatureObject(feature, {
+      dataProjection: mapProjection,
+      featureProjection: mapProjection,
+    });
+    const exploded = turfApi.explode(geoJsonFeature);
+    const sourceFeatureId =
+      feature.getId?.() || feature.get("fid") || String(featureIndex + 1);
+
+    exploded.features.forEach((pointFeature, vertexIndex) => {
+      pointFeature.properties = {
+        ...(pointFeature.properties || {}),
+        source_layer: layerItem.title,
+        source_feature: String(sourceFeatureId),
+        vertex_index: vertexIndex + 1,
+      };
+      vertexFeatures.push(
+        format.readFeature(pointFeature, {
+          dataProjection: mapProjection,
+          featureProjection: mapProjection,
+        }),
+      );
+    });
+  });
+
+  if (!vertexFeatures.length) {
+    alert("No vertices were created from this layer.");
+    return;
+  }
+
+  const resultLayer = createVerticesResultLayer(
+    vertexFeatures,
+    verticesLayerName.value.trim() || `${layerItem.title} vertices`,
+  );
+  selectedLayer = resultLayer;
+  vectorLayer = resultLayer;
+  source = resultLayer.getSource();
+  wfsVectorLayer = resultLayer;
+  wfsVectorSource = source;
+  layerTitle = resultLayer.get("title");
+  layerName = layerTitle;
+  layerType = "Point";
+  closeVerticesDialog();
 }
 
 function closeIntersectionDialog() {
@@ -5016,17 +5174,24 @@ document.addEventListener("click", (event) => {
 });
 btnIntersectLayers.addEventListener("click", openIntersectionDialog);
 btnMergeLayers.addEventListener("click", openMergeLayersDialog);
+btnVerticesLayer.addEventListener("click", openVerticesDialog);
 intersectModalClose.addEventListener("click", closeIntersectionDialog);
 intersectCancel.addEventListener("click", closeIntersectionDialog);
 intersectApply.addEventListener("click", applyIntersectionDialog);
 mergeLayersModalClose.addEventListener("click", closeMergeLayersDialog);
 mergeLayersCancel.addEventListener("click", closeMergeLayersDialog);
 mergeLayersApply.addEventListener("click", applyMergeLayersDialog);
+verticesModalClose.addEventListener("click", closeVerticesDialog);
+verticesCancel.addEventListener("click", closeVerticesDialog);
+verticesApply.addEventListener("click", createVerticesFromLayer);
 intersectModal.addEventListener("click", (event) => {
   if (event.target === intersectModal) closeIntersectionDialog();
 });
 mergeLayersModal.addEventListener("click", (event) => {
   if (event.target === mergeLayersModal) closeMergeLayersDialog();
+});
+verticesModal.addEventListener("click", (event) => {
+  if (event.target === verticesModal) closeVerticesDialog();
 });
 
 // SAVE FEATURE EVENT
@@ -6420,6 +6585,14 @@ const externalArcgisVectorStyle = new Style({
   }),
   stroke: new Stroke({ color: "rgba(0, 166, 200, 0.9)", width: 2 }),
   fill: new Fill({ color: "rgba(0, 166, 200, 0.18)" }),
+});
+
+const verticesResultStyle = new Style({
+  image: new CircleStyle({
+    radius: 5,
+    fill: new Fill({ color: "rgba(239, 68, 68, 0.9)" }),
+    stroke: new Stroke({ color: "#ffffff", width: 1.5 }),
+  }),
 });
 
 function setExternalServiceStatus(message, isError = false) {
@@ -7919,6 +8092,162 @@ document.getElementById("add-xy").addEventListener("click", () => {
 document.getElementById("xyClose").addEventListener("click", () => {
   document.getElementById("xyModal").style.display = "none";
 });
+
+// CREATE EMPTY VECTOR LAYER
+const vectorLayerModal = document.getElementById("vectorLayerModal");
+const vectorFieldsList = document.getElementById("vectorFieldsList");
+
+function openVectorLayerModal() {
+  document.getElementById("vectorLayerName").value = "";
+  document.getElementById("vectorGeometryType").value = "Point";
+  document.getElementById("vectorStrokeColor").value = "#2563eb";
+  document.getElementById("vectorFillColor").value = "#60a5fa";
+  document.getElementById("vectorStrokeWidth").value = "2";
+  document.getElementById("vectorPointSize").value = "7";
+  vectorFieldsList.innerHTML = "";
+  addVectorFieldRow("name", "text");
+  vectorLayerModal.style.display = "flex";
+}
+
+function closeVectorLayerModal() {
+  vectorLayerModal.style.display = "none";
+}
+
+function addVectorFieldRow(fieldName = "", fieldType = "text") {
+  const row = document.createElement("div");
+  row.className = "vector-field-row";
+
+  const nameInput = document.createElement("input");
+  nameInput.type = "text";
+  nameInput.placeholder = "Field name";
+  nameInput.value = fieldName;
+
+  const typeSelect = document.createElement("select");
+  ["text", "number", "date", "boolean"].forEach((type) => {
+    typeSelect.add(new Option(type, type));
+  });
+  typeSelect.value = fieldType;
+
+  const removeButton = document.createElement("button");
+  removeButton.type = "button";
+  removeButton.className = "vector-field-remove";
+  removeButton.textContent = "x";
+  removeButton.title = "Remove field";
+  removeButton.addEventListener("click", () => row.remove());
+
+  row.append(nameInput, typeSelect, removeButton);
+  vectorFieldsList.appendChild(row);
+}
+
+function getVectorLayerFields() {
+  const fields = [];
+  const names = new Set();
+
+  vectorFieldsList.querySelectorAll(".vector-field-row").forEach((row) => {
+    const [nameInput, typeSelect] = row.querySelectorAll("input, select");
+    const name = nameInput.value.trim();
+    const type = typeSelect.value;
+
+    if (!name || names.has(name)) return;
+    if (["geometry", "geom", "the_geom", "wkb_geometry"].includes(name)) return;
+
+    names.add(name);
+    fields.push({ name, type });
+  });
+
+  return fields;
+}
+
+function hexToRgba(hex, alpha = 1) {
+  const normalized = hex.replace("#", "");
+  const value = Number.parseInt(normalized, 16);
+  const red = (value >> 16) & 255;
+  const green = (value >> 8) & 255;
+  const blue = value & 255;
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function createVectorLayerStyle(config) {
+  const stroke = new Stroke({
+    color: config.strokeColor,
+    width: config.strokeWidth,
+  });
+  const fill = new Fill({
+    color: hexToRgba(config.fillColor, 0.28),
+  });
+
+  return new Style({
+    image: new CircleStyle({
+      radius: config.pointSize,
+      fill: new Fill({ color: config.fillColor }),
+      stroke: new Stroke({ color: "#ffffff", width: 1.5 }),
+    }),
+    stroke,
+    fill,
+  });
+}
+
+function createEmptyVectorLayer() {
+  const createdLayerName = document.getElementById("vectorLayerName").value.trim();
+  const geometryType = document.getElementById("vectorGeometryType").value;
+  const fields = getVectorLayerFields();
+
+  if (!createdLayerName) {
+    alert("Type a layer name first.");
+    return;
+  }
+
+  const styleConfig = {
+    strokeColor: document.getElementById("vectorStrokeColor").value,
+    fillColor: document.getElementById("vectorFillColor").value,
+    strokeWidth:
+      Number(document.getElementById("vectorStrokeWidth").value) || 2,
+    pointSize: Number(document.getElementById("vectorPointSize").value) || 7,
+  };
+  const layerProjection = map.getView().getProjection().getCode();
+  const createdVectorSource = new VectorSource();
+  const createdVectorLayer = new VectorLayer({
+    title: createdLayerName,
+    source: createdVectorSource,
+    style: createVectorLayerStyle(styleConfig),
+    displayInLayerSwitcher: true,
+  });
+
+  createdVectorLayer.set("editableVector", true);
+  createdVectorLayer.set("createdVectorLayer", true);
+  createdVectorLayer.set("geometryType", geometryType);
+  createdVectorLayer.set("attributeSchema", fields);
+  createdVectorLayer.set("styleConfig", styleConfig);
+  createdVectorLayer.set("featureProjection", layerProjection);
+  createdVectorLayer.set("sourceProjection", layerProjection);
+
+  map.addLayer(createdVectorLayer);
+  selectedLayer = createdVectorLayer;
+  layerTitle = createdLayerName;
+  layerName = layerTitle;
+  layerType = geometryType;
+  vectorLayer = createdVectorLayer;
+  source = createdVectorSource;
+  wfsVectorLayer = createdVectorLayer;
+  wfsVectorSource = createdVectorSource;
+  closeVectorLayerModal();
+}
+
+document
+  .getElementById("create-vector-layer")
+  .addEventListener("click", openVectorLayerModal);
+document
+  .getElementById("vectorLayerClose")
+  .addEventListener("click", closeVectorLayerModal);
+document
+  .getElementById("createVectorLayerCancel")
+  .addEventListener("click", closeVectorLayerModal);
+document
+  .getElementById("addVectorField")
+  .addEventListener("click", () => addVectorFieldRow());
+document
+  .getElementById("createVectorLayerApply")
+  .addEventListener("click", createEmptyVectorLayer);
 
 document.getElementById("xyCsvFile").addEventListener("change", async (event) => {
   const file = event.target.files[0];

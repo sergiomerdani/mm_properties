@@ -367,6 +367,11 @@ td {
 }
 
 .map-projection-control {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 1200;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -375,6 +380,7 @@ td {
   border: 1px solid #c4d0d8;
   border-radius: 6px;
   background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
 }
 
 #mapProjectionSelect {
@@ -1192,6 +1198,133 @@ button.fa-button.active {
   font-size: 11px;
 }
 
+/* Create Vector Layer */
+
+#vectorLayerModal {
+  position: absolute;
+  inset: 0;
+  z-index: 1250;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.22);
+}
+
+#vectorLayerModalContent {
+  width: min(420px, calc(100vw - 28px));
+  max-height: 86vh;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid #c3ccd4;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1f2937;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.22);
+  font-size: 12px;
+}
+
+.vector-layer-modal-header,
+.vector-fields-header,
+.vector-field-row,
+#vectorLayerModalActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vector-layer-modal-header,
+.vector-fields-header {
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.vector-layer-modal-header h4,
+.vector-fields-header h5 {
+  margin: 0;
+}
+
+#vectorLayerClose {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#vectorLayerModal label {
+  display: block;
+  margin: 8px 0 4px;
+  font-weight: 600;
+}
+
+#vectorLayerModal input,
+#vectorLayerModal select {
+  width: 100%;
+  height: 30px;
+  border: 1px solid #bfccd8;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 12px;
+}
+
+.vector-style-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+}
+
+#vectorFieldsList {
+  display: grid;
+  gap: 6px;
+}
+
+.vector-field-row {
+  display: grid;
+  grid-template-columns: 1fr 110px 28px;
+  gap: 6px;
+}
+
+.vector-field-remove {
+  width: 28px;
+  height: 30px;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  background: #fff1f2;
+  color: #b91c1c;
+  cursor: pointer;
+}
+
+#addVectorField {
+  height: 28px;
+  border: 1px solid #bfccd8;
+  border-radius: 4px;
+  background: #eef6fb;
+  color: #19364a;
+}
+
+#vectorLayerModalActions {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+#vectorLayerModalActions button {
+  min-width: 92px;
+  height: 32px;
+  border: 1px solid #bfccd8;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#createVectorLayerApply {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
 /* Georeference Image */
 
 #georefModal {
@@ -1348,7 +1481,8 @@ button.fa-button.active {
 #bufferModal,
 #mergeModal,
 #intersectModal,
-#mergeLayersModal {
+#mergeLayersModal,
+#verticesModal {
   display: none;
   position: fixed;
   inset: 0;
@@ -1362,14 +1496,16 @@ button.fa-button.active {
 #bufferModal.open,
 #mergeModal.open,
 #intersectModal.open,
-#mergeLayersModal.open {
+#mergeLayersModal.open,
+#verticesModal.open {
   display: flex;
 }
 
 #bufferModalContent,
 #mergeModalContent,
 #intersectModalContent,
-#mergeLayersModalContent {
+#mergeLayersModalContent,
+#verticesModalContent {
   width: min(360px, 100%);
   background: #ffffff;
   border: 1px solid #cbd5e1;
@@ -1400,7 +1536,8 @@ button.fa-button.active {
 #bufferModalClose,
 #mergeModalClose,
 #intersectModalClose,
-#mergeLayersModalClose {
+#mergeLayersModalClose,
+#verticesModalClose {
   width: 28px;
   height: 28px;
   border: 0;
@@ -1414,7 +1551,8 @@ button.fa-button.active {
 #bufferModalContent label,
 #mergeModalContent label,
 #intersectModalContent label,
-#mergeLayersModalContent label {
+#mergeLayersModalContent label,
+#verticesModalContent label {
   display: block;
   margin: 10px 0 5px;
   font-size: 12px;
@@ -1429,7 +1567,9 @@ button.fa-button.active {
 #intersectLayerName,
 #mergeLayerA,
 #mergeLayerB,
-#mergeLayersName {
+#mergeLayersName,
+#verticesLayerSelect,
+#verticesLayerName {
   height: 32px;
   border: 1px solid #bfccd8;
   border-radius: 4px;
@@ -1451,7 +1591,9 @@ button.fa-button.active {
 #intersectLayerName,
 #mergeLayerA,
 #mergeLayerB,
-#mergeLayersName {
+#mergeLayersName,
+#verticesLayerSelect,
+#verticesLayerName {
   width: 100%;
   background: white;
 }
@@ -1514,7 +1656,8 @@ button.fa-button.active {
 #bufferApply,
 #mergeApply,
 #intersectApply,
-#mergeLayersApply {
+#mergeLayersApply,
+#verticesApply {
   background: #2563eb;
   border-color: #2563eb;
   color: white;
