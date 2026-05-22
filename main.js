@@ -904,6 +904,7 @@ function getWfsGetFeatureUrl({
   maxFeatures,
   outputFormat = "application/json",
   srsName,
+  cqlFilter,
 }) {
   const params = new URLSearchParams({
     service: "WFS",
@@ -919,6 +920,10 @@ function getWfsGetFeatureUrl({
 
   if (srsName) {
     params.set("srsName", srsName);
+  }
+
+  if (cqlFilter) {
+    params.set("cql_filter", cqlFilter);
   }
 
   return `${getGeoServerProxyOwsUrl(workspace)}?${params}`;
@@ -1190,6 +1195,296 @@ geoSearch.on("select", function (event) {
 });
 
 const searchBox = document.querySelector(".ol-search");
+let layerSearchItems = [];
+let layerSearchMarkerLayer = null;
+
+function escapeCqlValue(value) {
+  return String(value).replace(/'/g, "''");
+}
+
+function quoteCqlProperty(fieldName) {
+  return `"${String(fieldName).replace(/"/g, '""')}"`;
+}
+
+function getLayerSearchItems() {
+  const items = [];
+
+  function visitLayer(layer) {
+    if (layer instanceof LayerGroup) {
+      layer.getLayers().forEach(visitLayer);
+      return;
+    }
+
+    const params = layer.getSource?.()?.getParams?.();
+    const typeName = params?.LAYERS || params?.layers || layer.get("layerParam");
+    if (!typeName || !String(typeName).includes(":")) return;
+
+    items.push({
+      title: layer.get("title") || typeName,
+      typeName,
+      layer,
+    });
+  }
+
+  map.getLayers().forEach(visitLayer);
+  return items;
+}
+
+async function fetchSearchLayerFields(typeName) {
+  const [workspace = workspaceName] = typeName.split(":");
+  const params = new URLSearchParams({
+    service: "WFS",
+    version: "1.1.0",
+    request: "DescribeFeatureType",
+    typeName,
+  });
+  const response = await fetch(`${getGeoServerProxyOwsUrl(workspace)}?${params}`);
+  if (!response.ok) {
+    throw new Error(`Could not read fields for ${typeName}.`);
+  }
+
+  const text = await response.text();
+  const doc = new DOMParser().parseFromString(text, "application/xml");
+  return Array.from(doc.querySelectorAll("element"))
+    .map((element) => ({
+      name: element.getAttribute("name"),
+      type: element.getAttribute("type") || "",
+    }))
+    .filter(
+      (field) =>
+        field.name &&
+        !/gml|geometry|point|polygon|linestring/i.test(field.type) &&
+        !["geom", "the_geom", "geometry", "wkb_geometry"].includes(field.name),
+    );
+}
+
+function buildLayerSearchControl() {
+  if (!searchBox) return;
+
+  const mapElement = document.getElementById("map");
+  const panel = document.createElement("div");
+  panel.className = "layer-search-config";
+  panel.innerHTML = `
+    <select id="mapSearchMode" title="Search mode">
+      <option value="nominatim">Nominatim</option>
+      <option value="layer">Layer</option>
+    </select>
+    <select id="mapSearchLayer" hidden></select>
+    <select id="mapSearchField" hidden></select>
+    <input id="mapSearchValue" type="search" placeholder="Feature name" hidden />
+    <button id="mapLayerSearchApply" type="button" hidden title="Search layer">
+      <i class="fa-solid fa-magnifying-glass"></i>
+    </button>
+    <div id="mapSearchSuggestions" class="layer-search-suggestions" hidden></div>
+  `;
+  mapElement.appendChild(panel);
+  panel.addEventListener("pointerdown", (event) => event.stopPropagation());
+  panel.addEventListener("click", (event) => event.stopPropagation());
+
+  const modeSelect = panel.querySelector("#mapSearchMode");
+  const layerSelect = panel.querySelector("#mapSearchLayer");
+  const fieldSelect = panel.querySelector("#mapSearchField");
+  const valueInput = panel.querySelector("#mapSearchValue");
+  const applyButton = panel.querySelector("#mapLayerSearchApply");
+  const suggestionsBox = panel.querySelector("#mapSearchSuggestions");
+  let suggestionTimer = null;
+  let suggestionRequestId = 0;
+
+  function setLayerMode(enabled) {
+    layerSelect.hidden = !enabled;
+    fieldSelect.hidden = !enabled;
+    valueInput.hidden = !enabled;
+    applyButton.hidden = !enabled;
+    suggestionsBox.hidden = true;
+    panel.classList.toggle("layer-search-mode", enabled);
+    const nominatimInput = searchBox.querySelector("input[type='search']");
+    if (nominatimInput) nominatimInput.hidden = enabled;
+  }
+
+  function populateLayerSearchLayers() {
+    layerSearchItems = getLayerSearchItems();
+    layerSelect.innerHTML = "";
+    layerSearchItems.forEach((item, index) => {
+      layerSelect.add(new Option(item.title, String(index)));
+    });
+    if (!layerSearchItems.length) {
+      layerSelect.add(new Option("No GeoServer layers found", ""));
+    }
+  }
+
+  async function populateLayerSearchFields() {
+    fieldSelect.innerHTML = "";
+    const layerItem = layerSearchItems[Number(layerSelect.value)];
+    if (!layerItem) return;
+
+    fieldSelect.add(new Option("Loading fields...", ""));
+    try {
+      const fields = await fetchSearchLayerFields(layerItem.typeName);
+      fieldSelect.innerHTML = "";
+      fields.forEach((field) => fieldSelect.add(new Option(field.name, field.name)));
+      if (!fields.length) fieldSelect.add(new Option("No text fields found", ""));
+      valueInput.value = "";
+      updateLayerSearchSuggestions();
+    } catch (error) {
+      console.error(error);
+      fieldSelect.innerHTML = "";
+      fieldSelect.add(new Option("Could not load fields", ""));
+    }
+  }
+
+  function buildCaseInsensitiveSearchFilter(fieldName, searchValue) {
+    const value = escapeCqlValue(searchValue);
+    return `${quoteCqlProperty(fieldName)} ILIKE '%${value}%'`;
+  }
+
+  async function fetchLayerSearchSuggestions(searchValue = "") {
+    const layerItem = layerSearchItems[Number(layerSelect.value)];
+    const fieldName = fieldSelect.value;
+    if (!layerItem || !fieldName) return [];
+
+    const [workspace = workspaceName] = layerItem.typeName.split(":");
+    const mapProjection = map.getView().getProjection().getCode();
+    const url = getWfsGetFeatureUrl({
+      workspace,
+      typeName: layerItem.typeName,
+      version: "1.1.0",
+      maxFeatures: 12,
+      srsName: mapProjection,
+      cqlFilter: searchValue
+        ? buildCaseInsensitiveSearchFilter(fieldName, searchValue)
+        : null,
+    });
+    const response = await fetch(url);
+    if (!response.ok) return [];
+
+    const geojson = await response.json();
+    const values = (geojson.features || [])
+      .map((feature) => feature.properties?.[fieldName])
+      .filter((value) => value !== null && value !== undefined && value !== "")
+      .map((value) => String(value));
+
+    return [...new Set(values)].slice(0, 10);
+  }
+
+  function renderLayerSearchSuggestions(values) {
+    suggestionsBox.innerHTML = "";
+    if (!values.length) {
+      suggestionsBox.hidden = true;
+      return;
+    }
+
+    values.forEach((value) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = value;
+      button.addEventListener("click", () => {
+        valueInput.value = value;
+        suggestionsBox.hidden = true;
+        runLayerSearch();
+      });
+      suggestionsBox.appendChild(button);
+    });
+    suggestionsBox.hidden = false;
+  }
+
+  function updateLayerSearchSuggestions() {
+    window.clearTimeout(suggestionTimer);
+    const requestId = ++suggestionRequestId;
+    const searchValue = valueInput.value.trim();
+
+    suggestionTimer = window.setTimeout(async () => {
+      const values = await fetchLayerSearchSuggestions(searchValue);
+      if (requestId !== suggestionRequestId) return;
+      renderLayerSearchSuggestions(values);
+    }, 200);
+  }
+
+  async function runLayerSearch() {
+    const layerItem = layerSearchItems[Number(layerSelect.value)];
+    const fieldName = fieldSelect.value;
+    const searchValue = valueInput.value.trim();
+    if (!layerItem || !fieldName || !searchValue) {
+      alert("Choose layer, field, and search value.");
+      return;
+    }
+
+    const [workspace = workspaceName] = layerItem.typeName.split(":");
+    const mapProjection = map.getView().getProjection().getCode();
+    const cqlFilter = buildCaseInsensitiveSearchFilter(fieldName, searchValue);
+    const url = getWfsGetFeatureUrl({
+      workspace,
+      typeName: layerItem.typeName,
+      version: "1.1.0",
+      maxFeatures: 1,
+      srsName: mapProjection,
+      cqlFilter,
+    });
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      alert(`Search failed with status ${response.status}.`);
+      return;
+    }
+
+    const geojson = await response.json();
+    const features = new GeoJSON().readFeatures(geojson, {
+      dataProjection: mapProjection,
+      featureProjection: mapProjection,
+    });
+
+    if (!features.length) {
+      alert("No feature found with that value.");
+      return;
+    }
+    suggestionsBox.hidden = true;
+
+    const feature = features[0];
+    const extent = feature.getGeometry().getExtent();
+    map.getView().fit(extent, {
+      duration: 600,
+      padding: [70, 70, 70, 70],
+      maxZoom: 18,
+    });
+
+    if (layerSearchMarkerLayer) map.removeLayer(layerSearchMarkerLayer);
+    layerSearchMarkerLayer = new VectorLayer({
+      source: new VectorSource({ features: [feature] }),
+      style: new Style({
+        image: new CircleStyle({
+          radius: 8,
+          fill: new Fill({ color: "rgba(239, 68, 68, 0.9)" }),
+          stroke: new Stroke({ color: "#ffffff", width: 2 }),
+        }),
+        stroke: new Stroke({ color: "#ef4444", width: 4 }),
+        fill: new Fill({ color: "rgba(239, 68, 68, 0.2)" }),
+      }),
+      displayInLayerSwitcher: false,
+    });
+    map.addLayer(layerSearchMarkerLayer);
+  }
+
+  modeSelect.addEventListener("change", () => {
+    const enabled = modeSelect.value === "layer";
+    setLayerMode(enabled);
+    if (enabled) {
+      populateLayerSearchLayers();
+      populateLayerSearchFields();
+    }
+  });
+  layerSelect.addEventListener("change", populateLayerSearchFields);
+  fieldSelect.addEventListener("change", () => {
+    valueInput.value = "";
+    updateLayerSearchSuggestions();
+  });
+  valueInput.addEventListener("input", updateLayerSearchSuggestions);
+  valueInput.addEventListener("focus", updateLayerSearchSuggestions);
+  applyButton.addEventListener("click", runLayerSearch);
+  valueInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") runLayerSearch();
+  });
+}
+
+buildLayerSearchControl();
 
 // searchBox.style.position = "absolute";
 // searchBox.style.left = 0;

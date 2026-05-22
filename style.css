@@ -100,6 +100,71 @@ header {
   left: 10px;
 }
 
+.layer-search-config {
+  position: absolute;
+  left: 10px;
+  top: 40px;
+  z-index: 5201;
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: 110px;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.layer-search-config.layer-search-mode {
+  grid-template-columns: 110px 160px 135px 160px 32px;
+  align-items: center;
+}
+
+.layer-search-config select,
+.layer-search-config input,
+.layer-search-config button {
+  height: 28px;
+  border: 1px solid #b9c6cf;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #263647;
+  font-size: 12px;
+}
+
+.layer-search-config input {
+  padding: 3px 6px;
+}
+
+.layer-search-config button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.layer-search-suggestions {
+  grid-column: 4 / 6;
+  display: grid;
+  max-height: 190px;
+  overflow: auto;
+  border: 1px solid #b9c6cf;
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+}
+
+.layer-search-suggestions button {
+  justify-content: flex-start;
+  width: 100%;
+  height: auto;
+  min-height: 28px;
+  border: 0;
+  border-radius: 0;
+  padding: 5px 8px;
+  text-align: left;
+}
+
+.layer-search-suggestions button:hover {
+  background: #eef6fb;
+}
+
 .form-container {
   padding: 30px;
   position: fixed;
