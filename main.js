@@ -77,8 +77,6 @@ import ImageStatic from "ol/source/ImageStatic.js";
 import { Image as ImageLayer } from "ol/layer.js";
 import ol_control_Graticule from "ol-ext/control/Graticule";
 import ol_control_FeatureList from "ol-ext/control/FeatureList";
-import ol_control_SearchCoordinates from "ol-ext/control/SearchCoordinates";
-import ol_control_Select from "ol-ext/control/Select";
 import WMSCapabilities from "ol/format/WMSCapabilities";
 import Cluster from "ol/source/Cluster";
 import { bbox, bbox as bboxStrategy } from "ol/loadingstrategy";
@@ -2665,11 +2663,6 @@ let layerType,
   features,
   workspacePart,
   namePart;
-const selectControl = new ol_control_Select({
-  source: null, // Set initially to null
-  className: "ol-select",
-});
-
 function fetchLayerPropertiesFromWFS(url, layerParam) {
   const [workspaceName, layerNamePart] = layerParam.split(":");
 
@@ -5271,115 +5264,6 @@ const testLat = "41°19′39.05″N";
 const testLon = "19°49′1.99″E";
 const testPair = `${testLat}, ${testLon}`;
 // console.log("parseDMSPair(testPair):", parseDMSPair(testPair));
-
-//OL-EXT SEARCH COORDINATES
-// Initialize the search control with custom options
-const searchCoordinates = new ol_control_SearchCoordinates({
-  zoom: 14, // Set the default zoom level when coordinates are found
-  projection: wgs84Proj, // Set your desired projection (e.g., EPSG:4326 for lat/long)
-  label: "Search Coordinates", // Optional: customize the label if needed
-  minLength: 4, // Minimum input length before triggering search
-  placeholder: "Enter coordinates...", // Customize the placeholder text
-});
-// Add control to the map
-map.addControl(searchCoordinates);
-// Style for the point feature
-const pointStyle = new Style({
-  image: new CircleStyle({
-    radius: 6,
-    fill: new Fill({ color: "red" }),
-    stroke: new Stroke({ color: "white", width: 2 }),
-  }),
-});
-
-// Create a vector layer to hold the point feature
-const gpsSource = new VectorSource();
-const gpsLayer = new VectorLayer({
-  source: gpsSource,
-  style: pointStyle,
-});
-// Add the vector layer to the map
-map.addLayer(gpsLayer);
-// Add an event listener for the "select" event
-searchCoordinates.on("select", function (event) {
-  const coord = event.search.gps;
-  console.log(coord);
-
-  // Transform the coordinates to the map's projection (if needed)
-  const mapProjection = map.getView().getProjection();
-  console.log(mapProjection);
-
-  const transformedCoord = transform(coord, wgs84Proj, mapProjection); // Change EPSG:4326 to your desired input projection
-  console.log(transformedCoord);
-
-  const pointFeature = new Feature({
-    geometry: new Point(transformedCoord),
-  });
-
-  gpsSource.clear(); // Clear previous points
-  gpsSource.addFeature(pointFeature); // Add the new point
-  // Zoom to the coordinates
-  map.getView().setCenter(transformedCoord);
-  map.getView().setZoom(20); // Set a zoom level for the focused view
-});
-
-// _______________________________________________________________________________
-// SELECY CONTROL OL-EXT
-const pointSelectedStyle = new Style({
-  image: new CircleStyle({
-    radius: 10, // Larger radius for emphasis
-    fill: new Fill({ color: "blue" }), // Blue fill color for the selected point
-    stroke: new Stroke({ color: "yellow", width: 2 }), // Yellow outline
-  }),
-});
-
-const polygonSelectedStyle = new Style({
-  stroke: new Stroke({
-    color: "blue",
-    width: 3,
-  }),
-  fill: new Fill({
-    color: "rgba(0, 0, 255, 0.3)", // Blue fill with opacity
-  }),
-});
-
-const lineStringSelectedStyle = new Style({
-  stroke: new Stroke({
-    color: "green",
-    width: 4,
-    lineDash: [10, 10], // Dashed pattern
-  }),
-});
-
-let previouslySelectedFeatures = []; // To store all previously selected features
-
-selectControl.on("select", function (event) {
-  const features = event.features; // Get the selected features
-
-  // Reset the style of all previously selected features
-  previouslySelectedFeatures.forEach((feat) => {
-    feat.setStyle(null);
-  });
-
-  // Apply the selected style to each currently selected feature
-  // Apply appropriate style based on geometry type
-  features.forEach((feat) => {
-    console.log(geometryType);
-    if (geometryType === "PointPropertyType") {
-      feat.setStyle(pointSelectedStyle);
-    } else if (geometryType === "GeometryPropertyType") {
-      feat.setStyle(polygonSelectedStyle);
-    } else if (geometryType === "MultiLineStringPropertyType") {
-      feat.setStyle(lineStringSelectedStyle);
-    }
-  });
-
-  // Update the array of previously selected features
-  previouslySelectedFeatures = [...features]; // Store the new selected features
-});
-
-// Add the control to the map
-map.addControl(selectControl);
 
 // SEARCH CONTROL
 // Get the button and form elements

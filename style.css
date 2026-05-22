@@ -729,17 +729,6 @@ button {
   border-top: 1px solid #ccc; /* Optional: border for separation */
 }
 
-.ol-searchcoord {
-  /* position: relative; */
-  top: 60px; /* Adjust this value as needed */
-}
-
-.ol-control.ol-select {
-  top: 3.8em;
-  left: 3em;
-  background-color: rgba(255, 255, 255, 0.5);
-}
-
 #search-container {
   position: fixed;
   top: 200px;
