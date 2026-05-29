@@ -147,6 +147,88 @@ header {
   cursor: pointer;
 }
 
+.nearby-category-menu {
+  position: relative;
+  display: inline-flex;
+  margin-top: 10px;
+}
+
+.nearby-analysis-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  margin: 10px 8px 0 0;
+  padding: 0 10px;
+  border: 1px solid #b8c6d1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1f6feb;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nearby-analysis-action:hover,
+.nearby-analysis-action.active {
+  background: #eaf2ff;
+}
+
+.nearby-category-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 128px;
+  height: 34px;
+  margin-left: 0;
+  padding: 4px 8px;
+  border: 1px solid #c4d0d8;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #263647;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#nearbyCategoryLabel {
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nearby-category-panel {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  z-index: 7000;
+  display: grid;
+  min-width: 170px;
+  max-height: 230px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid #b9c6cf;
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.2);
+}
+
+.nearby-category-panel label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 3px 5px;
+  color: #263647;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.nearby-category-panel label:hover {
+  background: #eef6fb;
+}
+
 .layer-search-suggestions {
   grid-column: 4 / 6;
   display: grid;
@@ -1037,10 +1119,40 @@ button {
   font-size: 12px;
 }
 
-.nearby-card__times span {
+.nearby-card__times button {
   padding: 5px 6px;
+  border: 0;
   border-radius: 6px;
   background: #f1f5f9;
+  color: #172033;
+  font: inherit;
+  cursor: pointer;
+}
+
+.nearby-card__times button:hover {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.nearby-time-source {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.nearby-time-source--route {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.nearby-time-source--estimate {
+  background: #fef3c7;
+  color: #92400e;
 }
 
 #attribute-record-count {

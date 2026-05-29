@@ -8134,6 +8134,9 @@ const nearbySidebarClose = document.getElementById("nearbySidebarClose");
 const nearbyResults = document.getElementById("nearbyResults");
 const nearbySidebarSubtitle = document.getElementById("nearbySidebarSubtitle");
 const sharedChatSidebar = document.getElementById("chatSidebar");
+const nearbyCategoryToggle = document.getElementById("nearbyCategoryToggle");
+const nearbyCategoryPanel = document.getElementById("nearbyCategoryPanel");
+const nearbyCategoryLabel = document.getElementById("nearbyCategoryLabel");
 let nearbyPickActive = false;
 let nearbyMarkerLayer = null;
 let nearbyResultsLayer = null;
@@ -8144,18 +8147,20 @@ let nearbyRouteRequestId = 0;
 let nearbyLastPlaces = [];
 
 const nearbyCategories = [
-  { key: "school", label: "School", query: '["amenity"="school"]' },
-  { key: "hospital", label: "Hospital", query: '["amenity"="hospital"]' },
-  { key: "park", label: "Park", query: '["leisure"="park"]' },
-  { key: "police", label: "Police Station", query: '["amenity"="police"]' },
+  { key: "school", group: "school", label: "School", query: '["amenity"="school"]' },
+  { key: "hospital", group: "hospital", label: "Hospital", query: '["amenity"="hospital"]' },
+  { key: "park", group: "park", label: "Park", query: '["leisure"="park"]' },
+  { key: "police", group: "police", label: "Police Station", query: '["amenity"="police"]' },
   {
     key: "fire_station",
+    group: "fire_station",
     label: "Fire Station",
     query: '["amenity"="fire_station"]',
   },
-  { key: "bus_stop", label: "Bus Stop", query: '["highway"="bus_stop"]' },
+  { key: "bus_stop", group: "bus_stop", label: "Bus Stop", query: '["highway"="bus_stop"]' },
   {
     key: "bus_platform",
+    group: "bus_stop",
     label: "Bus Stop",
     query: '["public_transport"="platform"]',
   },
@@ -8213,13 +8218,15 @@ function estimateNearbyDuration(distanceMeters, speedKmh) {
 
 function getNearbyDurationText(place, mode) {
   const duration = mode === "car" ? place.carDuration : place.walkDuration;
-  if (Number.isFinite(duration)) return formatNearbyDuration(duration);
+  if (Number.isFinite(duration)) {
+    return `${formatNearbyDuration(duration)} <small class="nearby-time-source nearby-time-source--route">Route</small>`;
+  }
 
   const estimatedSeconds = estimateNearbyDuration(
     place.distance,
     mode === "car" ? 35 : 5,
   );
-  return `${formatNearbyDuration(estimatedSeconds)} est.`;
+  return `${formatNearbyDuration(estimatedSeconds)} <small class="nearby-time-source nearby-time-source--estimate">Estimate</small>`;
 }
 
 function escapeNearbyHtml(value) {
@@ -8293,15 +8300,105 @@ function getNearbyHighlightStyle(feature) {
   ];
 }
 
-const nearbyRouteStyle = new Style({
+const nearbyCarRouteStyle = new Style({
   stroke: new Stroke({
     color: "#ef4444",
     width: 4,
   }),
 });
 
+const nearbyWalkRouteStyle = new Style({
+  stroke: new Stroke({
+    color: "#64748b",
+    width: 4,
+    lineDash: [10, 10],
+  }),
+});
+
+function getNearbyRouteStyle(profile) {
+  return profile === "foot-walking" ? nearbyWalkRouteStyle : nearbyCarRouteStyle;
+}
+
+function getSelectedNearbyCategories() {
+  const selectedValues = Array.from(
+    nearbyCategoryPanel?.querySelectorAll("input:checked") || [],
+  ).map((input) => input.value);
+
+  if (!selectedValues.length || selectedValues.includes("all")) {
+    return nearbyCategories;
+  }
+
+  return nearbyCategories.filter((category) =>
+    selectedValues.includes(category.group),
+  );
+}
+
+function updateNearbyCategoryLabel() {
+  const checkedInputs = Array.from(
+    nearbyCategoryPanel?.querySelectorAll("input:checked") || [],
+  );
+  const selectedValues = checkedInputs.map((input) => input.value);
+
+  if (!selectedValues.length || selectedValues.includes("all")) {
+    nearbyCategoryLabel.textContent = "All";
+    return;
+  }
+
+  nearbyCategoryLabel.textContent = checkedInputs
+    .map((input) => input.parentElement.textContent.trim())
+    .join(", ");
+}
+
+function positionNearbyCategoryPanel() {
+  nearbyCategoryPanel.style.left = "0";
+  nearbyCategoryPanel.style.top = "calc(100% + 4px)";
+}
+
+nearbyCategoryToggle?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  positionNearbyCategoryPanel();
+  nearbyCategoryPanel.hidden = !nearbyCategoryPanel.hidden;
+});
+
+nearbyCategoryPanel?.addEventListener("click", (event) => {
+  event.stopPropagation();
+});
+
+nearbyCategoryPanel?.addEventListener("change", (event) => {
+  const changed = event.target;
+  const allInput = nearbyCategoryPanel.querySelector('input[value="all"]');
+  const checkedInputs = Array.from(
+    nearbyCategoryPanel.querySelectorAll("input:checked"),
+  );
+
+  if (changed.value === "all" && changed.checked) {
+    nearbyCategoryPanel
+      .querySelectorAll('input:not([value="all"])')
+      .forEach((input) => {
+        input.checked = false;
+      });
+  } else if (changed.value !== "all" && changed.checked) {
+    allInput.checked = false;
+  } else if (!checkedInputs.length) {
+    allInput.checked = true;
+  }
+
+  updateNearbyCategoryLabel();
+});
+
+document.addEventListener("click", () => {
+  if (nearbyCategoryPanel) nearbyCategoryPanel.hidden = true;
+});
+
+window.addEventListener("resize", () => {
+  if (nearbyCategoryPanel && !nearbyCategoryPanel.hidden) {
+    positionNearbyCategoryPanel();
+  }
+});
+
 function getOverpassQuery([lon, lat], radius = 2000) {
-  const blocks = nearbyCategories
+  const categories = getSelectedNearbyCategories();
+  const blocks = categories
     .map(
       (category) =>
         `node${category.query}(around:${radius},${lat},${lon});` +
@@ -8417,7 +8514,7 @@ function displayNearbyPlacesOnMap(places) {
 
   nearbyRouteLayer = new VectorLayer({
     source: new VectorSource(),
-    style: nearbyRouteStyle,
+    style: nearbyCarRouteStyle,
     displayInLayerSwitcher: false,
   });
   nearbyRouteLayer.setZIndex(179);
@@ -8431,7 +8528,6 @@ function highlightNearbyPlace(placeId, shouldZoom = true) {
   const highlightFeature = createNearbyResultFeature(place);
   nearbyHighlightLayer.getSource().clear();
   nearbyHighlightLayer.getSource().addFeature(highlightFeature);
-  updateNearbyPath(place);
 
   nearbyResults
     .querySelectorAll(".nearby-card")
@@ -8451,9 +8547,9 @@ function highlightNearbyPlace(placeId, shouldZoom = true) {
   }
 }
 
-async function fetchNearbyRouteFeature(originLonLat, destinationLonLat) {
+async function fetchNearbyRouteFeature(originLonLat, destinationLonLat, profile) {
   const response = await fetch(
-    "https://api.openrouteservice.org/v2/directions/driving-car/geojson",
+    `https://api.openrouteservice.org/v2/directions/${profile}/geojson`,
     {
       method: "POST",
       headers: {
@@ -8487,10 +8583,11 @@ function createNearbyStraightPathFeature(place) {
   });
 }
 
-async function updateNearbyPath(place) {
+async function updateNearbyPath(place, profile = "driving-car") {
   if (!nearbyRouteLayer || !nearbyOriginCoordinate) return;
 
   const requestId = ++nearbyRouteRequestId;
+  nearbyRouteLayer.setStyle(getNearbyRouteStyle(profile));
   nearbyRouteLayer.getSource().clear();
   nearbyRouteLayer
     .getSource()
@@ -8501,6 +8598,7 @@ async function updateNearbyPath(place) {
     const routeFeature = await fetchNearbyRouteFeature(
       originLonLat,
       place.lonLat,
+      profile,
     );
     if (requestId !== nearbyRouteRequestId || !routeFeature) return;
     nearbyRouteLayer.getSource().clear();
@@ -8637,8 +8735,12 @@ function renderNearbyResults(places) {
               : '<div class="nearby-card__details nearby-card__details--empty">No extra OSM details returned.</div>'
           }
           <div class="nearby-card__times">
-            <span>Car: ${getNearbyDurationText(place, "car")}</span>
-            <span>Walk: ${getNearbyDurationText(place, "walk")}</span>
+            <button type="button" data-route-profile="driving-car">
+              Car: ${getNearbyDurationText(place, "car")}
+            </button>
+            <button type="button" data-route-profile="foot-walking">
+              Walk: ${getNearbyDurationText(place, "walk")}
+            </button>
           </div>
         </article>
       `,
@@ -8648,6 +8750,16 @@ function renderNearbyResults(places) {
   nearbyResults.querySelectorAll(".nearby-card").forEach((card) => {
     const openPlace = () => highlightNearbyPlace(card.dataset.placeId, true);
     card.addEventListener("click", openPlace);
+    card.querySelectorAll("[data-route-profile]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openPlace();
+        const place = nearbyLastPlaces.find(
+          (item) => item.id === card.dataset.placeId,
+        );
+        if (place) updateNearbyPath(place, button.dataset.routeProfile);
+      });
+    });
     card.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();

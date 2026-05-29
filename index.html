@@ -141,13 +141,6 @@
           <button id="reachabilityBtn" class="fa-button" title="Reachability">
             🗺️
           </button>
-          <button
-            id="nearbyAnalysisBtn"
-            class="fa-button"
-            title="Nearby analysis"
-          >
-            <i class="fa-solid fa-location-crosshairs"></i>
-          </button>
           <button id="site-selection" class="fa-button" title="Site Selection">
             📍
           </button>
@@ -1024,6 +1017,35 @@
             </div>
             <h2>Nearby Analysis</h2>
             <p id="nearbySidebarSubtitle">Click a point on the map.</p>
+            <button
+              id="nearbyAnalysisBtn"
+              class="nearby-analysis-action"
+              type="button"
+              title="Start nearby analysis"
+            >
+              <i class="fa-solid fa-location-crosshairs"></i>
+              Pick Location
+            </button>
+            <div class="nearby-category-menu" id="nearbyCategoryMenu">
+              <button
+                id="nearbyCategoryToggle"
+                class="nearby-category-toggle"
+                type="button"
+                title="Nearby categories"
+              >
+                <span id="nearbyCategoryLabel">All</span>
+                <i class="fa-solid fa-caret-down"></i>
+              </button>
+              <div id="nearbyCategoryPanel" class="nearby-category-panel" hidden>
+                <label><input type="checkbox" value="all" checked /> All</label>
+                <label><input type="checkbox" value="bus_stop" /> Bus stops</label>
+                <label><input type="checkbox" value="school" /> Schools</label>
+                <label><input type="checkbox" value="park" /> Parks</label>
+                <label><input type="checkbox" value="hospital" /> Hospitals</label>
+                <label><input type="checkbox" value="police" /> Police</label>
+                <label><input type="checkbox" value="fire_station" /> Fire stations</label>
+              </div>
+            </div>
           </div>
           <button id="nearbySidebarClose" type="button" title="Close">
             &times;
