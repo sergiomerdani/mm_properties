@@ -13,8 +13,8 @@
       crossorigin="anonymous"
     ></script>
     <title>INOVACIONI</title>
-    <script type="module" crossorigin src="/assets/index-DHhM13yj.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-BasEd6pU.css">
+    <script type="module" crossorigin src="/assets/index-x_OsMRMP.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BFVb3Lcx.css">
   </head>
   <body>
     <div class="grid-container">
@@ -138,6 +138,13 @@
           </div>
           <button id="reachabilityBtn" class="fa-button" title="Reachability">
             🗺️
+          </button>
+          <button
+            id="nearbyAnalysisBtn"
+            class="fa-button"
+            title="Nearby analysis"
+          >
+            <i class="fa-solid fa-location-crosshairs"></i>
           </button>
           <button id="site-selection" class="fa-button" title="Site Selection">
             📍
@@ -997,6 +1004,34 @@
         </div>
       </div>
 
+      <aside
+        class="nearby-sidebar"
+        id="nearbySidebar"
+        aria-label="Nearby analysis results"
+        hidden
+      >
+        <div class="nearby-sidebar__header">
+          <div>
+            <div class="sidebar-panel-tabs">
+              <button type="button" data-sidebar-panel="assistant">
+                Assistant
+              </button>
+              <button type="button" data-sidebar-panel="nearby" class="active">
+                Nearby
+              </button>
+            </div>
+            <h2>Nearby Analysis</h2>
+            <p id="nearbySidebarSubtitle">Click a point on the map.</p>
+          </div>
+          <button id="nearbySidebarClose" type="button" title="Close">
+            &times;
+          </button>
+        </div>
+        <div id="nearbyResults" class="nearby-results">
+          <div class="nearby-empty">Activate the tool and click on the map.</div>
+        </div>
+      </aside>
+
       <button
         id="chatSidebarToggle"
         class="chat-sidebar-toggle"
@@ -1011,6 +1046,14 @@
       <aside class="chat-sidebar" id="chatSidebar" aria-label="Map chatbot">
         <div class="chat-sidebar__header">
           <div>
+            <div class="sidebar-panel-tabs">
+              <button type="button" data-sidebar-panel="assistant" class="active">
+                Assistant
+              </button>
+              <button type="button" data-sidebar-panel="nearby">
+                Nearby
+              </button>
+            </div>
             <h2>GIS Assistant</h2>
             <p>Ask about tools, layers, and map workflow.</p>
           </div>

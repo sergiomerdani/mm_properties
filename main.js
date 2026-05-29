@@ -1069,12 +1069,10 @@ setMapProjectionButton?.addEventListener("click", () => {
   setMapProjection(mapProjectionSelect.value);
 });
 
-document
-  .getElementById("save-session-view")
-  .addEventListener("click", () => {
-    saveCurrentMapViewForSession();
-    alert("Current map view saved for this session.");
-  });
+document.getElementById("save-session-view").addEventListener("click", () => {
+  saveCurrentMapViewForSession();
+  alert("Current map view saved for this session.");
+});
 
 // Creating vectorSource to store layers
 const vectorSource = new VectorSource();
@@ -1216,7 +1214,8 @@ function getLayerSearchItems() {
     }
 
     const params = layer.getSource?.()?.getParams?.();
-    const typeName = params?.LAYERS || params?.layers || layer.get("layerParam");
+    const typeName =
+      params?.LAYERS || params?.layers || layer.get("layerParam");
     if (!typeName || !String(typeName).includes(":")) return;
 
     items.push({
@@ -1238,7 +1237,9 @@ async function fetchSearchLayerFields(typeName) {
     request: "DescribeFeatureType",
     typeName,
   });
-  const response = await fetch(`${getGeoServerProxyOwsUrl(workspace)}?${params}`);
+  const response = await fetch(
+    `${getGeoServerProxyOwsUrl(workspace)}?${params}`,
+  );
   if (!response.ok) {
     throw new Error(`Could not read fields for ${typeName}.`);
   }
@@ -1321,8 +1322,11 @@ function buildLayerSearchControl() {
     try {
       const fields = await fetchSearchLayerFields(layerItem.typeName);
       fieldSelect.innerHTML = "";
-      fields.forEach((field) => fieldSelect.add(new Option(field.name, field.name)));
-      if (!fields.length) fieldSelect.add(new Option("No text fields found", ""));
+      fields.forEach((field) =>
+        fieldSelect.add(new Option(field.name, field.name)),
+      );
+      if (!fields.length)
+        fieldSelect.add(new Option("No text fields found", ""));
       valueInput.value = "";
       updateLayerSearchSuggestions();
     } catch (error) {
@@ -3041,15 +3045,22 @@ async function getLayerNativeProjection(layerParam) {
 
   try {
     const response = await fetch(capabilitiesUrl);
-    if (!response.ok) throw new Error(`WFS capabilities HTTP ${response.status}`);
+    if (!response.ok)
+      throw new Error(`WFS capabilities HTTP ${response.status}`);
 
     const text = await response.text();
     const doc = new DOMParser().parseFromString(text, "text/xml");
-    const featureTypes = Array.from(doc.getElementsByTagNameNS("*", "FeatureType"));
+    const featureTypes = Array.from(
+      doc.getElementsByTagNameNS("*", "FeatureType"),
+    );
 
     for (const featureType of featureTypes) {
-      const name = featureType.getElementsByTagNameNS("*", "Name")[0]?.textContent;
-      if (name !== layerParam && name?.split(":").pop() !== layerParam.split(":").pop()) {
+      const name = featureType.getElementsByTagNameNS("*", "Name")[0]
+        ?.textContent;
+      if (
+        name !== layerParam &&
+        name?.split(":").pop() !== layerParam.split(":").pop()
+      ) {
         continue;
       }
 
@@ -3070,7 +3081,11 @@ async function getLayerNativeProjection(layerParam) {
   return getLayerDeclaredProjection(selectedLayer);
 }
 
-function cloneFeaturesForProjection(featuresToClone, sourceProjection, targetProjection) {
+function cloneFeaturesForProjection(
+  featuresToClone,
+  sourceProjection,
+  targetProjection,
+) {
   return featuresToClone.map((feature) => {
     const clone = feature.clone();
     clone.setId(feature.getId());
@@ -3734,7 +3749,10 @@ editLayerButton.addEventListener("click", async () => {
   }
 
   if (!isEditing) {
-    if (selectedLayer instanceof VectorLayer && selectedLayer.get("editableVector")) {
+    if (
+      selectedLayer instanceof VectorLayer &&
+      selectedLayer.get("editableVector")
+    ) {
       isLocalVectorEdit = true;
       inserts = [];
       updates = [];
@@ -4323,7 +4341,9 @@ function getSelectedFeatureForSplit() {
 function createSplitParts(targetFeature, cutterFeature) {
   const turfApi = getTurf();
   if (!turfApi) {
-    alert("Turf.js is not loaded. Check your internet connection and try again.");
+    alert(
+      "Turf.js is not loaded. Check your internet connection and try again.",
+    );
     return [];
   }
 
@@ -4389,7 +4409,9 @@ function splitPolygonWithJsts(targetFeature, cutterFeature) {
     : targetGeometry.getBoundary?.();
 
   if (!boundary) {
-    alert("This polygon cannot be split because its boundary could not be read.");
+    alert(
+      "This polygon cannot be split because its boundary could not be read.",
+    );
     return [];
   }
 
@@ -4552,7 +4574,13 @@ function updateDefaultBufferLayerName(force = false) {
   );
 }
 
-function createBufferLayer(bufferFeatures, distance, units, scope, outputLayerName) {
+function createBufferLayer(
+  bufferFeatures,
+  distance,
+  units,
+  scope,
+  outputLayerName,
+) {
   const bufferSource = new VectorSource({
     features: bufferFeatures,
   });
@@ -4624,16 +4652,16 @@ function getBufferFeatures(scope) {
     );
   }
 
-  return selectedFeatures
-    .getArray()
-    .filter((feature) => feature.getGeometry());
+  return selectedFeatures.getArray().filter((feature) => feature.getGeometry());
 }
 
 function bufferFeatures(features, distance, units, scope, outputLayerName) {
   const turfApi = getTurf();
 
   if (!turfApi?.buffer) {
-    alert("Turf.js is not loaded. Check your internet connection and try again.");
+    alert(
+      "Turf.js is not loaded. Check your internet connection and try again.",
+    );
     return false;
   }
 
@@ -4721,8 +4749,12 @@ document.querySelectorAll('input[name="bufferScope"]').forEach((input) => {
     updateBufferDialogHelp();
   });
 });
-bufferDistanceInput.addEventListener("input", () => updateDefaultBufferLayerName());
-bufferUnitsSelect.addEventListener("change", () => updateDefaultBufferLayerName());
+bufferDistanceInput.addEventListener("input", () =>
+  updateDefaultBufferLayerName(),
+);
+bufferUnitsSelect.addEventListener("change", () =>
+  updateDefaultBufferLayerName(),
+);
 bufferLayerNameInput.addEventListener("input", () => {
   bufferLayerNameEdited = bufferLayerNameInput.value.trim().length > 0;
 });
@@ -4787,9 +4819,7 @@ function getMergeFeatures(scope) {
     );
   }
 
-  return selectedFeatures
-    .getArray()
-    .filter((feature) => feature.getGeometry());
+  return selectedFeatures.getArray().filter((feature) => feature.getGeometry());
 }
 
 function getBaseGeometryType(feature) {
@@ -4804,7 +4834,9 @@ function createMergedGeoJsonFeature(features, scope) {
   const turfApi = getTurf();
 
   if (!turfApi?.featureCollection) {
-    alert("Turf.js is not loaded. Check your internet connection and try again.");
+    alert(
+      "Turf.js is not loaded. Check your internet connection and try again.",
+    );
     return null;
   }
 
@@ -4909,7 +4941,9 @@ function applyMergeFromDialog() {
       return;
     }
 
-    alert("The active editable layer needs at least two loaded features to merge.");
+    alert(
+      "The active editable layer needs at least two loaded features to merge.",
+    );
     return;
   }
 
@@ -4994,7 +5028,9 @@ function getGeoprocessLayerItems() {
     if (layer instanceof VectorLayer) {
       const layerSource = layer.getSource?.();
       const layerFeatures = layerSource?.getFeatures?.() || [];
-      const firstFeature = layerFeatures.find((feature) => feature.getGeometry?.());
+      const firstFeature = layerFeatures.find((feature) =>
+        feature.getGeometry?.(),
+      );
       items.push({
         layer,
         source: layerSource,
@@ -5031,7 +5067,8 @@ function fillLayerSelect(selectElement, items) {
   items.forEach((item, index) => {
     const option = document.createElement("option");
     option.value = String(index);
-    const sourceLabel = item.sourceType === "wfs" ? "WFS" : item.geometryType || "Vector";
+    const sourceLabel =
+      item.sourceType === "wfs" ? "WFS" : item.geometryType || "Vector";
     option.textContent = `${item.title} (${sourceLabel})`;
     selectElement.appendChild(option);
   });
@@ -5069,7 +5106,9 @@ async function loadGeoprocessFeatures(layerItem) {
       (feature) => feature.getGeometry?.(),
     );
     const firstFeature = layerItem.features[0];
-    layerItem.geometryType = firstFeature ? getBaseGeometryType(firstFeature) : "";
+    layerItem.geometryType = firstFeature
+      ? getBaseGeometryType(firstFeature)
+      : "";
     return layerItem;
   }
 
@@ -5090,7 +5129,9 @@ async function loadGeoprocessFeatures(layerItem) {
   });
   const response = await fetch(wfsUrl);
   if (!response.ok) {
-    throw new Error(`Could not load ${layerItem.title}: HTTP ${response.status}`);
+    throw new Error(
+      `Could not load ${layerItem.title}: HTTP ${response.status}`,
+    );
   }
 
   const geojson = await response.json();
@@ -5099,8 +5140,12 @@ async function loadGeoprocessFeatures(layerItem) {
     dataProjection: "EPSG:3857",
     featureProjection: map.getView().getProjection().getCode(),
   });
-  const firstFeature = layerItem.features.find((feature) => feature.getGeometry?.());
-  layerItem.geometryType = firstFeature ? getBaseGeometryType(firstFeature) : "";
+  const firstFeature = layerItem.features.find((feature) =>
+    feature.getGeometry?.(),
+  );
+  layerItem.geometryType = firstFeature
+    ? getBaseGeometryType(firstFeature)
+    : "";
   return layerItem;
 }
 
@@ -5141,7 +5186,9 @@ function createVerticesResultLayer(features, title) {
   });
 
   const mapProjection = map.getView().getProjection().getCode();
-  features.forEach((feature) => feature.set("_featureProjection", mapProjection));
+  features.forEach((feature) =>
+    feature.set("_featureProjection", mapProjection),
+  );
   resultLayer.set("editableVector", true);
   resultLayer.set("geoprocessLayer", true);
   resultLayer.set("geometryType", "Point");
@@ -5187,7 +5234,9 @@ function openIntersectionDialog() {
 }
 
 function getVerticesLayerItems() {
-  return getGeoprocessLayerItems().filter((item) => item.sourceType === "vector");
+  return getGeoprocessLayerItems().filter(
+    (item) => item.sourceType === "vector",
+  );
 }
 
 function openVerticesDialog() {
@@ -5283,7 +5332,9 @@ function closeIntersectionDialog() {
 function createIntersectingOverlayFeatures(inputLayerItem, overlayLayerItem) {
   const turfApi = getTurf();
   if (!turfApi?.booleanIntersects || !turfApi?.featureCollection) {
-    alert("Turf intersection is not loaded. Check your internet connection and try again.");
+    alert(
+      "Turf intersection is not loaded. Check your internet connection and try again.",
+    );
     return [];
   }
 
@@ -5332,8 +5383,14 @@ function createIntersectingOverlayFeatures(inputLayerItem, overlayLayerItem) {
 }
 
 async function applyIntersectionDialog() {
-  const layerItemA = getSelectedLayerItem(intersectLayerA, currentGeoprocessLayerItems);
-  const layerItemB = getSelectedLayerItem(intersectLayerB, currentGeoprocessLayerItems);
+  const layerItemA = getSelectedLayerItem(
+    intersectLayerA,
+    currentGeoprocessLayerItems,
+  );
+  const layerItemB = getSelectedLayerItem(
+    intersectLayerB,
+    currentGeoprocessLayerItems,
+  );
 
   if (!layerItemA || !layerItemB || layerItemA === layerItemB) {
     alert("Choose two different layers.");
@@ -5380,8 +5437,14 @@ function closeMergeLayersDialog() {
 }
 
 async function applyMergeLayersDialog() {
-  const layerItemA = getSelectedLayerItem(mergeLayerA, currentGeoprocessLayerItems);
-  const layerItemB = getSelectedLayerItem(mergeLayerB, currentGeoprocessLayerItems);
+  const layerItemA = getSelectedLayerItem(
+    mergeLayerA,
+    currentGeoprocessLayerItems,
+  );
+  const layerItemB = getSelectedLayerItem(
+    mergeLayerB,
+    currentGeoprocessLayerItems,
+  );
 
   if (!layerItemA || !layerItemB || layerItemA === layerItemB) {
     alert("Choose two different layers.");
@@ -5411,14 +5474,15 @@ async function applyMergeLayersDialog() {
     return;
   }
 
-  const mergedFeatures = [...loadedLayerA.features, ...loadedLayerB.features].map(
-    (feature, index) => {
-      const clone = feature.clone();
-      clone.setProperties(feature.getProperties());
-      clone.setId(`merged-layer.${Date.now()}.${index + 1}`);
-      return clone;
-    },
-  );
+  const mergedFeatures = [
+    ...loadedLayerA.features,
+    ...loadedLayerB.features,
+  ].map((feature, index) => {
+    const clone = feature.clone();
+    clone.setProperties(feature.getProperties());
+    clone.setId(`merged-layer.${Date.now()}.${index + 1}`);
+    return clone;
+  });
 
   if (!mergedFeatures.length) {
     alert("No features were found to merge.");
@@ -5933,7 +5997,8 @@ function syncAttributeSelectionLayer() {
   selectedAttributeFeatures.forEach((feature) => {
     const clone = feature.clone();
     clone.setProperties(feature.getProperties());
-    const featureProjection = feature.get("_featureProjection") || mapProjection;
+    const featureProjection =
+      feature.get("_featureProjection") || mapProjection;
     if (featureProjection !== mapProjection) {
       clone.getGeometry()?.transform(featureProjection, mapProjection);
       clone.set("_featureProjection", mapProjection, true);
@@ -6207,7 +6272,8 @@ saveBtn.addEventListener("click", () => {
         return;
       }
 
-      const layerNativeProjection = await getLayerNativeProjection(tableLayerSelected);
+      const layerNativeProjection =
+        await getLayerNativeProjection(tableLayerSelected);
       const transactionUpdates = cloneFeaturesForProjection(
         updatedFeatures,
         mapSrs,
@@ -6748,7 +6814,9 @@ const externalServiceUrlInput = document.getElementById("externalServiceUrl");
 const externalServiceLayerNameInput = document.getElementById(
   "externalServiceLayerName",
 );
-const externalWmsLayerNameInput = document.getElementById("externalWmsLayerName");
+const externalWmsLayerNameInput = document.getElementById(
+  "externalWmsLayerName",
+);
 const externalServiceForm = document.getElementById("externalServiceForm");
 const externalServiceStatus = document.getElementById("externalServiceStatus");
 const externalServiceLayers = document.getElementById("externalServiceLayers");
@@ -6780,7 +6848,10 @@ function setExternalServiceStatus(message, isError = false) {
 }
 
 function normalizeExternalServiceUrl(url) {
-  return url.trim().replace(/[?#].*$/, "").replace(/\/+$/, "");
+  return url
+    .trim()
+    .replace(/[?#].*$/, "")
+    .replace(/\/+$/, "");
 }
 
 function getArcgisServiceParts(url) {
@@ -6809,7 +6880,9 @@ function inferExternalServiceType(url, selectedType) {
 }
 
 async function fetchArcgisServiceMetadata(serviceUrl) {
-  const response = await fetch(`${normalizeExternalServiceUrl(serviceUrl)}?f=pjson`);
+  const response = await fetch(
+    `${normalizeExternalServiceUrl(serviceUrl)}?f=pjson`,
+  );
   if (!response.ok) {
     throw new Error(`ArcGIS metadata failed with status ${response.status}`);
   }
@@ -6827,7 +6900,8 @@ function getExternalServicesGroup() {
     .getArray()
     .find(
       (layer) =>
-        layer instanceof LayerGroup && layer.get("title") === "External Services",
+        layer instanceof LayerGroup &&
+        layer.get("title") === "External Services",
     );
 
   if (existing) return existing;
@@ -6875,12 +6949,16 @@ async function addArcgisFeatureLayer(serviceUrl, titleOverride = "") {
   });
   const response = await fetch(`${layerUrl}/query?${params}`);
   if (!response.ok) {
-    throw new Error(`ArcGIS feature query failed with status ${response.status}`);
+    throw new Error(
+      `ArcGIS feature query failed with status ${response.status}`,
+    );
   }
 
   const data = await response.json();
   if (data.error) {
-    throw new Error(data.error.message || "ArcGIS feature query returned an error.");
+    throw new Error(
+      data.error.message || "ArcGIS feature query returned an error.",
+    );
   }
 
   const featureProjection = getCurrentMapProjectionCode();
@@ -6888,7 +6966,9 @@ async function addArcgisFeatureLayer(serviceUrl, titleOverride = "") {
     dataProjection: "EPSG:4326",
     featureProjection,
   });
-  features.forEach((feature) => feature.set("_featureProjection", featureProjection));
+  features.forEach((feature) =>
+    feature.set("_featureProjection", featureProjection),
+  );
 
   const source = new VectorSource({ features });
   const layer = new VectorLayer({
@@ -6993,11 +7073,19 @@ function addExternalWmsLayer(serviceUrl, layerName, titleOverride = "") {
   return layer;
 }
 
-async function addLoadedExternalServiceLayer(serviceUrl, type, titleOverride = "") {
+async function addLoadedExternalServiceLayer(
+  serviceUrl,
+  type,
+  titleOverride = "",
+) {
   if (type === "arcgis-feature") {
     const parts = getArcgisServiceParts(serviceUrl);
     const metadata = loadedExternalService?.metadata;
-    if (!parts?.layerId && Array.isArray(metadata?.layers) && metadata.layers.length) {
+    if (
+      !parts?.layerId &&
+      Array.isArray(metadata?.layers) &&
+      metadata.layers.length
+    ) {
       for (const serviceLayer of metadata.layers) {
         await addArcgisFeatureLayer(
           `${parts.rootUrl}/${serviceLayer.id}`,
@@ -7081,13 +7169,18 @@ function updateExternalServiceInputs() {
   document.querySelectorAll(".external-wms-only").forEach((element) => {
     element.style.display = isWms ? "" : "none";
   });
-  addExternalServiceLayerButton.disabled = !externalServiceUrlInput.value.trim();
+  addExternalServiceLayerButton.disabled =
+    !externalServiceUrlInput.value.trim();
 }
 
-externalServiceTypeInput.addEventListener("change", updateExternalServiceInputs);
+externalServiceTypeInput.addEventListener(
+  "change",
+  updateExternalServiceInputs,
+);
 externalServiceUrlInput.addEventListener("input", () => {
   loadedExternalService = null;
-  addExternalServiceLayerButton.disabled = !externalServiceUrlInput.value.trim();
+  addExternalServiceLayerButton.disabled =
+    !externalServiceUrlInput.value.trim();
 });
 
 externalServiceForm.addEventListener("submit", async (event) => {
@@ -7116,10 +7209,13 @@ externalServiceForm.addEventListener("submit", async (event) => {
     const metadata = await fetchArcgisServiceMetadata(serviceUrl);
     loadedExternalService = { serviceUrl, serviceType, metadata };
     externalServiceLayerNameInput.value =
-      externalServiceLayerNameInput.value || getServiceLayerTitle(metadata, serviceUrl);
+      externalServiceLayerNameInput.value ||
+      getServiceLayerTitle(metadata, serviceUrl);
     renderExternalServiceLayers(serviceUrl, serviceType, metadata);
     addExternalServiceLayerButton.disabled = false;
-    setExternalServiceStatus("Service loaded. Add it directly or choose a child layer.");
+    setExternalServiceStatus(
+      "Service loaded. Add it directly or choose a child layer.",
+    );
 
     const layersTab = document.getElementById("service-layers-tab");
     bootstrap.Tab.getOrCreateInstance(layersTab).show();
@@ -7772,6 +7868,8 @@ document.getElementById("resetHeatmapBtn").addEventListener("click", () => {
 const reachabilityBtn = document.getElementById("reachabilityBtn");
 const reachabilityModal = document.getElementById("reachabilityModal");
 const closeReachabilityBtn = document.getElementById("closeReachabilityBtn");
+const OPEN_ROUTE_SERVICE_API_KEY =
+  "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImFhZjdlYThlODJiOWEyYmY5MTk4MzU1OTk5ODZiMGFhMTg2OTBkNmZiYTJmNzgxNGU1ZDlmODYwIiwiaCI6Im11cm11cjY0In0=";
 
 reachabilityBtn.addEventListener("click", () => {
   reachabilityModal.showModal();
@@ -7874,9 +7972,6 @@ document
     const allFeatures = [];
 
     const url = `https://api.openrouteservice.org/v2/isochrones/${travelMode}`;
-    const apiKey =
-      "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImFhZjdlYThlODJiOWEyYmY5MTk4MzU1OTk5ODZiMGFhMTg2OTBkNmZiYTJmNzgxNGU1ZDlmODYwIiwiaCI6Im11cm11cjY0In0=";
-
     for (const origin of origins) {
       const location4326 = toLonLat(origin);
       const body = {
@@ -7889,7 +7984,7 @@ document
       const res = await fetch(url, {
         method: "POST",
         headers: {
-          Authorization: apiKey,
+          Authorization: OPEN_ROUTE_SERVICE_API_KEY,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
@@ -8031,6 +8126,616 @@ document
     // Clear selected map point
     mapClickCoordinate = null;
   });
+
+// NEARBY ANALYSIS
+const nearbyAnalysisBtn = document.getElementById("nearbyAnalysisBtn");
+const nearbySidebar = document.getElementById("nearbySidebar");
+const nearbySidebarClose = document.getElementById("nearbySidebarClose");
+const nearbyResults = document.getElementById("nearbyResults");
+const nearbySidebarSubtitle = document.getElementById("nearbySidebarSubtitle");
+const sharedChatSidebar = document.getElementById("chatSidebar");
+let nearbyPickActive = false;
+let nearbyMarkerLayer = null;
+let nearbyResultsLayer = null;
+let nearbyHighlightLayer = null;
+let nearbyRouteLayer = null;
+let nearbyOriginCoordinate = null;
+let nearbyRouteRequestId = 0;
+let nearbyLastPlaces = [];
+
+const nearbyCategories = [
+  { key: "school", label: "School", query: '["amenity"="school"]' },
+  { key: "hospital", label: "Hospital", query: '["amenity"="hospital"]' },
+  { key: "park", label: "Park", query: '["leisure"="park"]' },
+  { key: "police", label: "Police Station", query: '["amenity"="police"]' },
+  {
+    key: "fire_station",
+    label: "Fire Station",
+    query: '["amenity"="fire_station"]',
+  },
+  { key: "bus_stop", label: "Bus Stop", query: '["highway"="bus_stop"]' },
+  {
+    key: "bus_platform",
+    label: "Bus Stop",
+    query: '["public_transport"="platform"]',
+  },
+];
+const NEARBY_ROUTE_LIMIT = 10;
+
+function updateSidebarPanelTabs(activePanel) {
+  document.querySelectorAll("[data-sidebar-panel]").forEach((button) => {
+    button.classList.toggle(
+      "active",
+      button.dataset.sidebarPanel === activePanel,
+    );
+  });
+}
+
+function showSidebarPanel(activePanel) {
+  const grid = document.querySelector(".grid-container");
+  const showNearby = activePanel === "nearby";
+
+  nearbySidebar.hidden = !showNearby;
+  if (sharedChatSidebar) sharedChatSidebar.hidden = showNearby;
+  grid?.classList.toggle("nearby-open", showNearby);
+  grid?.classList.remove("chat-collapsed");
+  chatSidebarToggle?.setAttribute("aria-expanded", "true");
+  updateSidebarPanelTabs(activePanel);
+
+  window.setTimeout(() => {
+    map.updateSize();
+  }, 150);
+}
+
+function setNearbySidebarOpen(open) {
+  showSidebarPanel(open ? "nearby" : "assistant");
+}
+
+function formatNearbyDistance(meters) {
+  return meters >= 1000
+    ? `${(meters / 1000).toFixed(2)} km`
+    : `${Math.round(meters)} m`;
+}
+
+function formatNearbyDuration(seconds) {
+  if (!Number.isFinite(seconds)) return "n/a";
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  return minutes >= 60
+    ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+    : `${minutes} min`;
+}
+
+function estimateNearbyDuration(distanceMeters, speedKmh) {
+  const roadFactor = 1.25;
+  const metersPerSecond = (speedKmh * 1000) / 3600;
+  return (distanceMeters * roadFactor) / metersPerSecond;
+}
+
+function getNearbyDurationText(place, mode) {
+  const duration = mode === "car" ? place.carDuration : place.walkDuration;
+  if (Number.isFinite(duration)) return formatNearbyDuration(duration);
+
+  const estimatedSeconds = estimateNearbyDuration(
+    place.distance,
+    mode === "car" ? 35 : 5,
+  );
+  return `${formatNearbyDuration(estimatedSeconds)} est.`;
+}
+
+function escapeNearbyHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function getHaversineDistanceMeters(a, b) {
+  const radius = 6371008.8;
+  const toRad = (value) => (value * Math.PI) / 180;
+  const dLat = toRad(b[1] - a[1]);
+  const dLon = toRad(b[0] - a[0]);
+  const lat1 = toRad(a[1]);
+  const lat2 = toRad(b[1]);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * radius * Math.asin(Math.sqrt(h));
+}
+
+function getNearbyLabelText(name) {
+  const text = String(name || "");
+  return text.length > 28 ? `${text.slice(0, 25)}...` : text;
+}
+
+function getNearbyCategoryColor(category) {
+  const colors = {
+    School: "#2563eb",
+    Hospital: "#dc2626",
+    Park: "#16a34a",
+    "Police Station": "#7c3aed",
+    "Fire Station": "#f97316",
+    "Bus Stop": "#0891b2",
+  };
+  return colors[category] || "#334155";
+}
+
+function getNearbyPlaceStyle(feature) {
+  const category = feature.get("category");
+  const color = getNearbyCategoryColor(category);
+  return new Style({
+    image: new CircleStyle({
+      radius: 6,
+      fill: new Fill({ color }),
+      stroke: new Stroke({ color: "#ffffff", width: 2 }),
+    }),
+    text: new Text({
+      text: getNearbyLabelText(feature.get("name")),
+      offsetY: -16,
+      font: "12px Calibri,sans-serif",
+      fill: new Fill({ color: "#111827" }),
+      stroke: new Stroke({ color: "#ffffff", width: 3 }),
+    }),
+  });
+}
+
+function getNearbyHighlightStyle(feature) {
+  return [
+    new Style({
+      image: new CircleStyle({
+        radius: 13,
+        fill: new Fill({ color: "rgba(250, 204, 21, 0.25)" }),
+        stroke: new Stroke({ color: "#facc15", width: 4 }),
+      }),
+    }),
+    getNearbyPlaceStyle(feature),
+  ];
+}
+
+const nearbyRouteStyle = new Style({
+  stroke: new Stroke({
+    color: "#ef4444",
+    width: 4,
+  }),
+});
+
+function getOverpassQuery([lon, lat], radius = 2000) {
+  const blocks = nearbyCategories
+    .map(
+      (category) =>
+        `node${category.query}(around:${radius},${lat},${lon});` +
+        `way${category.query}(around:${radius},${lat},${lon});` +
+        `relation${category.query}(around:${radius},${lat},${lon});`,
+    )
+    .join("");
+  return `[out:json][timeout:25];(${blocks});out center tags;`;
+}
+
+function getNearbyCategory(tags = {}) {
+  if (tags.amenity === "school") return "School";
+  if (tags.amenity === "hospital") return "Hospital";
+  if (tags.leisure === "park") return "Park";
+  if (tags.amenity === "police") return "Police Station";
+  if (tags.amenity === "fire_station") return "Fire Station";
+  if (tags.highway === "bus_stop" || tags.public_transport === "platform") {
+    return "Bus Stop";
+  }
+  return "Nearby Place";
+}
+
+function getNearbyPlaceDetails(tags = {}) {
+  const details = [
+    tags.operator && `Operator: ${tags.operator}`,
+    tags["addr:street"] && `Street: ${tags["addr:street"]}`,
+    tags["addr:housenumber"] && `No: ${tags["addr:housenumber"]}`,
+    tags["addr:city"] && `City: ${tags["addr:city"]}`,
+    tags.opening_hours && `Hours: ${tags.opening_hours}`,
+    tags.phone && `Phone: ${tags.phone}`,
+    tags.website && `Website: ${tags.website}`,
+    tags.wheelchair && `Wheelchair: ${tags.wheelchair}`,
+  ].filter(Boolean);
+
+  return details.slice(0, 5);
+}
+
+async function fetchNearbyPlaces(originLonLat) {
+  const response = await fetch("https://overpass-api.de/api/interpreter", {
+    method: "POST",
+    body: new URLSearchParams({ data: getOverpassQuery(originLonLat) }),
+  });
+  if (!response.ok) {
+    throw new Error(`Overpass request failed with status ${response.status}`);
+  }
+
+  const data = await response.json();
+  const seen = new Set();
+  return (data.elements || [])
+    .map((element) => {
+      const lon = element.lon ?? element.center?.lon;
+      const lat = element.lat ?? element.center?.lat;
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+      const id = `${element.type}.${element.id}`;
+      if (seen.has(id)) return null;
+      seen.add(id);
+      const tags = element.tags || {};
+      return {
+        id,
+        name: tags.name || getNearbyCategory(tags),
+        category: getNearbyCategory(tags),
+        details: getNearbyPlaceDetails(tags),
+        osmType: element.type,
+        osmId: element.id,
+        lonLat: [lon, lat],
+        distance: getHaversineDistanceMeters(originLonLat, [lon, lat]),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, 10);
+}
+
+function clearNearbyResultLayers() {
+  if (nearbyResultsLayer) map.removeLayer(nearbyResultsLayer);
+  if (nearbyHighlightLayer) map.removeLayer(nearbyHighlightLayer);
+  if (nearbyRouteLayer) map.removeLayer(nearbyRouteLayer);
+  nearbyResultsLayer = null;
+  nearbyHighlightLayer = null;
+  nearbyRouteLayer = null;
+}
+
+function createNearbyResultFeature(place) {
+  return new Feature({
+    geometry: new Point(
+      fromLonLat(place.lonLat, map.getView().getProjection()),
+    ),
+    placeId: place.id,
+    name: place.name,
+    category: place.category,
+    distance: place.distance,
+  });
+}
+
+function displayNearbyPlacesOnMap(places) {
+  clearNearbyResultLayers();
+  const features = places.map(createNearbyResultFeature);
+  nearbyResultsLayer = new VectorLayer({
+    source: new VectorSource({ features }),
+    style: getNearbyPlaceStyle,
+    displayInLayerSwitcher: false,
+  });
+  nearbyResultsLayer.setZIndex(180);
+  map.addLayer(nearbyResultsLayer);
+
+  nearbyHighlightLayer = new VectorLayer({
+    source: new VectorSource(),
+    style: getNearbyHighlightStyle,
+    displayInLayerSwitcher: false,
+  });
+  nearbyHighlightLayer.setZIndex(181);
+  map.addLayer(nearbyHighlightLayer);
+
+  nearbyRouteLayer = new VectorLayer({
+    source: new VectorSource(),
+    style: nearbyRouteStyle,
+    displayInLayerSwitcher: false,
+  });
+  nearbyRouteLayer.setZIndex(179);
+  map.addLayer(nearbyRouteLayer);
+}
+
+function highlightNearbyPlace(placeId, shouldZoom = true) {
+  const place = nearbyLastPlaces.find((item) => item.id === placeId);
+  if (!place || !nearbyHighlightLayer) return;
+
+  const highlightFeature = createNearbyResultFeature(place);
+  nearbyHighlightLayer.getSource().clear();
+  nearbyHighlightLayer.getSource().addFeature(highlightFeature);
+  updateNearbyPath(place);
+
+  nearbyResults
+    .querySelectorAll(".nearby-card")
+    .forEach((card) =>
+      card.classList.toggle(
+        "nearby-card--active",
+        card.dataset.placeId === placeId,
+      ),
+    );
+
+  if (shouldZoom) {
+    map.getView().animate({
+      center: fromLonLat(place.lonLat, map.getView().getProjection()),
+      zoom: Math.max(map.getView().getZoom() || 14, 17),
+      duration: 450,
+    });
+  }
+}
+
+async function fetchNearbyRouteFeature(originLonLat, destinationLonLat) {
+  const response = await fetch(
+    "https://api.openrouteservice.org/v2/directions/driving-car/geojson",
+    {
+      method: "POST",
+      headers: {
+        Authorization: OPEN_ROUTE_SERVICE_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        coordinates: [originLonLat, destinationLonLat],
+      }),
+    },
+  );
+
+  if (!response.ok) return null;
+
+  const geojson = await response.json();
+  const routeGeoJson = geojson.features?.[0];
+  if (!routeGeoJson) return null;
+
+  return new GeoJSON().readFeature(routeGeoJson, {
+    dataProjection: "EPSG:4326",
+    featureProjection: map.getView().getProjection(),
+  });
+}
+
+function createNearbyStraightPathFeature(place) {
+  return new Feature({
+    geometry: new LineString([
+      nearbyOriginCoordinate,
+      fromLonLat(place.lonLat, map.getView().getProjection()),
+    ]),
+  });
+}
+
+async function updateNearbyPath(place) {
+  if (!nearbyRouteLayer || !nearbyOriginCoordinate) return;
+
+  const requestId = ++nearbyRouteRequestId;
+  nearbyRouteLayer.getSource().clear();
+  nearbyRouteLayer
+    .getSource()
+    .addFeature(createNearbyStraightPathFeature(place));
+
+  const originLonLat = toLonLat(nearbyOriginCoordinate);
+  try {
+    const routeFeature = await fetchNearbyRouteFeature(
+      originLonLat,
+      place.lonLat,
+    );
+    if (requestId !== nearbyRouteRequestId || !routeFeature) return;
+    nearbyRouteLayer.getSource().clear();
+    nearbyRouteLayer.getSource().addFeature(routeFeature);
+  } catch (error) {
+    console.warn(
+      "Nearby route path unavailable; showing straight line.",
+      error,
+    );
+  }
+}
+
+async function fetchOrsDurations(originLonLat, places, profile) {
+  if (!places.length) return [];
+  const locations = [originLonLat, ...places.map((place) => place.lonLat)];
+
+  let durations = [];
+  try {
+    const response = await fetch(
+      `https://api.openrouteservice.org/v2/matrix/${profile}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: OPEN_ROUTE_SERVICE_API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          locations,
+          sources: [0],
+          destinations: places.map((_, index) => index + 1),
+          metrics: ["duration"],
+        }),
+      },
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      durations = data.durations?.[0] || [];
+    } else {
+      console.warn(`ORS matrix ${profile} failed:`, await response.text());
+    }
+  } catch (error) {
+    console.warn(`ORS matrix ${profile} failed:`, error);
+  }
+
+  const missingIndexes = places
+    .map((_, index) => index)
+    .filter((index) => !Number.isFinite(durations[index]));
+
+  if (!missingIndexes.length) return durations;
+
+  await Promise.all(
+    missingIndexes.slice(0, NEARBY_ROUTE_LIMIT).map(async (index) => {
+      durations[index] = await fetchOrsDirectionDuration(
+        originLonLat,
+        places[index].lonLat,
+        profile,
+      );
+    }),
+  );
+
+  return durations;
+}
+
+async function fetchOrsDirectionDuration(
+  originLonLat,
+  destinationLonLat,
+  profile,
+) {
+  try {
+    const response = await fetch(
+      `https://api.openrouteservice.org/v2/directions/${profile}/geojson`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: OPEN_ROUTE_SERVICE_API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          coordinates: [originLonLat, destinationLonLat],
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      console.warn(`ORS directions ${profile} failed:`, await response.text());
+      return null;
+    }
+
+    const data = await response.json();
+    return data.features?.[0]?.properties?.summary?.duration ?? null;
+  } catch (error) {
+    console.warn(`ORS directions ${profile} failed:`, error);
+    return null;
+  }
+}
+
+function renderNearbyResults(places) {
+  if (!places.length) {
+    nearbyResults.innerHTML =
+      '<div class="nearby-empty">No nearby OSM features found.</div>';
+    return;
+  }
+
+  const routeNote = places.some(
+    (place) =>
+      !Number.isFinite(place.carDuration) ||
+      !Number.isFinite(place.walkDuration),
+  )
+    ? `<div class="nearby-route-note">ORS route times are unavailable for one or more results, so estimated times are shown from straight-line distance.</div>`
+    : "";
+
+  nearbyResults.innerHTML =
+    routeNote +
+    places
+      .map(
+        (place) => `
+        <article class="nearby-card" data-place-id="${escapeNearbyHtml(place.id)}" tabindex="0">
+          <div class="nearby-card__top">
+            <div>
+              <div class="nearby-card__title">${escapeNearbyHtml(place.name)}</div>
+              <div class="nearby-card__type">${escapeNearbyHtml(place.category)}</div>
+            </div>
+            <div class="nearby-card__distance">${formatNearbyDistance(place.distance)}</div>
+          </div>
+          <div class="nearby-card__meta">
+            OSM ${escapeNearbyHtml(place.osmType)} ${escapeNearbyHtml(place.osmId)}
+          </div>
+          ${
+            place.details?.length
+              ? `<ul class="nearby-card__details">${place.details
+                  .map((detail) => `<li>${escapeNearbyHtml(detail)}</li>`)
+                  .join("")}</ul>`
+              : '<div class="nearby-card__details nearby-card__details--empty">No extra OSM details returned.</div>'
+          }
+          <div class="nearby-card__times">
+            <span>Car: ${getNearbyDurationText(place, "car")}</span>
+            <span>Walk: ${getNearbyDurationText(place, "walk")}</span>
+          </div>
+        </article>
+      `,
+      )
+      .join("");
+
+  nearbyResults.querySelectorAll(".nearby-card").forEach((card) => {
+    const openPlace = () => highlightNearbyPlace(card.dataset.placeId, true);
+    card.addEventListener("click", openPlace);
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openPlace();
+      }
+    });
+  });
+}
+
+function setNearbyMarker(coordinate) {
+  if (nearbyMarkerLayer) map.removeLayer(nearbyMarkerLayer);
+  nearbyMarkerLayer = new VectorLayer({
+    source: new VectorSource({
+      features: [
+        new Feature({
+          geometry: new Point(coordinate),
+        }),
+      ],
+    }),
+    style: new Style({
+      image: new CircleStyle({
+        radius: 8,
+        fill: new Fill({ color: "rgba(239, 68, 68, 0.95)" }),
+        stroke: new Stroke({ color: "#ffffff", width: 2 }),
+      }),
+    }),
+    displayInLayerSwitcher: false,
+  });
+  map.addLayer(nearbyMarkerLayer);
+}
+
+async function runNearbyAnalysis(coordinate) {
+  setNearbySidebarOpen(true);
+  nearbyOriginCoordinate = coordinate;
+  setNearbyMarker(coordinate);
+  nearbyResults.innerHTML =
+    '<div class="nearby-loading">Reading OpenStreetMap and routes...</div>';
+
+  const originLonLat = toLonLat(coordinate);
+  nearbySidebarSubtitle.textContent = `${originLonLat[1].toFixed(5)}, ${originLonLat[0].toFixed(5)}`;
+
+  try {
+    const places = await fetchNearbyPlaces(originLonLat);
+    nearbyLastPlaces = places;
+    displayNearbyPlacesOnMap(places);
+    renderNearbyResults(places);
+    if (places[0]) highlightNearbyPlace(places[0].id, false);
+
+    const routeTargets = places.slice(0, NEARBY_ROUTE_LIMIT);
+    const [carDurations, walkDurations] = await Promise.all([
+      fetchOrsDurations(originLonLat, routeTargets, "driving-car"),
+      fetchOrsDurations(originLonLat, routeTargets, "foot-walking"),
+    ]);
+
+    routeTargets.forEach((place, index) => {
+      place.carDuration = carDurations[index];
+      place.walkDuration = walkDurations[index];
+    });
+
+    renderNearbyResults(places);
+    if (places[0]) highlightNearbyPlace(places[0].id, false);
+  } catch (error) {
+    console.error(error);
+    nearbyResults.innerHTML = `<div class="nearby-empty">${error.message}</div>`;
+  }
+}
+
+function activateNearbyPick() {
+  nearbyPickActive = true;
+  nearbyAnalysisBtn.classList.add("active");
+  setNearbySidebarOpen(true);
+  nearbyResults.innerHTML =
+    '<div class="nearby-empty">Click anywhere on the map to analyze nearby services.</div>';
+}
+
+nearbyAnalysisBtn.addEventListener("click", activateNearbyPick);
+nearbySidebarClose.addEventListener("click", () => setNearbySidebarOpen(false));
+document.querySelectorAll("[data-sidebar-panel]").forEach((button) => {
+  button.addEventListener("click", () => {
+    showSidebarPanel(button.dataset.sidebarPanel);
+  });
+});
+map.on("click", (event) => {
+  if (!nearbyPickActive) return;
+  nearbyPickActive = false;
+  nearbyAnalysisBtn.classList.remove("active");
+  runNearbyAnalysis(event.coordinate);
+});
 
 //Site Selection
 // Elements
@@ -8367,7 +9072,9 @@ function createVectorLayerStyle(config) {
 }
 
 function createEmptyVectorLayer() {
-  const createdLayerName = document.getElementById("vectorLayerName").value.trim();
+  const createdLayerName = document
+    .getElementById("vectorLayerName")
+    .value.trim();
   const geometryType = document.getElementById("vectorGeometryType").value;
   const fields = getVectorLayerFields();
 
@@ -8428,41 +9135,50 @@ document
   .getElementById("createVectorLayerApply")
   .addEventListener("click", createEmptyVectorLayer);
 
-document.getElementById("xyCsvFile").addEventListener("change", async (event) => {
-  const file = event.target.files[0];
-  xyCsvRows = [];
-  xyCsvHeaders = [];
-  document.getElementById("xyCsvColumns").hidden = true;
+document
+  .getElementById("xyCsvFile")
+  .addEventListener("change", async (event) => {
+    const file = event.target.files[0];
+    xyCsvRows = [];
+    xyCsvHeaders = [];
+    document.getElementById("xyCsvColumns").hidden = true;
 
-  if (!file) {
-    setXyCsvStatus("");
-    return;
-  }
-
-  try {
-    const text = await file.text();
-    const rows = parseCsvText(text);
-    if (rows.length < 2) {
-      throw new Error("CSV must contain a header row and at least one data row.");
+    if (!file) {
+      setXyCsvStatus("");
+      return;
     }
 
-    xyCsvHeaders = rows[0].map((header, index) => header || `Column ${index + 1}`);
-    xyCsvRows = rows.slice(1).map((row) =>
-      xyCsvHeaders.reduce((record, header, index) => {
-        record[header] = row[index] ?? "";
-        return record;
-      }, {}),
-    );
+    try {
+      const text = await file.text();
+      const rows = parseCsvText(text);
+      if (rows.length < 2) {
+        throw new Error(
+          "CSV must contain a header row and at least one data row.",
+        );
+      }
 
-    populateXyCsvColumns(xyCsvHeaders);
-    document.getElementById("xyCsvColumns").hidden = false;
-    document.getElementById("xyLayerName").value ||= file.name.replace(/\.csv$/i, "");
-    setXyCsvStatus(`${xyCsvRows.length} CSV rows loaded.`);
-  } catch (error) {
-    console.error(error);
-    setXyCsvStatus(error.message, true);
-  }
-});
+      xyCsvHeaders = rows[0].map(
+        (header, index) => header || `Column ${index + 1}`,
+      );
+      xyCsvRows = rows.slice(1).map((row) =>
+        xyCsvHeaders.reduce((record, header, index) => {
+          record[header] = row[index] ?? "";
+          return record;
+        }, {}),
+      );
+
+      populateXyCsvColumns(xyCsvHeaders);
+      document.getElementById("xyCsvColumns").hidden = false;
+      document.getElementById("xyLayerName").value ||= file.name.replace(
+        /\.csv$/i,
+        "",
+      );
+      setXyCsvStatus(`${xyCsvRows.length} CSV rows loaded.`);
+    } catch (error) {
+      console.error(error);
+      setXyCsvStatus(error.message, true);
+    }
+  });
 
 document.getElementById("xyLoadCsvPoints").addEventListener("click", () => {
   const xColumn = document.getElementById("xyCsvXColumn").value;
@@ -10144,6 +10860,12 @@ if (chatSidebarToggle && gridContainer) {
   chatSidebarToggle.addEventListener("click", () => {
     const isCollapsed = gridContainer.classList.toggle("chat-collapsed");
     chatSidebarToggle.setAttribute("aria-expanded", String(!isCollapsed));
+    if (gridContainer.classList.contains("nearby-open")) {
+      nearbySidebar.hidden = isCollapsed;
+      if (sharedChatSidebar) sharedChatSidebar.hidden = true;
+    } else if (sharedChatSidebar) {
+      sharedChatSidebar.hidden = isCollapsed;
+    }
 
     window.setTimeout(() => {
       map.updateSize();
