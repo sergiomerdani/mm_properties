@@ -966,6 +966,116 @@ const planifikimiLayers = new LayerGroup({
   displayInLayerSwitcher: true,
 });
 
+const referencePriceStyle = new Style({
+  fill: new Fill({ color: "rgba(26, 115, 232, 0.16)" }),
+  stroke: new Stroke({ color: "#1a73e8", width: 1.5 }),
+  image: new CircleStyle({
+    radius: 5,
+    fill: new Fill({ color: "#1a73e8" }),
+    stroke: new Stroke({ color: "#ffffff", width: 1.5 }),
+  }),
+});
+
+function getNumericPropertyByName(feature, patterns) {
+  const props = feature.getProperties();
+
+  for (const [key, value] of Object.entries(props)) {
+    if (key === "geometry") continue;
+    const normalizedKey = key.toLowerCase();
+    const matches = patterns.some((pattern) => normalizedKey.includes(pattern));
+    const numericValue =
+      typeof value === "number" ? value : Number(String(value).replace(",", "."));
+
+    if (matches && Number.isFinite(numericValue)) {
+      return numericValue;
+    }
+  }
+
+  return null;
+}
+
+function getNumericFeatureValueForYear(feature, year) {
+  return getNumericPropertyByName(feature, [String(year)]);
+}
+
+function getLabelProperty(feature) {
+  const props = feature.getProperties();
+  const preferredKeys = [
+    "name",
+    "Name",
+    "NAME",
+    "emri",
+    "Emri",
+    "EMRI",
+    "label",
+    "Label",
+    "LABEL",
+  ];
+
+  for (const key of preferredKeys) {
+    if (props[key]) return String(props[key]);
+  }
+
+  return "";
+}
+
+function getReferenceZone2025Color(value) {
+  if (!Number.isFinite(value)) return "rgba(148, 163, 184, 0.2)";
+  if (value >= 3000) return "rgba(127, 29, 29, 0.2)";
+  if (value >= 2200) return "rgba(220, 38, 38, 0.2)";
+  if (value >= 1600) return "rgba(249, 115, 22, 0.2)";
+  if (value >= 1000) return "rgba(234, 179, 8, 0.2)";
+  if (value >= 500) return "rgba(132, 204, 22, 0.2)";
+  return "rgba(34, 197, 94, 0.2)";
+}
+
+function getReferenceZone2025Style(feature, resolution) {
+  const value = getNumericPropertyByName(feature, ["2025"]);
+  const label = resolution < 40 ? getLabelProperty(feature) : "";
+  const fillColor = getReferenceZone2025Color(value);
+
+  return new Style({
+    fill: new Fill({ color: fillColor }),
+    stroke: new Stroke({ color: "rgba(51, 65, 85, 0.5)", width: 0.8 }),
+    image: new CircleStyle({
+      radius: 5,
+      fill: new Fill({ color: fillColor }),
+      stroke: new Stroke({ color: "#ffffff", width: 1.5 }),
+    }),
+    text: label
+      ? new Text({
+          text: label,
+          font: "bold 11px Calibri,sans-serif",
+          fill: new Fill({ color: "#0f172a" }),
+          stroke: new Stroke({ color: "#ffffff", width: 3 }),
+          overflow: true,
+        })
+      : undefined,
+  });
+}
+
+const stadiaOpenMapTilesLayer = new VectorTileLayer({
+  source: new VectorTileSource({
+    format: new MVT(),
+    url: "https://tiles.stadiamaps.com/data/openmaptiles/{z}/{x}/{y}.pbf?api_key=6ec6da2c-3e7e-4b4d-8ef7-4ba39357c366",
+  }),
+  style: referencePriceStyle,
+  visible: false,
+  title: "Stadia OpenMapTiles",
+  displayInLayerSwitcher: true,
+});
+
+const referenceZones2025Layer = new VectorTileLayer({
+  source: new VectorTileSource({
+    format: new MVT(),
+    url: "https://tiles.kaktu.al/data/reference_zones_2025/{z}/{x}/{y}.pbf",
+  }),
+  style: getReferenceZone2025Style,
+  visible: false,
+  title: "reference_zones_2025",
+  displayInLayerSwitcher: true,
+});
+
 const center_4326 = [19.80835, 41.310824];
 const center_3857 = [2206185.65, 5060810.15];
 const saranda_center = [2226806.503832, 4847588.560703];
@@ -1005,7 +1115,14 @@ const initialMapViewState = getInitialMapViewState();
 const map = new Map({
   target: "map",
   controls: defaults({ attribution: false }).extend(mapControls),
-  layers: [baseLayerGroup, asigLayers, addressSystem, planifikimiLayers],
+  layers: [
+    baseLayerGroup,
+    asigLayers,
+    addressSystem,
+    planifikimiLayers,
+    stadiaOpenMapTilesLayer,
+    referenceZones2025Layer,
+  ],
   view: new View({
     projection: initialMapViewState.projection,
     center: initialMapViewState.center,
@@ -2094,7 +2211,7 @@ layerSwitcherElement.style.right = "auto";
 const identifyBtn = document.getElementById("identify");
 const identifyModeSelect = document.getElementById("identifyMode");
 const container = document.querySelector(".form-container");
-const maxProperties = 10;
+const maxProperties = 30;
 
 // keep track of current mode ("all" or "top")
 let currentMode = null;
@@ -2104,6 +2221,81 @@ function clearResults() {
   container.innerHTML = "";
   container.style.display = "none";
 }
+
+function positionIdentifyContainer(evt) {
+  const mapRect = map.getTargetElement().getBoundingClientRect();
+  const panelWidth = 360;
+  const panelHeight = 420;
+  const padding = 12;
+  const clickX = evt.originalEvent?.clientX ?? mapRect.left + evt.pixel[0];
+  const clickY = evt.originalEvent?.clientY ?? mapRect.top + evt.pixel[1];
+  const left = Math.min(
+    Math.max(clickX + 12, padding),
+    window.innerWidth - panelWidth - padding,
+  );
+  const top = Math.min(
+    Math.max(clickY + 12, padding),
+    window.innerHeight - panelHeight - padding,
+  );
+
+  container.style.left = `${left}px`;
+  container.style.top = `${top}px`;
+}
+
+function prepareIdentifyContainer(evt) {
+  container.innerHTML = "";
+  positionIdentifyContainer(evt);
+
+  const header = document.createElement("div");
+  header.className = "form-container__titlebar";
+  header.innerHTML = `
+    <span>Identify Results</span>
+    <button type="button" class="close-form" title="Close">&times;</button>
+  `;
+  container.appendChild(header);
+  header.querySelector(".close-form").addEventListener("click", clearResults);
+}
+
+function enableIdentifyContainerDrag() {
+  let dragging = false;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  container.addEventListener("mousedown", (event) => {
+    if (!event.target.closest(".form-container__titlebar")) return;
+    if (event.target.closest("button")) return;
+
+    dragging = true;
+    const rect = container.getBoundingClientRect();
+    offsetX = event.clientX - rect.left;
+    offsetY = event.clientY - rect.top;
+    container.classList.add("is-dragging");
+    event.preventDefault();
+  });
+
+  document.addEventListener("mousemove", (event) => {
+    if (!dragging) return;
+
+    const left = Math.min(
+      Math.max(event.clientX - offsetX, 8),
+      window.innerWidth - container.offsetWidth - 8,
+    );
+    const top = Math.min(
+      Math.max(event.clientY - offsetY, 8),
+      window.innerHeight - container.offsetHeight - 8,
+    );
+    container.style.left = `${left}px`;
+    container.style.top = `${top}px`;
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    container.classList.remove("is-dragging");
+  });
+}
+
+enableIdentifyContainerDrag();
 
 // ——————————————————————————————
 //  MODE SELECTION & MAP LISTENERS
@@ -2158,17 +2350,7 @@ let lastClickCoord = null;
 async function getInfo(evt) {
   lastClickCoord = map.getCoordinateFromPixel(evt.pixel);
 
-  // build list of visible layers (starting at group index 2)
-  const visibleLayers = [];
-  for (let i = 2; i < layerGroupsArray.length; i++) {
-    visibleLayers.push(
-      ...layerGroupsArray[i]
-        .getLayers()
-        .getArray()
-        .filter((l) => l.getVisible())
-        .reverse(),
-    );
-  }
+  const visibleLayers = getVisibleIdentifyLayers();
 
   if (!visibleLayers.length) {
     clearResults();
@@ -2177,27 +2359,12 @@ async function getInfo(evt) {
 
   if (currentMode === "top") {
     for (const layer of visibleLayers) {
-      const url = layer
-        .getSource()
-        .getFeatureInfoUrl(
-          lastClickCoord,
-          map.getView().getResolution(),
-          map.getView().getProjection(),
-          { INFO_FORMAT: "application/json" },
-        );
-      if (!url) continue;
-      try {
-        const json = await fetch(url).then((r) => r.json());
-        const feats = json.features || [];
-        if (feats.length > 0) {
-          // found the topmost layer that has features here:
-          container.innerHTML = "";
-          feats.forEach((f) => renderFeatureBlock({ layer, feature: f }));
-          container.style.display = "block";
-          return; // stop scanning further
-        }
-      } catch (_) {
-        // on error, just move to the next layer
+      const feats = await queryIdentifyLayer(layer, evt);
+      if (feats.length > 0) {
+        prepareIdentifyContainer(evt);
+        feats.forEach((f) => renderFeatureBlock({ layer, feature: f }));
+        container.style.display = "block";
+        return;
       }
     }
     // if we get here, no layers had features
@@ -2210,6 +2377,16 @@ async function getInfo(evt) {
     };
     const featureCount = 10;
     const promises = visibleLayers.map((layer) => {
+      if (layer instanceof VectorTileLayer) {
+        return Promise.resolve({
+          layer,
+          features: getVectorTileFeaturesAtPixel(layer, evt.pixel),
+        });
+      }
+      const source = layer.getSource?.();
+      if (typeof source?.getFeatureInfoUrl !== "function") {
+        return Promise.resolve({ layer, features: [] });
+      }
       const url = layer
         .getSource()
         .getFeatureInfoUrl(
@@ -2237,11 +2414,76 @@ async function getInfo(evt) {
       }
 
       // render all hits
-      container.innerHTML = "";
-      hits.forEach(renderFeatureBlock);
-      container.style.display = "block";
-    });
+    prepareIdentifyContainer(evt);
+    hits.forEach(renderFeatureBlock);
+    container.style.display = "block";
+  });
   }
+}
+
+function getVisibleIdentifyLayers() {
+  const layers = [];
+  const collectLayers = (layer) => {
+    if (!layer.getVisible()) return;
+
+    if (layer instanceof LayerGroup) {
+      layer.getLayers().getArray().slice().reverse().forEach(collectLayers);
+      return;
+    }
+
+    const source = layer.getSource?.();
+    const isQueryableWms = typeof source?.getFeatureInfoUrl === "function";
+    const isVectorTile = layer instanceof VectorTileLayer;
+
+    if (isQueryableWms || isVectorTile) {
+      layers.push(layer);
+    }
+  };
+
+  map.getLayers().getArray().slice().reverse().forEach(collectLayers);
+  return layers;
+}
+
+async function queryIdentifyLayer(layer, evt) {
+  if (layer instanceof VectorTileLayer) {
+    return getVectorTileFeaturesAtPixel(layer, evt.pixel);
+  }
+
+  const source = layer.getSource?.();
+  if (typeof source?.getFeatureInfoUrl !== "function") return [];
+
+  const url = source.getFeatureInfoUrl(
+    lastClickCoord,
+    map.getView().getResolution(),
+    map.getView().getProjection(),
+    {
+      INFO_FORMAT: "application/json",
+      FEATURE_COUNT: 10,
+    },
+  );
+  if (!url) return [];
+
+  try {
+    const json = await fetch(url).then((response) => response.json());
+    return json.features || [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function getVectorTileFeaturesAtPixel(layer, pixel) {
+  const features = [];
+  map.forEachFeatureAtPixel(
+    pixel,
+    (feature, featureLayer) => {
+      if (featureLayer === layer) features.push(feature);
+    },
+    {
+      hitTolerance: 5,
+      layerFilter: (featureLayer) => featureLayer === layer,
+    },
+  );
+  return features;
 }
 
 // helper to query one layer (for top-only mode)
@@ -2277,7 +2519,10 @@ function queryLayer(layer) {
 
 // builds one “form‐block” for a layer/feature
 function renderFeatureBlock({ layer, feature }) {
-  const props = feature.properties || {};
+  const props = feature.getProperties
+    ? { ...feature.getProperties() }
+    : { ...(feature.properties || {}) };
+  delete props.geometry;
 
   const formEl = document.createElement("div");
   formEl.className = "form-container-el";
@@ -2285,33 +2530,33 @@ function renderFeatureBlock({ layer, feature }) {
   // header
   const hdr = document.createElement("div");
   hdr.className = "form-header";
-  hdr.innerHTML = `Layer: <b>${layer.get("title") || layer.get("name")}</b>`;
+  hdr.innerHTML = `<span>Layer</span><b>${layer.get("title") || layer.get("name")}</b>`;
   formEl.appendChild(hdr);
-  formEl.appendChild(document.createElement("hr"));
 
-  // properties
-  const labels = document.createElement("div");
-  const inputs = document.createElement("div");
-  labels.style.display = inputs.style.display = "flex";
-  labels.style.flexDirection = inputs.style.flexDirection = "column";
+  const table = document.createElement("table");
+  table.className = "form-properties";
 
   Object.keys(props)
     .slice(0, maxProperties)
     .forEach((key) => {
-      const lbl = document.createElement("label");
-      lbl.textContent = key;
-      labels.appendChild(lbl);
-
-      const inp = document.createElement("input");
-      inp.readOnly = true;
-      inp.value = props[key];
-      inputs.appendChild(inp);
+      const row = document.createElement("tr");
+      const keyCell = document.createElement("th");
+      const valueCell = document.createElement("td");
+      keyCell.textContent = key;
+      valueCell.textContent =
+        props[key] === null || props[key] === undefined ? "" : String(props[key]);
+      row.append(keyCell, valueCell);
+      table.appendChild(row);
     });
 
-  const wrapper = document.createElement("div");
-  wrapper.style.display = "flex";
-  wrapper.append(labels, inputs);
-  formEl.appendChild(wrapper);
+  if (!table.children.length) {
+    const empty = document.createElement("div");
+    empty.className = "form-empty";
+    empty.textContent = "No attributes returned.";
+    formEl.appendChild(empty);
+  } else {
+    formEl.appendChild(table);
+  }
 
   container.appendChild(formEl);
 }
@@ -8134,6 +8379,10 @@ const nearbySidebarClose = document.getElementById("nearbySidebarClose");
 const nearbyResults = document.getElementById("nearbyResults");
 const nearbySidebarSubtitle = document.getElementById("nearbySidebarSubtitle");
 const sharedChatSidebar = document.getElementById("chatSidebar");
+const geoAdvisorSidebar = document.getElementById("geoAdvisorSidebar");
+const geoAdvisorClose = document.getElementById("geoAdvisorClose");
+const geoAdvisorResults = document.getElementById("geoAdvisorResults");
+const geoAdvisorSubtitle = document.getElementById("geoAdvisorSubtitle");
 const nearbyCategoryToggle = document.getElementById("nearbyCategoryToggle");
 const nearbyCategoryPanel = document.getElementById("nearbyCategoryPanel");
 const nearbyCategoryLabel = document.getElementById("nearbyCategoryLabel");
@@ -8146,6 +8395,11 @@ let nearbyBusRouteLayer = null;
 let nearbyOriginCoordinate = null;
 let nearbyRouteRequestId = 0;
 let nearbyLastPlaces = [];
+let geoAdvisorChart = null;
+let geoAdvisorCompareChart = null;
+let geoAdvisorTotalChart = null;
+let geoAdvisorCurrentContext = null;
+let currentSidebarPanel = "assistant";
 
 const nearbyCategories = [
   { key: "school", group: "school", label: "School", query: '["amenity"="school"]' },
@@ -8178,12 +8432,15 @@ function updateSidebarPanelTabs(activePanel) {
 }
 
 function showSidebarPanel(activePanel) {
+  currentSidebarPanel = activePanel;
   const grid = document.querySelector(".grid-container");
   const showNearby = activePanel === "nearby";
+  const showGeoAdvisor = activePanel === "geoAdvisor";
 
   nearbySidebar.hidden = !showNearby;
-  if (sharedChatSidebar) sharedChatSidebar.hidden = showNearby;
-  grid?.classList.toggle("nearby-open", showNearby);
+  if (geoAdvisorSidebar) geoAdvisorSidebar.hidden = !showGeoAdvisor;
+  if (sharedChatSidebar) sharedChatSidebar.hidden = showNearby || showGeoAdvisor;
+  grid?.classList.toggle("nearby-open", showNearby || showGeoAdvisor);
   grid?.classList.remove("chat-collapsed");
   chatSidebarToggle?.setAttribute("aria-expanded", "true");
   updateSidebarPanelTabs(activePanel);
@@ -8195,6 +8452,10 @@ function showSidebarPanel(activePanel) {
 
 function setNearbySidebarOpen(open) {
   showSidebarPanel(open ? "nearby" : "assistant");
+}
+
+function setGeoAdvisorSidebarOpen(open) {
+  showSidebarPanel(open ? "geoAdvisor" : "assistant");
 }
 
 function formatNearbyDistance(meters) {
@@ -8674,6 +8935,336 @@ function getNearbyPlaceIdAtPixel(pixel) {
   return nearbyPlaceId;
 }
 
+function getGeoAdvisorValueText(value) {
+  if (!Number.isFinite(value)) return "n/a";
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+async function getReferenceZoneFeatureAtCoordinate(coordinate) {
+  const pixel = map.getPixelFromCoordinate(coordinate);
+  let features = [];
+
+  if (typeof referenceZones2025Layer.getFeatures === "function") {
+    features = await referenceZones2025Layer.getFeatures(pixel);
+  }
+
+  if (!features.length) {
+    features = getVectorTileFeaturesAtPixel(referenceZones2025Layer, pixel);
+  }
+
+  return features[0] || null;
+}
+
+function renderGeoAdvisorChart(values) {
+  const canvas = document.getElementById("geoAdvisorChart");
+  if (!canvas) return;
+  if (geoAdvisorChart) geoAdvisorChart.destroy();
+
+  geoAdvisorChart = new Chart(canvas, {
+    type: "line",
+    data: {
+      labels: ["2019", "2023", "2025"],
+      datasets: [
+        {
+          label: "Reference value",
+          data: values,
+          borderColor: "#1a73e8",
+          backgroundColor: "rgba(26, 115, 232, 0.16)",
+          borderWidth: 3,
+          pointRadius: 4,
+          pointBackgroundColor: "#1a73e8",
+          tension: 0.25,
+          fill: true,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+      },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: false },
+      },
+    },
+  });
+}
+
+function parseGeoAdvisorNumber(value) {
+  const normalized = String(value || "")
+    .replace(/\s/g, "")
+    .replace(/,/g, ".");
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : null;
+}
+
+function getGeoAdvisorPercentText(percent) {
+  if (!Number.isFinite(percent)) return "n/a";
+  return `${Math.abs(percent).toFixed(1)}%`;
+}
+
+function renderGeoAdvisorCompareChart(referencePrice, userPrice, referenceTotal, propertyValue) {
+  const canvas = document.getElementById("geoAdvisorCompareChart");
+  if (!canvas) return;
+  if (geoAdvisorCompareChart) geoAdvisorCompareChart.destroy();
+
+  geoAdvisorCompareChart = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels: ["Reference m²", "Your m²"],
+      datasets: [
+        {
+          label: "Value per square meter",
+          data: [referencePrice, userPrice],
+          backgroundColor: ["rgba(26, 115, 232, 0.72)", "rgba(249, 115, 22, 0.72)"],
+          borderColor: ["#1a73e8", "#f97316"],
+          borderWidth: 1,
+          borderRadius: 5,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true },
+        title: {
+          display: true,
+          text: "Value for square meters",
+        },
+      },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true },
+      },
+    },
+  });
+
+  const totalCanvas = document.getElementById("geoAdvisorTotalChart");
+  if (!totalCanvas) return;
+  if (geoAdvisorTotalChart) geoAdvisorTotalChart.destroy();
+
+  geoAdvisorTotalChart = new Chart(totalCanvas, {
+    type: "bar",
+    data: {
+      labels: ["Reference total", "Your total"],
+      datasets: [
+        {
+          label: "Total value",
+          data: [referenceTotal, propertyValue],
+          backgroundColor: ["rgba(26, 115, 232, 0.72)", "rgba(249, 115, 22, 0.72)"],
+          borderColor: ["#1a73e8", "#f97316"],
+          borderWidth: 1,
+          borderRadius: 5,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true },
+        title: {
+          display: true,
+          text: "Total value",
+        },
+      },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true },
+      },
+    },
+  });
+}
+
+function calculateGeoAdvisorProperty() {
+  if (!geoAdvisorCurrentContext) return;
+
+  const valueInput = document.getElementById("geoAdvisorPropertyValue");
+  const areaInput = document.getElementById("geoAdvisorPropertyArea");
+  const output = document.getElementById("geoAdvisorCalculationResult");
+  const propertyValue = parseGeoAdvisorNumber(valueInput?.value);
+  const propertyArea = parseGeoAdvisorNumber(areaInput?.value);
+  const referencePrice = geoAdvisorCurrentContext.value2025;
+
+  if (!output) return;
+
+  if (!Number.isFinite(referencePrice)) {
+    output.innerHTML =
+      '<div class="nearby-empty">The reference zone does not have a readable 2025 price.</div>';
+    return;
+  }
+
+  if (!propertyValue || propertyValue <= 0 || !propertyArea || propertyArea <= 0) {
+    output.innerHTML =
+      '<div class="geo-advisor-calculation__hint">Enter a property value and area greater than zero.</div>';
+    return;
+  }
+
+  const userPrice = propertyValue / propertyArea;
+  const referenceTotal = referencePrice * propertyArea;
+  const differencePerSquareMeter = userPrice - referencePrice;
+  const differenceTotal = propertyValue - referenceTotal;
+  const percentDifference = (differencePerSquareMeter / referencePrice) * 100;
+  const percentBadgeText =
+    differencePerSquareMeter >= 0
+      ? `+${getGeoAdvisorPercentText(percentDifference)}`
+      : `-${getGeoAdvisorPercentText(percentDifference)}`;
+  const isModerateDifference = Math.abs(differencePerSquareMeter) <= 10000;
+  const differenceToneClass = isModerateDifference
+    ? "geo-advisor-difference--moderate"
+    : differencePerSquareMeter >= 0
+      ? "geo-advisor-difference--positive"
+      : "geo-advisor-difference--negative";
+  const toneClass =
+    differencePerSquareMeter >= 0
+      ? "geo-advisor-comparison--above"
+      : "geo-advisor-comparison--below";
+
+  output.innerHTML = `
+    <div class="geo-advisor-comparison ${toneClass}">
+      <div>
+        <div class="geo-advisor-card__label">Price per m²</div>
+        <div class="geo-advisor-price-pair">
+          <div>
+            <span>Your price</span>
+            <b>${escapeNearbyHtml(getGeoAdvisorValueText(userPrice))}</b>
+            <small class="geo-advisor-percent-badge ${differenceToneClass}">${escapeNearbyHtml(percentBadgeText)}</small>
+          </div>
+          <div>
+            <span>Reference</span>
+            <b>${escapeNearbyHtml(getGeoAdvisorValueText(referencePrice))}</b>
+          </div>
+          <div class="geo-advisor-difference ${differenceToneClass}">
+            <span>Difference</span>
+            <b>${escapeNearbyHtml(getGeoAdvisorValueText(differencePerSquareMeter))}</b>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="geo-advisor-card__label">Total value</div>
+        <div class="geo-advisor-price-pair">
+          <div>
+            <span>Your total</span>
+            <b>${escapeNearbyHtml(getGeoAdvisorValueText(propertyValue))}</b>
+            <small class="geo-advisor-percent-badge ${differenceToneClass}">${escapeNearbyHtml(percentBadgeText)}</small>
+          </div>
+          <div>
+            <span>Reference total</span>
+            <b>${escapeNearbyHtml(getGeoAdvisorValueText(referenceTotal))}</b>
+          </div>
+          <div class="geo-advisor-difference ${differenceToneClass}">
+            <span>Difference</span>
+            <b>${escapeNearbyHtml(getGeoAdvisorValueText(differenceTotal))}</b>
+          </div>
+        </div>
+      </div>
+      <div class="geo-advisor-compare-chart">
+        <canvas id="geoAdvisorCompareChart"></canvas>
+      </div>
+      <div class="geo-advisor-compare-chart">
+        <canvas id="geoAdvisorTotalChart"></canvas>
+      </div>
+    </div>
+  `;
+
+  renderGeoAdvisorCompareChart(referencePrice, userPrice, referenceTotal, propertyValue);
+}
+
+function bindGeoAdvisorCalculator() {
+  const calculateButton = document.getElementById("geoAdvisorCalculate");
+  calculateButton?.addEventListener("click", calculateGeoAdvisorProperty);
+  document
+    .querySelectorAll("#geoAdvisorPropertyValue, #geoAdvisorPropertyArea")
+    .forEach((input) => {
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          calculateGeoAdvisorProperty();
+        }
+      });
+    });
+}
+
+async function analyzeGeoAdvisorLocation(coordinate) {
+  if (!geoAdvisorResults) return;
+
+  geoAdvisorResults.innerHTML =
+    '<div class="nearby-loading">Reading reference zone...</div>';
+
+  const lonLat = toLonLat(coordinate);
+  geoAdvisorSubtitle.textContent = `${lonLat[1].toFixed(5)}, ${lonLat[0].toFixed(5)}`;
+
+  const wasVisible = referenceZones2025Layer.getVisible();
+  referenceZones2025Layer.setVisible(true);
+  map.renderSync();
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+
+  const feature = await getReferenceZoneFeatureAtCoordinate(coordinate);
+  if (!feature) {
+    referenceZones2025Layer.setVisible(wasVisible);
+    geoAdvisorCurrentContext = null;
+    geoAdvisorResults.innerHTML =
+      '<div class="nearby-empty">No reference zone feature was found at this location. Try zooming in or enabling reference_zones_2025.</div>';
+    return;
+  }
+
+  const zoneName = getLabelProperty(feature) || "Unnamed zone";
+  const values = [2019, 2023, 2025].map((year) =>
+    getNumericFeatureValueForYear(feature, year),
+  );
+  const value2025 = values[2];
+  geoAdvisorCurrentContext = {
+    zoneName,
+    values,
+    value2025,
+  };
+
+  geoAdvisorResults.innerHTML = `
+    <div class="geo-advisor-card">
+      <div>
+        <div class="geo-advisor-card__label">Reference zone</div>
+        <div class="geo-advisor-card__name">${escapeNearbyHtml(zoneName)}</div>
+      </div>
+      <div>
+        <div class="geo-advisor-card__label">2025 value</div>
+        <div class="geo-advisor-card__value">${escapeNearbyHtml(getGeoAdvisorValueText(value2025))}</div>
+      </div>
+      <div class="geo-advisor-card__meta">
+        2019: ${escapeNearbyHtml(getGeoAdvisorValueText(values[0]))}
+        &nbsp; 2023: ${escapeNearbyHtml(getGeoAdvisorValueText(values[1]))}
+        &nbsp; 2025: ${escapeNearbyHtml(getGeoAdvisorValueText(values[2]))}
+      </div>
+      <div class="geo-advisor-chart">
+        <canvas id="geoAdvisorChart"></canvas>
+      </div>
+      <div class="geo-advisor-calculator">
+        <div class="geo-advisor-card__label">Property calculator</div>
+        <label>
+          <span>Property value</span>
+          <input id="geoAdvisorPropertyValue" type="number" min="0" step="0.01" placeholder="e.g. 120000" />
+        </label>
+        <label>
+          <span>Property area m²</span>
+          <input id="geoAdvisorPropertyArea" type="number" min="0" step="0.01" placeholder="e.g. 85" />
+        </label>
+        <button id="geoAdvisorCalculate" type="button">Calculate</button>
+      </div>
+      <div id="geoAdvisorCalculationResult" class="geo-advisor-calculation-result">
+        <div class="geo-advisor-calculation__hint">
+          Add value and area to compare your price per m² with the 2025 reference price.
+        </div>
+      </div>
+    </div>
+  `;
+  renderGeoAdvisorChart(values);
+  bindGeoAdvisorCalculator();
+}
+
 async function fetchNearbyRouteFeature(originLonLat, destinationLonLat, profile) {
   const response = await fetch(
     `https://api.openrouteservice.org/v2/directions/${profile}/geojson`,
@@ -9107,6 +9698,7 @@ async function runNearbyAnalysis(coordinate) {
 
   const originLonLat = toLonLat(coordinate);
   nearbySidebarSubtitle.textContent = `${originLonLat[1].toFixed(5)}, ${originLonLat[0].toFixed(5)}`;
+  analyzeGeoAdvisorLocation(coordinate);
 
   try {
     const places = await fetchNearbyPlaces(originLonLat);
@@ -9144,6 +9736,7 @@ function activateNearbyPick() {
 
 nearbyAnalysisBtn.addEventListener("click", activateNearbyPick);
 nearbySidebarClose.addEventListener("click", () => setNearbySidebarOpen(false));
+geoAdvisorClose?.addEventListener("click", () => setGeoAdvisorSidebarOpen(false));
 document.querySelectorAll("[data-sidebar-panel]").forEach((button) => {
   button.addEventListener("click", () => {
     showSidebarPanel(button.dataset.sidebarPanel);
@@ -11300,8 +11893,17 @@ if (chatSidebarToggle && gridContainer) {
   chatSidebarToggle.addEventListener("click", () => {
     const isCollapsed = gridContainer.classList.toggle("chat-collapsed");
     chatSidebarToggle.setAttribute("aria-expanded", String(!isCollapsed));
+    const toggleIcon = chatSidebarToggle.querySelector("i");
+    if (toggleIcon) {
+      toggleIcon.classList.toggle("fa-chevron-left", isCollapsed);
+      toggleIcon.classList.toggle("fa-chevron-right", !isCollapsed);
+    }
     if (gridContainer.classList.contains("nearby-open")) {
-      nearbySidebar.hidden = isCollapsed;
+      nearbySidebar.hidden = isCollapsed || currentSidebarPanel !== "nearby";
+      if (geoAdvisorSidebar) {
+        geoAdvisorSidebar.hidden =
+          isCollapsed || currentSidebarPanel !== "geoAdvisor";
+      }
       if (sharedChatSidebar) sharedChatSidebar.hidden = true;
     } else if (sharedChatSidebar) {
       sharedChatSidebar.hidden = isCollapsed;

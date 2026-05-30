@@ -1014,6 +1014,9 @@
               <button type="button" data-sidebar-panel="nearby" class="active">
                 Nearby
               </button>
+              <button type="button" data-sidebar-panel="geoAdvisor">
+                GeoAdvisor
+              </button>
             </div>
             <h2>Nearby Analysis</h2>
             <p id="nearbySidebarSubtitle">Click a point on the map.</p>
@@ -1056,15 +1059,46 @@
         </div>
       </aside>
 
+      <aside
+        class="geo-advisor-sidebar"
+        id="geoAdvisorSidebar"
+        aria-label="GeoAdvisor"
+        hidden
+      >
+        <div class="nearby-sidebar__header">
+          <div>
+            <div class="sidebar-panel-tabs">
+              <button type="button" data-sidebar-panel="assistant">
+                Assistant
+              </button>
+              <button type="button" data-sidebar-panel="nearby">
+                Nearby
+              </button>
+              <button type="button" data-sidebar-panel="geoAdvisor" class="active">
+                GeoAdvisor
+              </button>
+            </div>
+            <h2>GeoAdvisor</h2>
+            <p id="geoAdvisorSubtitle">Pick a location from Nearby Analysis.</p>
+          </div>
+          <button id="geoAdvisorClose" type="button" title="Close">
+            &times;
+          </button>
+        </div>
+        <div id="geoAdvisorResults" class="geo-advisor-results">
+          <div class="nearby-empty">Pick a location to read the reference zone.</div>
+        </div>
+      </aside>
+
       <button
         id="chatSidebarToggle"
         class="chat-sidebar-toggle"
         type="button"
-        title="Toggle assistant"
-        aria-label="Toggle assistant"
+        title="Toggle sidebar"
+        aria-label="Toggle sidebar"
         aria-expanded="true"
       >
-        <i class="fa-solid fa-comments"></i>
+        <i class="fa-solid fa-chevron-right"></i>
       </button>
 
       <aside class="chat-sidebar" id="chatSidebar" aria-label="Map chatbot">
@@ -1076,6 +1110,9 @@
               </button>
               <button type="button" data-sidebar-panel="nearby">
                 Nearby
+              </button>
+              <button type="button" data-sidebar-panel="geoAdvisor">
+                GeoAdvisor
               </button>
             </div>
             <h2>GIS Assistant</h2>
