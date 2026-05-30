@@ -1134,6 +1134,56 @@ button {
   color: #1d4ed8;
 }
 
+.nearby-bus-routes {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+  color: #334155;
+  font-size: 12px;
+}
+
+.nearby-bus-routes--empty {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.nearby-bus-routes__label {
+  margin-bottom: 6px;
+  color: #475569;
+  font-weight: 700;
+}
+
+.nearby-bus-routes__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.nearby-bus-routes__load,
+.nearby-bus-routes__chips button {
+  border: 1px solid #bae6fd;
+  border-radius: 999px;
+  background: #f0f9ff;
+  color: #0369a1;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nearby-bus-routes__load {
+  padding: 5px 9px;
+}
+
+.nearby-bus-routes__chips button {
+  padding: 4px 8px;
+}
+
+.nearby-bus-routes__load:hover,
+.nearby-bus-routes__chips button:hover {
+  border-color: #38bdf8;
+  background: #e0f2fe;
+}
+
 .nearby-time-source {
   display: inline-flex;
   align-items: center;

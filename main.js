@@ -8142,6 +8142,7 @@ let nearbyMarkerLayer = null;
 let nearbyResultsLayer = null;
 let nearbyHighlightLayer = null;
 let nearbyRouteLayer = null;
+let nearbyBusRouteLayer = null;
 let nearbyOriginCoordinate = null;
 let nearbyRouteRequestId = 0;
 let nearbyLastPlaces = [];
@@ -8268,23 +8269,53 @@ function getNearbyCategoryColor(category) {
   return colors[category] || "#334155";
 }
 
+function getNearbyCategorySymbol(category) {
+  const symbols = {
+    School: "🏫",
+    Hospital: "H",
+    Park: "🌳",
+    "Police Station": "P",
+    "Fire Station": "🚒",
+    "Bus Stop": "🚌",
+  };
+  return symbols[category] || "•";
+}
+
 function getNearbyPlaceStyle(feature) {
   const category = feature.get("category");
   const color = getNearbyCategoryColor(category);
-  return new Style({
-    image: new CircleStyle({
-      radius: 6,
-      fill: new Fill({ color }),
-      stroke: new Stroke({ color: "#ffffff", width: 2 }),
+  const symbol = getNearbyCategorySymbol(category);
+
+  return [
+    new Style({
+      image: new CircleStyle({
+        radius: 11,
+        fill: new Fill({ color }),
+        stroke: new Stroke({ color: "#ffffff", width: 3 }),
+      }),
     }),
-    text: new Text({
-      text: getNearbyLabelText(feature.get("name")),
-      offsetY: -16,
-      font: "12px Calibri,sans-serif",
-      fill: new Fill({ color: "#111827" }),
-      stroke: new Stroke({ color: "#ffffff", width: 3 }),
+    new Style({
+      text: new Text({
+        text: symbol,
+        offsetY: symbol.length > 1 ? 1 : 0,
+        font:
+          symbol === "H" || symbol === "P"
+            ? "bold 12px Calibri,sans-serif"
+            : "14px sans-serif",
+        fill: new Fill({ color: "#ffffff" }),
+        stroke: new Stroke({ color: "rgba(15, 23, 42, 0.35)", width: 1 }),
+      }),
     }),
-  });
+    new Style({
+      text: new Text({
+        text: getNearbyLabelText(feature.get("name")),
+        offsetY: -22,
+        font: "12px Calibri,sans-serif",
+        fill: new Fill({ color: "#111827" }),
+        stroke: new Stroke({ color: "#ffffff", width: 3 }),
+      }),
+    }),
+  ];
 }
 
 function getNearbyHighlightStyle(feature) {
@@ -8296,23 +8327,78 @@ function getNearbyHighlightStyle(feature) {
         stroke: new Stroke({ color: "#facc15", width: 4 }),
       }),
     }),
-    getNearbyPlaceStyle(feature),
+    ...getNearbyPlaceStyle(feature),
   ];
 }
 
-const nearbyCarRouteStyle = new Style({
-  stroke: new Stroke({
-    color: "#ef4444",
-    width: 4,
-  }),
+function getRouteLineCoordinateSets(geometry) {
+  if (!geometry) return [];
+  const type = geometry.getType();
+  if (type === "LineString") return [geometry.getCoordinates()];
+  if (type === "MultiLineString") return geometry.getCoordinates();
+  return [];
+}
+
+function createDirectionalRouteStyle({ color, width, lineDash, arrowColor }) {
+  const lineStyle = new Style({
+    stroke: new Stroke({
+      color,
+      width,
+      lineDash,
+    }),
+  });
+
+  return (feature) => {
+    const styles = [lineStyle];
+    const coordinateSets = getRouteLineCoordinateSets(feature.getGeometry());
+
+    coordinateSets.forEach((coordinates) => {
+      if (coordinates.length < 2) return;
+      const step = Math.max(2, Math.floor(coordinates.length / 4));
+
+      for (let index = step; index < coordinates.length; index += step) {
+        const start = coordinates[index - 1];
+        const end = coordinates[index];
+        const dx = end[0] - start[0];
+        const dy = end[1] - start[1];
+        if (!dx && !dy) continue;
+
+        styles.push(
+          new Style({
+            geometry: new Point(end),
+            image: new RegularShape({
+              points: 3,
+              radius: Math.max(6, width + 1),
+              angle: Math.PI / 2,
+              rotation: -Math.atan2(dy, dx),
+              rotateWithView: true,
+              fill: new Fill({ color: arrowColor || color }),
+              stroke: new Stroke({ color: "#ffffff", width: 1.5 }),
+            }),
+          }),
+        );
+      }
+    });
+
+    return styles;
+  };
+}
+
+const nearbyCarRouteStyle = createDirectionalRouteStyle({
+  color: "#1a73e8",
+  width: 7,
 });
 
-const nearbyWalkRouteStyle = new Style({
-  stroke: new Stroke({
-    color: "#64748b",
-    width: 4,
-    lineDash: [10, 10],
-  }),
+const nearbyWalkRouteStyle = createDirectionalRouteStyle({
+  color: "#64748b",
+  width: 4,
+  lineDash: [10, 10],
+  arrowColor: "#334155",
+});
+
+const nearbyBusRouteStyle = createDirectionalRouteStyle({
+  color: "#0ea5e9",
+  width: 5,
 });
 
 function getNearbyRouteStyle(profile) {
@@ -8409,6 +8495,10 @@ function getOverpassQuery([lon, lat], radius = 2000) {
   return `[out:json][timeout:25];(${blocks});out center tags;`;
 }
 
+function getOverpassBusRoutesQuery([lon, lat], radius = 90) {
+  return `[out:json][timeout:25];relation["type"="route"]["route"="bus"](around:${radius},${lat},${lon});out tags geom;`;
+}
+
 function getNearbyCategory(tags = {}) {
   if (tags.amenity === "school") return "School";
   if (tags.amenity === "hospital") return "Hospital";
@@ -8476,9 +8566,11 @@ function clearNearbyResultLayers() {
   if (nearbyResultsLayer) map.removeLayer(nearbyResultsLayer);
   if (nearbyHighlightLayer) map.removeLayer(nearbyHighlightLayer);
   if (nearbyRouteLayer) map.removeLayer(nearbyRouteLayer);
+  if (nearbyBusRouteLayer) map.removeLayer(nearbyBusRouteLayer);
   nearbyResultsLayer = null;
   nearbyHighlightLayer = null;
   nearbyRouteLayer = null;
+  nearbyBusRouteLayer = null;
 }
 
 function createNearbyResultFeature(place) {
@@ -8519,6 +8611,24 @@ function displayNearbyPlacesOnMap(places) {
   });
   nearbyRouteLayer.setZIndex(179);
   map.addLayer(nearbyRouteLayer);
+
+  nearbyBusRouteLayer = new VectorLayer({
+    source: new VectorSource(),
+    style: nearbyBusRouteStyle,
+    displayInLayerSwitcher: false,
+  });
+  nearbyBusRouteLayer.setZIndex(178);
+  map.addLayer(nearbyBusRouteLayer);
+}
+
+function scrollNearbyCardIntoView(placeId) {
+  const card = Array.from(nearbyResults.querySelectorAll(".nearby-card")).find(
+    (item) => item.dataset.placeId === placeId,
+  );
+  if (!card) return;
+
+  card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  card.focus({ preventScroll: true });
 }
 
 function highlightNearbyPlace(placeId, shouldZoom = true) {
@@ -8545,6 +8655,23 @@ function highlightNearbyPlace(placeId, shouldZoom = true) {
       duration: 450,
     });
   }
+}
+
+function getNearbyPlaceIdAtPixel(pixel) {
+  let nearbyPlaceId = null;
+  map.forEachFeatureAtPixel(
+    pixel,
+    (feature) => {
+      nearbyPlaceId = feature.get("placeId");
+      return Boolean(nearbyPlaceId);
+    },
+    {
+      hitTolerance: 8,
+      layerFilter: (layer) =>
+        layer === nearbyResultsLayer || layer === nearbyHighlightLayer,
+    },
+  );
+  return nearbyPlaceId;
 }
 
 async function fetchNearbyRouteFeature(originLonLat, destinationLonLat, profile) {
@@ -8587,6 +8714,7 @@ async function updateNearbyPath(place, profile = "driving-car") {
   if (!nearbyRouteLayer || !nearbyOriginCoordinate) return;
 
   const requestId = ++nearbyRouteRequestId;
+  nearbyBusRouteLayer?.getSource().clear();
   nearbyRouteLayer.setStyle(getNearbyRouteStyle(profile));
   nearbyRouteLayer.getSource().clear();
   nearbyRouteLayer
@@ -8609,6 +8737,178 @@ async function updateNearbyPath(place, profile = "driving-car") {
       error,
     );
   }
+}
+
+function getNearbyBusRouteName(route) {
+  const tags = route.tags || {};
+  return (
+    tags.ref ||
+    tags.name ||
+    tags.route_ref ||
+    tags.operator ||
+    `Route ${route.osmId}`
+  );
+}
+
+function createNearbyBusRouteFeature(route) {
+  return new Feature({
+    geometry: new MultiLineString(route.segments),
+    name: route.name,
+    osmId: route.osmId,
+  });
+}
+
+function getNearbyBusRouteCardHtml(place) {
+  if (place.category !== "Bus Stop") return "";
+
+  if (place.busRoutesLoading) {
+    return `<div class="nearby-bus-routes">Reading bus lines...</div>`;
+  }
+
+  if (place.busRoutesError) {
+    return `<div class="nearby-bus-routes nearby-bus-routes--empty">${escapeNearbyHtml(place.busRoutesError)}</div>`;
+  }
+
+  if (!place.busRoutes) {
+    return `
+      <div class="nearby-bus-routes">
+        <button type="button" class="nearby-bus-routes__load" data-load-bus-routes>
+          Show bus lines
+        </button>
+      </div>
+    `;
+  }
+
+  if (!place.busRoutes.length) {
+    return `<div class="nearby-bus-routes nearby-bus-routes--empty">No OSM bus route relations found near this stop.</div>`;
+  }
+
+  return `
+    <div class="nearby-bus-routes">
+      <div class="nearby-bus-routes__label">Bus lines</div>
+      <div class="nearby-bus-routes__chips">
+        ${place.busRoutes
+          .map(
+            (route, index) => `
+              <button type="button" data-bus-route-index="${index}">
+                ${escapeNearbyHtml(route.name)}
+              </button>
+            `,
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+async function fetchNearbyBusRoutes(place) {
+  const response = await fetch("https://overpass-api.de/api/interpreter", {
+    method: "POST",
+    body: new URLSearchParams({
+      data: getOverpassBusRoutesQuery(place.lonLat),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Bus routes request failed with status ${response.status}`);
+  }
+
+  const data = await response.json();
+  return (data.elements || [])
+    .filter((element) => element.type === "relation")
+    .map((element) => {
+      const segments = (element.members || [])
+        .map((member) =>
+          (member.geometry || [])
+            .filter(
+              (point) => Number.isFinite(point.lon) && Number.isFinite(point.lat),
+            )
+            .map((point) =>
+              fromLonLat(
+                [point.lon, point.lat],
+                map.getView().getProjection(),
+              ),
+            ),
+        )
+        .filter((segment) => segment.length > 1);
+
+      if (!segments.length) return null;
+
+      return {
+        osmId: element.id,
+        tags: element.tags || {},
+        name: getNearbyBusRouteName({
+          osmId: element.id,
+          tags: element.tags || {},
+        }),
+        segments,
+      };
+    })
+    .filter(Boolean);
+}
+
+function updateNearbyBusRoutesSection(place) {
+  const card = Array.from(nearbyResults.querySelectorAll(".nearby-card")).find(
+    (item) => item.dataset.placeId === place.id,
+  );
+  const section = card?.querySelector("[data-bus-routes-section]");
+  if (!section) return;
+
+  section.innerHTML = getNearbyBusRouteCardHtml(place);
+  bindNearbyBusRouteButtons(card, place);
+}
+
+function showNearbyBusRoute(route) {
+  if (!nearbyBusRouteLayer) return;
+
+  nearbyRouteLayer?.getSource().clear();
+  nearbyBusRouteLayer.getSource().clear();
+  nearbyBusRouteLayer.getSource().addFeature(createNearbyBusRouteFeature(route));
+
+  const extent = nearbyBusRouteLayer.getSource().getExtent();
+  map.getView().fit(extent, {
+    padding: [80, 420, 80, 80],
+    duration: 450,
+    maxZoom: 16,
+  });
+}
+
+async function loadNearbyBusRoutes(place) {
+  if (place.busRoutes || place.busRoutesLoading) return;
+
+  place.busRoutesLoading = true;
+  updateNearbyBusRoutesSection(place);
+
+  try {
+    place.busRoutes = await fetchNearbyBusRoutes(place);
+    place.busRoutesError = null;
+  } catch (error) {
+    console.warn("Nearby bus routes unavailable.", error);
+    place.busRoutesError = "Could not read OSM bus lines for this stop.";
+  } finally {
+    place.busRoutesLoading = false;
+    updateNearbyBusRoutesSection(place);
+  }
+}
+
+function bindNearbyBusRouteButtons(card, place) {
+  card.querySelector("[data-load-bus-routes]")?.addEventListener(
+    "click",
+    (event) => {
+      event.stopPropagation();
+      loadNearbyBusRoutes(place);
+    },
+  );
+
+  card.querySelectorAll("[data-bus-route-index]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const route = place.busRoutes?.[Number(button.dataset.busRouteIndex)];
+      if (!route) return;
+      highlightNearbyPlace(place.id, false);
+      showNearbyBusRoute(route);
+    });
+  });
 }
 
 async function fetchOrsDurations(originLonLat, places, profile) {
@@ -8742,6 +9042,9 @@ function renderNearbyResults(places) {
               Walk: ${getNearbyDurationText(place, "walk")}
             </button>
           </div>
+          <div data-bus-routes-section>
+            ${getNearbyBusRouteCardHtml(place)}
+          </div>
         </article>
       `,
       )
@@ -8760,6 +9063,10 @@ function renderNearbyResults(places) {
         if (place) updateNearbyPath(place, button.dataset.routeProfile);
       });
     });
+    const place = nearbyLastPlaces.find(
+      (item) => item.id === card.dataset.placeId,
+    );
+    if (place) bindNearbyBusRouteButtons(card, place);
     card.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
@@ -8847,6 +9154,27 @@ map.on("click", (event) => {
   nearbyPickActive = false;
   nearbyAnalysisBtn.classList.remove("active");
   runNearbyAnalysis(event.coordinate);
+});
+
+map.on("click", (event) => {
+  if (nearbyPickActive) return;
+
+  const nearbyPlaceId = getNearbyPlaceIdAtPixel(event.pixel);
+  if (!nearbyPlaceId) return;
+
+  setNearbySidebarOpen(true);
+  highlightNearbyPlace(nearbyPlaceId, false);
+  scrollNearbyCardIntoView(nearbyPlaceId);
+});
+
+map.on("pointermove", (event) => {
+  if (event.dragging || nearbyPickActive) return;
+
+  const nearbyPlaceId = getNearbyPlaceIdAtPixel(event.pixel);
+  const target = map.getTargetElement();
+  if (target) {
+    target.style.cursor = nearbyPlaceId ? "pointer" : "";
+  }
 });
 
 //Site Selection
