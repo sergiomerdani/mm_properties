@@ -11915,68 +11915,314 @@ if (chatSidebarToggle && gridContainer) {
   });
 }
 
-const kadasterLayer = new TileLayer({
-  title: "Kadaster Layers",
+function createKadasterWmsLayer(title, url) {
+  return new TileLayer({
+    title,
+    visible: false,
+    minZoom: 15,
+    maxZoom: 22,
+    footprintDiscovery: true,
+    displayInLayerSwitcher: true,
+    source: new TileWMS({
+      url,
+      params: {
+        VERSION: "1.1.1",
+        LAYERS: "ndertesa,pasuri",
+        STYLES: "",
+        FORMAT: "image/png",
+        TRANSPARENT: true,
+        SRS: "EPSG:3857",
+      },
+      crossOrigin: "anonymous",
+    }),
+  });
+}
 
-  source: new TileWMS({
-    url: "https://apps.kadaster.al/himarewms",
+function createAsigZrppWmsLayer(title, layerName) {
+  return new TileLayer({
+    title,
+    visible: false,
+    minZoom: 15,
+    maxZoom: 22,
+    footprintDiscovery: true,
+    displayInLayerSwitcher: true,
+    source: new TileWMS({
+      url: "https://geoportal.asig.gov.al/service/zrpp/wms",
+      params: {
+        VERSION: "1.1.1",
+        LAYERS: layerName,
+        STYLES: "",
+        FORMAT: "image/png",
+        TRANSPARENT: true,
+        SRS: "EPSG:3857",
+      },
+      crossOrigin: "anonymous",
+    }),
+  });
+}
 
-    params: {
-      LAYERS: "ndertesa,pasuri",
-      FORMAT: "image/png",
-      TRANSPARENT: true,
-      VERSION: "1.1.1",
-      SRS: "EPSG:3857",
-    },
+const kadasterWmsGroup = new LayerGroup({
+  title: "Kadaster WMS",
+  openInLayerSwitcher: true,
+  displayInLayerSwitcher: true,
+  layers: [
+    createKadasterWmsLayer("Himare WMS", "https://apps.kadaster.al/himarewms"),
+    createKadasterWmsLayer("Dhermi WMS", "https://apps.kadaster.al/dhermiwms"),
+    createKadasterWmsLayer("Palase WMS", "https://apps.kadaster.al/palasewms"),
+    createAsigZrppWmsLayer(
+      "P Kadastrale ASHK 04/2025",
+      "p_kadastrale_ashk_042025",
+    ),
+    createAsigZrppWmsLayer(
+      "Parcela Kadastrale QKD 04/2025",
+      "parcela_kadastrale_qkd_042025",
+    ),
+  ],
+});
 
-    crossOrigin: "anonymous",
+map.addLayer(kadasterWmsGroup);
+
+const footprintBoxStyle = new Style({
+  fill: new Fill({ color: "rgba(26, 115, 232, 0.08)" }),
+  stroke: new Stroke({
+    color: "rgba(26, 115, 232, 0.85)",
+    width: 2,
+    lineDash: [8, 6],
   }),
 });
 
-map.addLayer(kadasterLayer);
-
-const dhermiNdertesaLayer = new TileLayer({
-  title: "Dhermi - Pasuri",
-  visible: true,
-  source: new TileWMS({
-    url: "https://apps.kadaster.al/dhermiwms",
-    params: {
-      VERSION: "1.1.1",
-      LAYERS: "ndertesa,pasuri",
-      STYLES: "",
-      FORMAT: "image/png",
-      TRANSPARENT: true,
-      SRS: "EPSG:3857",
-    },
-    crossOrigin: "anonymous",
+const footprintBoxHighlightStyle = new Style({
+  fill: new Fill({ color: "rgba(249, 115, 22, 0.1)" }),
+  stroke: new Stroke({
+    color: "rgba(249, 115, 22, 0.9)",
+    width: 2,
+    lineDash: [8, 6],
   }),
 });
 
-map.addLayer(dhermiNdertesaLayer);
-
-const ndertesaLayer = new TileLayer({
-  title: "Ndertesa",
-  source: new TileWMS({
-    url: "https://apps.kadaster.al/palasewms",
-    params: {
-      LAYERS: "ndertesa",
-      FORMAT: "image/png",
-      TRANSPARENT: true,
-    },
-  }),
+const footprintSource = new VectorSource();
+const footprintLayer = new VectorLayer({
+  title: "Automatic coverage boxes",
+  source: footprintSource,
+  style: (feature) => [
+    feature.get("isMultiLayer") ? footprintBoxHighlightStyle : footprintBoxStyle,
+    new Style({
+      text: new Text({
+        text: feature.get("label") || "",
+        font: "bold 12px Calibri,sans-serif",
+        fill: new Fill({ color: "#0f172a" }),
+        stroke: new Stroke({ color: "#ffffff", width: 3 }),
+        overflow: true,
+      }),
+    }),
+  ],
+  displayInLayerSwitcher: false,
 });
+footprintLayer.setZIndex(170);
+map.addLayer(footprintLayer);
 
-const pasuriLayer = new TileLayer({
-  title: "Pasuri",
-  source: new TileWMS({
-    url: "https://apps.kadaster.al/palasewms",
-    params: {
-      LAYERS: "pasuri",
-      FORMAT: "image/png",
-      TRANSPARENT: true,
+let footprintUpdateTimer = null;
+let footprintRequestId = 0;
+
+function getFootprintDiscoveryLayers() {
+  const layers = [];
+  kadasterWmsGroup.getLayers().forEach((layer) => {
+    if (layer.get("footprintDiscovery")) layers.push(layer);
+  });
+  return layers;
+}
+
+function isLayerOutOfScale(layer) {
+  const zoom = map.getView().getZoom() || 0;
+  const minZoom = layer.getMinZoom?.() ?? -Infinity;
+  const maxZoom = layer.getMaxZoom?.() ?? Infinity;
+  return zoom <= minZoom || zoom > maxZoom;
+}
+
+function makeFootprintCellGeometry(extent) {
+  const [minX, minY, maxX, maxY] = extent;
+  return new Polygon([
+    [
+      [minX, minY],
+      [maxX, minY],
+      [maxX, maxY],
+      [minX, maxY],
+      [minX, minY],
+    ],
+  ]);
+}
+
+function extentIntersectsOrNear(a, b, tolerance) {
+  return !(
+    a[2] + tolerance < b[0] ||
+    b[2] + tolerance < a[0] ||
+    a[3] + tolerance < b[1] ||
+    b[3] + tolerance < a[1]
+  );
+}
+
+function mergeExtents(a, b) {
+  return [
+    Math.min(a[0], b[0]),
+    Math.min(a[1], b[1]),
+    Math.max(a[2], b[2]),
+    Math.max(a[3], b[3]),
+  ];
+}
+
+function clusterFootprintHits(hits) {
+  const resolution = map.getView().getResolution() || 1;
+  const tolerance = resolution * 100;
+  const clusters = [];
+
+  hits.forEach((hit) => {
+    let cluster = clusters.find((item) =>
+      extentIntersectsOrNear(item.extent, hit.extent, tolerance),
+    );
+
+    if (!cluster) {
+      clusters.push({
+        extent: hit.extent,
+        layerTitles: new Set([hit.layerTitle]),
+      });
+      return;
+    }
+
+    cluster.extent = mergeExtents(cluster.extent, hit.extent);
+    cluster.layerTitles.add(hit.layerTitle);
+  });
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < clusters.length; i += 1) {
+      for (let j = i + 1; j < clusters.length; j += 1) {
+        if (extentIntersectsOrNear(clusters[i].extent, clusters[j].extent, tolerance)) {
+          clusters[i].extent = mergeExtents(clusters[i].extent, clusters[j].extent);
+          clusters[j].layerTitles.forEach((title) => clusters[i].layerTitles.add(title));
+          clusters.splice(j, 1);
+          changed = true;
+          break;
+        }
+      }
+      if (changed) break;
+    }
+  }
+
+  return clusters;
+}
+
+async function hasWmsFeatureAtCoordinate(layer, coordinate) {
+  const source = layer.getSource();
+  const url = source.getFeatureInfoUrl(
+    coordinate,
+    map.getView().getResolution(),
+    map.getView().getProjection(),
+    {
+      INFO_FORMAT: "application/json",
+      FEATURE_COUNT: 1,
     },
-  }),
-});
+  );
 
-map.addLayer(ndertesaLayer);
-map.addLayer(pasuriLayer);
+  if (!url) return false;
+
+  try {
+    const response = await fetch(url);
+    const text = await response.text();
+    if (!response.ok || !text.trim()) return false;
+
+    try {
+      const json = JSON.parse(text);
+      return Boolean(json.features?.length);
+    } catch (_) {
+      return !/exception|serviceexception|no features/i.test(text);
+    }
+  } catch (error) {
+    console.warn("Footprint discovery failed:", layer.get("title"), error);
+    return false;
+  }
+}
+
+async function sampleFootprintLayer(layer, requestId) {
+  const size = map.getSize();
+  if (!size) return [];
+
+  const cols = 7;
+  const rows = 7;
+  const hits = [];
+  const cellWidth = size[0] / cols;
+  const cellHeight = size[1] / rows;
+
+  for (let col = 0; col < cols; col += 1) {
+    for (let row = 0; row < rows; row += 1) {
+      if (requestId !== footprintRequestId) return [];
+
+      const pixel = [(col + 0.5) * cellWidth, (row + 0.5) * cellHeight];
+      const coordinate = map.getCoordinateFromPixel(pixel);
+      const hasFeature = await hasWmsFeatureAtCoordinate(layer, coordinate);
+      if (!hasFeature) continue;
+
+      const minCoordinate = map.getCoordinateFromPixel([col * cellWidth, (row + 1) * cellHeight]);
+      const maxCoordinate = map.getCoordinateFromPixel([(col + 1) * cellWidth, row * cellHeight]);
+      hits.push({
+        layerTitle: layer.get("title"),
+        extent: [
+          Math.min(minCoordinate[0], maxCoordinate[0]),
+          Math.min(minCoordinate[1], maxCoordinate[1]),
+          Math.max(minCoordinate[0], maxCoordinate[0]),
+          Math.max(minCoordinate[1], maxCoordinate[1]),
+        ],
+      });
+    }
+  }
+
+  return hits;
+}
+
+function renderFootprintClusters(hits) {
+  footprintSource.clear();
+  const clusters = clusterFootprintHits(hits);
+
+  clusters.forEach((cluster) => {
+    const titles = Array.from(cluster.layerTitles);
+    footprintSource.addFeature(
+      new Feature({
+        geometry: makeFootprintCellGeometry(cluster.extent),
+        label: titles.length > 1 ? `${titles.length} layers with data` : titles[0],
+        isMultiLayer: titles.length > 1,
+      }),
+    );
+  });
+}
+
+async function updateAutomaticFootprints() {
+  const requestId = ++footprintRequestId;
+  const activeLayers = getFootprintDiscoveryLayers().filter(
+    (layer) => layer.getVisible() && isLayerOutOfScale(layer),
+  );
+
+  if (!activeLayers.length) {
+    footprintSource.clear();
+    return;
+  }
+
+  const allHits = [];
+  for (const layer of activeLayers) {
+    const layerHits = await sampleFootprintLayer(layer, requestId);
+    if (requestId !== footprintRequestId) return;
+    allHits.push(...layerHits);
+  }
+
+  renderFootprintClusters(allHits);
+}
+
+function scheduleAutomaticFootprints() {
+  window.clearTimeout(footprintUpdateTimer);
+  footprintUpdateTimer = window.setTimeout(updateAutomaticFootprints, 250);
+}
+
+map.on("moveend", scheduleAutomaticFootprints);
+getFootprintDiscoveryLayers().forEach((layer) => {
+  layer.on("change:visible", scheduleAutomaticFootprints);
+});
+scheduleAutomaticFootprints();
