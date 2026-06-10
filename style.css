@@ -2477,19 +2477,50 @@ button.fa-button.active {
   flex-direction: row; /* 🖱️ and ⏷ side by side */
 }
 
-.btn-group button {
-  border: 1px solid #ccc;
-  background: #f9f9f9;
-  padding: 5px 8px;
-  cursor: pointer;
-}
-
 .dropdown {
   position: relative; /* anchor for dropdown */
 }
 
 .dropdown-arrow {
-  width: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: #1d2a36;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dropdown-arrow:hover {
+  border-color: #b4c2cc;
+  background: #ffffff;
+}
+
+.navbar-tool-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  vertical-align: middle;
+}
+
+.navbar-tool-group > .fa-button,
+.navbar-tool-group .dropdown-arrow {
+  flex: 0 0 30px;
+}
+
+.navbar-tool-group .dropdown {
+  display: inline-flex;
+  align-items: center;
+}
+
+.navbar-tool-group .dropdown-arrow {
   padding: 0;
 }
 

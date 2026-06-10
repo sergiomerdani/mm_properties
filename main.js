@@ -7318,6 +7318,79 @@ function addExternalWmsLayer(serviceUrl, layerName, titleOverride = "") {
   return layer;
 }
 
+function getWmtsCapabilitiesUrl(serviceUrl) {
+  const trimmedUrl = serviceUrl.trim();
+  if (/request=getcapabilities/i.test(trimmedUrl)) return trimmedUrl;
+  const separator = trimmedUrl.includes("?") ? "&" : "?";
+  return `${trimmedUrl}${separator}SERVICE=WMTS&REQUEST=GetCapabilities`;
+}
+
+async function fetchWmtsMetadata(serviceUrl) {
+  const response = await fetch(getWmtsCapabilitiesUrl(serviceUrl));
+  if (!response.ok) {
+    throw new Error(`WMTS capabilities failed with status ${response.status}`);
+  }
+  const text = await response.text();
+  return new WMTSCapabilities().read(text);
+}
+
+function getWmtsLayerTitle(layer) {
+  return (
+    layer?.Title ||
+    layer?.Identifier ||
+    layer?.Abstract ||
+    "WMTS layer"
+  );
+}
+
+function getWmtsMatrixSet(layer, metadata) {
+  const links = layer?.TileMatrixSetLink || [];
+  const matrixSets = metadata?.Contents?.TileMatrixSet || [];
+  const preferredCodes = [
+    getCurrentMapProjectionCode(),
+    "EPSG:3857",
+    "GoogleMapsCompatible",
+    "EPSG:900913",
+    "EPSG:6870",
+    "EPSG:4326",
+  ];
+
+  for (const code of preferredCodes) {
+    const link = links.find((item) => item.TileMatrixSet === code);
+    if (link) return link.TileMatrixSet;
+  }
+
+  const compatibleLink = links.find((link) =>
+    matrixSets.some((matrixSet) => matrixSet.Identifier === link.TileMatrixSet),
+  );
+  return compatibleLink?.TileMatrixSet || links[0]?.TileMatrixSet;
+}
+
+function addExternalWmtsLayer(serviceUrl, wmtsLayer, metadata) {
+  const matrixSet = getWmtsMatrixSet(wmtsLayer, metadata);
+  if (!matrixSet) {
+    throw new Error(`No WMTS matrix set found for ${getWmtsLayerTitle(wmtsLayer)}.`);
+  }
+
+  const options = optionsFromCapabilities(metadata, {
+    layer: wmtsLayer.Identifier,
+    matrixSet,
+  });
+
+  const layer = new TileLayer({
+    title: getWmtsLayerTitle(wmtsLayer),
+    visible: true,
+    source: new WMTS(options),
+    displayInLayerSwitcher: true,
+  });
+  layer.set("externalServiceType", "wmts");
+  layer.set("externalServiceUrl", serviceUrl);
+  layer.set("wmtsLayerIdentifier", wmtsLayer.Identifier);
+  layer.set("wmtsMatrixSet", matrixSet);
+  addExternalLayerToMap(layer);
+  return layer;
+}
+
 async function addLoadedExternalServiceLayer(
   serviceUrl,
   type,
@@ -7350,6 +7423,19 @@ async function addLoadedExternalServiceLayer(
     return addArcgisImageLayer(serviceUrl, titleOverride);
   }
 
+  if (type === "wmts") {
+    const metadata = loadedExternalService?.metadata || (await fetchWmtsMetadata(serviceUrl));
+    const layerName = externalServiceLayerNameInput.value.trim();
+    const wmtsLayer =
+      metadata?.Contents?.Layer?.find(
+        (layer) =>
+          layer.Identifier === layerName ||
+          getWmtsLayerTitle(layer) === layerName,
+      ) || metadata?.Contents?.Layer?.[0];
+    if (!wmtsLayer) throw new Error("No WMTS layer was found.");
+    return addExternalWmtsLayer(serviceUrl, wmtsLayer, metadata);
+  }
+
   const wmsLayerName = externalWmsLayerNameInput.value.trim();
   if (!wmsLayerName) {
     throw new Error("Type the WMS layer name before adding it.");
@@ -7358,7 +7444,10 @@ async function addLoadedExternalServiceLayer(
 }
 
 function renderExternalServiceLayers(serviceUrl, serviceType, metadata) {
-  const serviceLayers = metadata.layers || [];
+  const serviceLayers =
+    serviceType === "wmts"
+      ? metadata?.Contents?.Layer || []
+      : metadata.layers || [];
   externalServiceLayers.innerHTML = "";
 
   if (!serviceLayers.length) {
@@ -7377,12 +7466,18 @@ function renderExternalServiceLayers(serviceUrl, serviceType, metadata) {
     const info = document.createElement("div");
     const title = document.createElement("div");
     title.className = "external-service-layer-title";
-    title.textContent = serviceLayer.name || `Layer ${serviceLayer.id}`;
+    title.textContent =
+      serviceType === "wmts"
+        ? getWmtsLayerTitle(serviceLayer)
+        : serviceLayer.name || `Layer ${serviceLayer.id}`;
     const meta = document.createElement("div");
     meta.className = "external-service-layer-meta";
-    meta.textContent = `ID ${serviceLayer.id}${
-      serviceLayer.geometryType ? ` - ${serviceLayer.geometryType}` : ""
-    }`;
+    meta.textContent =
+      serviceType === "wmts"
+        ? serviceLayer.Identifier
+        : `ID ${serviceLayer.id}${
+            serviceLayer.geometryType ? ` - ${serviceLayer.geometryType}` : ""
+          }`;
     info.append(title, meta);
 
     const button = document.createElement("button");
@@ -7390,14 +7485,21 @@ function renderExternalServiceLayers(serviceUrl, serviceType, metadata) {
     button.textContent = "Add";
     button.addEventListener("click", async () => {
       try {
-        setExternalServiceStatus(`Adding ${serviceLayer.name}...`);
-        const childUrl = `${parts.rootUrl}/${serviceLayer.id}`;
-        if (serviceType === "arcgis-feature") {
+        const serviceLayerTitle =
+          serviceType === "wmts"
+            ? getWmtsLayerTitle(serviceLayer)
+            : serviceLayer.name;
+        setExternalServiceStatus(`Adding ${serviceLayerTitle}...`);
+        if (serviceType === "wmts") {
+          await addExternalWmtsLayer(serviceUrl, serviceLayer, metadata);
+        } else if (serviceType === "arcgis-feature") {
+          const childUrl = `${parts.rootUrl}/${serviceLayer.id}`;
           await addArcgisFeatureLayer(childUrl, serviceLayer.name);
         } else {
+          const childUrl = `${parts.rootUrl}/${serviceLayer.id}`;
           await addArcgisMapLayer(childUrl, serviceLayer.name);
         }
-        setExternalServiceStatus(`${serviceLayer.name} added to the map.`);
+        setExternalServiceStatus(`${serviceLayerTitle} added to the map.`);
       } catch (error) {
         console.error(error);
         setExternalServiceStatus(error.message, true);
@@ -7414,6 +7516,10 @@ function updateExternalServiceInputs() {
   document.querySelectorAll(".external-wms-only").forEach((element) => {
     element.style.display = isWms ? "" : "none";
   });
+  externalServiceUrlInput.placeholder =
+    externalServiceTypeInput.value === "wmts"
+      ? "https://.../wmts?request=GetCapabilities"
+      : "https://.../arcgis/rest/services/.../FeatureServer";
   addExternalServiceLayerButton.disabled =
     !externalServiceUrlInput.value.trim();
 }
@@ -7448,6 +7554,26 @@ externalServiceForm.addEventListener("submit", async (event) => {
       setExternalServiceStatus("Type the WMS layer name, then add the layer.");
       externalServiceLayers.textContent =
         "WMS layer listing is not loaded here yet. Add one layer by name from the Service tab.";
+      return;
+    }
+
+    if (serviceType === "wmts") {
+      const metadata = await fetchWmtsMetadata(serviceUrl);
+      loadedExternalService = { serviceUrl, serviceType, metadata };
+      const firstLayer = metadata?.Contents?.Layer?.[0];
+      externalServiceLayerNameInput.value =
+        externalServiceLayerNameInput.value ||
+        (firstLayer ? getWmtsLayerTitle(firstLayer) : "");
+      renderExternalServiceLayers(serviceUrl, serviceType, metadata);
+      addExternalServiceLayerButton.disabled = !firstLayer;
+      setExternalServiceStatus(
+        firstLayer
+          ? "WMTS loaded. Add it directly or choose a layer."
+          : "WMTS loaded, but no layers were found.",
+        !firstLayer,
+      );
+      const layersTab = document.getElementById("service-layers-tab");
+      bootstrap.Tab.getOrCreateInstance(layersTab).show();
       return;
     }
 
@@ -7504,10 +7630,6 @@ function openAddDataModal(tabId = "service-tab") {
 }
 
 document.getElementById("add-data").addEventListener("click", () => {
-  openAddDataModal("service-tab");
-});
-
-document.getElementById("add-service").addEventListener("click", () => {
   openAddDataModal("service-tab");
 });
 
