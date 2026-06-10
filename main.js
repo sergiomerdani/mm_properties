@@ -7633,6 +7633,446 @@ document.getElementById("add-data").addEventListener("click", () => {
   openAddDataModal("service-tab");
 });
 
+document
+  .getElementById("manage-geoserver-layers")
+  ?.addEventListener("click", () => {
+    new bootstrap.Modal(
+      document.getElementById("geoserverManagerModal"),
+    ).show();
+    loadGeoServerManagerData();
+  });
+
+const geoserverLayerGroupsList = document.getElementById(
+  "geoserverLayerGroupsList",
+);
+const geoserverLayersList = document.getElementById("geoserverLayersList");
+const geoserverNewGroupBtn = document.getElementById("geoserverNewGroupBtn");
+const geoserverNewGroupForm = document.getElementById("geoserverNewGroupForm");
+const geoserverNewGroupName = document.getElementById("geoserverNewGroupName");
+const geoserverNewGroupLayers = document.getElementById(
+  "geoserverNewGroupLayers",
+);
+const geoserverNewGroupStatus = document.getElementById(
+  "geoserverNewGroupStatus",
+);
+const geoserverPublishGroupBtn = document.getElementById(
+  "geoserverPublishGroupBtn",
+);
+const geoserverNewLayerBtn = document.getElementById("geoserverNewLayerBtn");
+const geoserverNewLayerForm = document.getElementById("geoserverNewLayerForm");
+const geoserverNewLayerName = document.getElementById("geoserverNewLayerName");
+const geoserverNewLayerGeometry = document.getElementById(
+  "geoserverNewLayerGeometry",
+);
+const geoserverNewLayerStatus = document.getElementById(
+  "geoserverNewLayerStatus",
+);
+const geoserverPublishLayerBtn = document.getElementById(
+  "geoserverPublishLayerBtn",
+);
+const geoserverManagerWorkspace = "test";
+const geoserverManagerDatastore = "postgres";
+let geoserverManagerLayers = [];
+
+function normalizeManagerItems(data, preferredKeys = []) {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+
+  for (const key of preferredKeys) {
+    const value = data?.[key];
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === "object") {
+      const nestedItems = normalizeManagerItems(value, preferredKeys);
+      if (nestedItems.length) return nestedItems;
+    }
+  }
+
+  const commonKeys = [
+    "layerGroup",
+    "layerGroups",
+    "layergroup",
+    "layergroups",
+    "featureType",
+    "featureTypes",
+    "layer",
+    "layers",
+    "items",
+    "results",
+  ];
+
+  for (const key of commonKeys) {
+    const value = data?.[key];
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === "object") {
+      const nestedItems = normalizeManagerItems(value, preferredKeys);
+      if (nestedItems.length) return nestedItems;
+    }
+  }
+
+  const firstArray = Object.values(data || {}).find(Array.isArray);
+  if (firstArray) return firstArray;
+
+  const objectEntries = Object.entries(data || {}).filter(
+    ([, value]) => value && typeof value === "object",
+  );
+  if (objectEntries.length) {
+    return objectEntries.map(([key, value]) => ({
+      name: value.name || value.title || key,
+      ...value,
+    }));
+  }
+
+  return [];
+}
+
+function getManagerItemName(item) {
+  if (typeof item === "string") return item;
+  return (
+    item.name ||
+    item.layerName ||
+    item.layer_name ||
+    item.title ||
+    item.id ||
+    item.layer_group ||
+    item.layerGroup ||
+    "Unnamed"
+  );
+}
+
+function getManagerItemMeta(item) {
+  if (typeof item === "string") return "";
+  return (
+    item.workspace ||
+    item.datastore ||
+    item.type ||
+    item.geometryType ||
+    item.nativeName ||
+    item.href ||
+    ""
+  );
+}
+
+function renderManagerLoading(container, message) {
+  container.innerHTML = `<div class="geoserver-manager-empty">${message}</div>`;
+}
+
+function renderManagerError(container, message) {
+  container.innerHTML = `<div class="geoserver-manager-empty geoserver-manager-empty--error">${message}</div>`;
+}
+
+function renderManagerDetails(container, details) {
+  const detailBox = document.createElement("div");
+  detailBox.className = "geoserver-manager-details";
+  detailBox.textContent = JSON.stringify(details, null, 2);
+  container.appendChild(detailBox);
+}
+
+function setGeoServerNewLayerStatus(message, type = "") {
+  if (!geoserverNewLayerStatus) return;
+  geoserverNewLayerStatus.hidden = !message;
+  geoserverNewLayerStatus.textContent = message || "";
+  geoserverNewLayerStatus.className = `geoserver-create-status${
+    type ? ` geoserver-create-status--${type}` : ""
+  }`;
+}
+
+function setGeoServerNewGroupStatus(message, type = "") {
+  if (!geoserverNewGroupStatus) return;
+  geoserverNewGroupStatus.hidden = !message;
+  geoserverNewGroupStatus.textContent = message || "";
+  geoserverNewGroupStatus.className = `geoserver-create-status${
+    type ? ` geoserver-create-status--${type}` : ""
+  }`;
+}
+
+function renderGeoServerGroupLayerPicker() {
+  if (!geoserverNewGroupLayers) return;
+  geoserverNewGroupLayers.innerHTML = "";
+
+  const layerNames = geoserverManagerLayers
+    .map(getManagerItemName)
+    .filter((name) => name && name !== "Unnamed");
+
+  if (!layerNames.length) {
+    geoserverNewGroupLayers.innerHTML =
+      '<div class="geoserver-manager-empty">No layers available.</div>';
+    return;
+  }
+
+  layerNames.forEach((name) => {
+    const option = document.createElement("label");
+    option.className = "geoserver-create-layer-option";
+    option.innerHTML = `
+      <input type="checkbox" value="${escapeNearbyHtml(name)}" />
+      <span>${escapeNearbyHtml(name)}</span>
+    `;
+    geoserverNewGroupLayers.appendChild(option);
+  });
+}
+
+function getSelectedGeoServerGroupLayers() {
+  return Array.from(
+    geoserverNewGroupLayers?.querySelectorAll("input:checked") || [],
+  ).map((input) => input.value);
+}
+
+function renderManagerList(container, items, options) {
+  container.innerHTML = "";
+
+  if (!items.length) {
+    container.innerHTML = `<div class="geoserver-manager-empty">${options.emptyMessage}</div>`;
+    return;
+  }
+
+  items.forEach((item) => {
+    const name = getManagerItemName(item);
+    const meta = getManagerItemMeta(item);
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "geoserver-manager-row";
+    row.innerHTML = `
+      <span>
+        <strong>${escapeNearbyHtml(name)}</strong>
+        ${meta ? `<small>${escapeNearbyHtml(meta)}</small>` : ""}
+      </span>
+      <i class="fa-solid fa-chevron-right"></i>
+    `;
+
+    row.addEventListener("click", async () => {
+      container
+        .querySelectorAll(".geoserver-manager-row")
+        .forEach((button) => button.classList.remove("active"));
+      container
+        .querySelectorAll(".geoserver-manager-details")
+        .forEach((detail) => detail.remove());
+      row.classList.add("active");
+
+      try {
+        const details = await options.fetchDetails(name);
+        renderManagerDetails(container, details);
+      } catch (error) {
+        console.error(error);
+        renderManagerError(container, `Could not read ${name}.`);
+      }
+    });
+
+    container.appendChild(row);
+  });
+}
+
+async function loadGeoServerManagerData() {
+  renderManagerLoading(geoserverLayerGroupsList, "Loading layer groups...");
+  renderManagerLoading(geoserverLayersList, "Loading layers...");
+
+  try {
+    const response = await fetch("http://localhost:8000/api/layergroups/");
+    if (!response.ok) {
+      throw new Error(`Layer groups failed with status ${response.status}`);
+    }
+    const data = await response.json();
+    const layerGroups = normalizeManagerItems(data, [
+      "layerGroups",
+      "layerGroup",
+      "layergroups",
+      "layergroup",
+      "groups",
+      "items",
+      "results",
+    ]);
+
+    renderManagerList(geoserverLayerGroupsList, layerGroups, {
+      emptyMessage: "No layer groups returned.",
+      fetchDetails: async (groupName) => {
+        const detailResponse = await fetch(
+          `http://localhost:8000/api/layergroups/${encodeURIComponent(groupName)}/`,
+        );
+        if (!detailResponse.ok) {
+          throw new Error(
+            `Layer group details failed with status ${detailResponse.status}`,
+          );
+        }
+        return detailResponse.json();
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    renderManagerError(geoserverLayerGroupsList, "Could not load layer groups.");
+  }
+
+  try {
+    const response = await fetch(
+      `http://localhost:8000/api/groups/${geoserverManagerWorkspace}/${geoserverManagerDatastore}/`,
+    );
+    if (!response.ok) {
+      throw new Error(`Layers failed with status ${response.status}`);
+    }
+    const data = await response.json();
+    const layers = normalizeManagerItems(data, [
+      "layers",
+      "layer",
+      "featureTypes",
+      "featureType",
+      "items",
+      "results",
+    ]);
+    geoserverManagerLayers = layers;
+
+    renderManagerList(geoserverLayersList, layers, {
+      emptyMessage: "No layers returned.",
+      fetchDetails: async (layerName) => {
+        const detailResponse = await fetch(
+          `http://localhost:8000/api/groups/${geoserverManagerWorkspace}/${geoserverManagerDatastore}/${encodeURIComponent(layerName)}/`,
+        );
+        if (!detailResponse.ok) {
+          throw new Error(
+            `Layer details failed with status ${detailResponse.status}`,
+          );
+        }
+        return detailResponse.json();
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    renderManagerError(geoserverLayersList, "Could not load layers.");
+  }
+}
+
+async function createGeoServerLayerGroup(groupName, layerNames) {
+  const response = await fetch("http://localhost:8000/api/layergroups/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: groupName,
+      layer: layerNames,
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const message =
+      data.detail ||
+      data.error ||
+      data.message ||
+      `Create layer group failed with status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return data;
+}
+
+async function createGeoServerLayer(layerName, geometryType) {
+  const response = await fetch(
+    `http://localhost:8000/api/groups/${geoserverManagerWorkspace}/${geoserverManagerDatastore}/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: layerName,
+        geometry: geometryType,
+      }),
+    },
+  );
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const message =
+      data.detail ||
+      data.error ||
+      data.message ||
+      `Create layer failed with status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return data;
+}
+
+geoserverNewLayerBtn?.addEventListener("click", () => {
+  geoserverNewLayerForm?.reset();
+  setGeoServerNewLayerStatus("");
+  new bootstrap.Modal(document.getElementById("geoserverNewLayerModal")).show();
+  setTimeout(() => geoserverNewLayerName?.focus(), 150);
+});
+
+geoserverNewGroupBtn?.addEventListener("click", () => {
+  geoserverNewGroupForm?.reset();
+  setGeoServerNewGroupStatus("");
+  renderGeoServerGroupLayerPicker();
+  new bootstrap.Modal(document.getElementById("geoserverNewGroupModal")).show();
+  setTimeout(() => geoserverNewGroupName?.focus(), 150);
+});
+
+geoserverNewGroupForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const groupName = geoserverNewGroupName?.value.trim();
+  const layerNames = getSelectedGeoServerGroupLayers();
+
+  if (!groupName) {
+    setGeoServerNewGroupStatus("Fill the group name.", "error");
+    return;
+  }
+
+  if (!layerNames.length) {
+    setGeoServerNewGroupStatus("Select at least one layer.", "error");
+    return;
+  }
+
+  geoserverPublishGroupBtn.disabled = true;
+  setGeoServerNewGroupStatus("Publishing layer group...");
+
+  try {
+    await createGeoServerLayerGroup(groupName, layerNames);
+    setGeoServerNewGroupStatus("Layer group created successfully.", "success");
+    await loadGeoServerManagerData();
+    setTimeout(() => {
+      bootstrap.Modal.getInstance(
+        document.getElementById("geoserverNewGroupModal"),
+      )?.hide();
+    }, 700);
+  } catch (error) {
+    console.error("Create layer group failed:", error);
+    setGeoServerNewGroupStatus(
+      error.message || "Could not create layer group.",
+      "error",
+    );
+  } finally {
+    geoserverPublishGroupBtn.disabled = false;
+  }
+});
+
+geoserverNewLayerForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const layerName = geoserverNewLayerName?.value.trim();
+  const geometryType = geoserverNewLayerGeometry?.value;
+
+  if (!layerName || !geometryType) {
+    setGeoServerNewLayerStatus("Fill the layer name and geometry type.", "error");
+    return;
+  }
+
+  geoserverPublishLayerBtn.disabled = true;
+  setGeoServerNewLayerStatus("Publishing layer...");
+
+  try {
+    await createGeoServerLayer(layerName, geometryType);
+    setGeoServerNewLayerStatus("Layer created successfully.", "success");
+    await loadGeoServerManagerData();
+    setTimeout(() => {
+      bootstrap.Modal.getInstance(
+        document.getElementById("geoserverNewLayerModal"),
+      )?.hide();
+    }, 700);
+  } catch (error) {
+    console.error("Create layer failed:", error);
+    setGeoServerNewLayerStatus(error.message || "Could not create layer.", "error");
+  } finally {
+    geoserverPublishLayerBtn.disabled = false;
+  }
+});
+
 const uploadForm = document.getElementById("uploadForm");
 uploadForm.addEventListener("submit", async (e) => {
   e.preventDefault();

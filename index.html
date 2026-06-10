@@ -105,6 +105,13 @@
             📊
           </button>
           <button class="fa-button" id="add-data" title="Add Data">📥</button>
+          <button
+            class="fa-button"
+            id="manage-geoserver-layers"
+            title="Manage GeoServer layers"
+          >
+            <i class="fa-solid fa-database"></i>
+          </button>
           <button class="fa-button" id="add-chart" title="Add Graphic">
             🥧
           </button>
@@ -847,6 +854,185 @@
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal fade" id="geoserverManagerModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+          <div class="modal-content geoserver-manager-modal">
+            <div class="modal-header">
+              <div>
+                <h5 class="modal-title">GeoServer Manager</h5>
+                <p class="geoserver-manager-subtitle">
+                  Manage published layer groups and database layers.
+                </p>
+              </div>
+              <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="modal"
+              ></button>
+            </div>
+            <div class="modal-body">
+              <section class="geoserver-manager-panel">
+                <div class="geoserver-manager-panel__header">
+                  <div>
+                    <h6>Layer Groups</h6>
+                    <p>Published groups from GeoServer.</p>
+                  </div>
+                  <button
+                    type="button"
+                    class="geoserver-manager-action"
+                    id="geoserverNewGroupBtn"
+                  >
+                    New Group
+                  </button>
+                </div>
+                <div id="geoserverLayerGroupsList" class="geoserver-manager-list">
+                  <div class="geoserver-manager-empty">
+                    Layer groups will appear here after connection.
+                  </div>
+                </div>
+              </section>
+
+              <section class="geoserver-manager-panel">
+                <div class="geoserver-manager-panel__header">
+                  <div>
+                    <h6>Layers</h6>
+                    <p>Database and published GeoServer layers.</p>
+                  </div>
+                  <button
+                    type="button"
+                    class="geoserver-manager-action"
+                    id="geoserverNewLayerBtn"
+                  >
+                    New Layer
+                  </button>
+                </div>
+                <div id="geoserverLayersList" class="geoserver-manager-list">
+                  <div class="geoserver-manager-empty">
+                    Layers will appear here after connection.
+                  </div>
+                </div>
+              </section>
+            </div>
+            <div class="modal-footer">
+              <button
+                type="button"
+                class="btn btn-secondary"
+                data-bs-dismiss="modal"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal fade" id="geoserverNewGroupModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered geoserver-create-layer-dialog">
+          <div class="modal-content geoserver-create-layer-modal">
+            <form id="geoserverNewGroupForm">
+              <div class="modal-header">
+                <h5 class="modal-title">New Group</h5>
+                <button
+                  type="button"
+                  class="btn-close"
+                  data-bs-dismiss="modal"
+                ></button>
+              </div>
+              <div class="modal-body">
+                <label class="geoserver-create-field" for="geoserverNewGroupName">
+                  <span>Group name</span>
+                  <input
+                    type="text"
+                    id="geoserverNewGroupName"
+                    autocomplete="off"
+                    placeholder="my_layer_group"
+                    required
+                  />
+                </label>
+                <div class="geoserver-create-field">
+                  <span>Layers</span>
+                  <div
+                    id="geoserverNewGroupLayers"
+                    class="geoserver-create-layer-picker"
+                  ></div>
+                </div>
+                <div
+                  id="geoserverNewGroupStatus"
+                  class="geoserver-create-status"
+                  hidden
+                ></div>
+              </div>
+              <div class="modal-footer">
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  data-bs-dismiss="modal"
+                >
+                  Cancel
+                </button>
+                <button type="submit" class="btn btn-primary" id="geoserverPublishGroupBtn">
+                  Publish
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal fade" id="geoserverNewLayerModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered geoserver-create-layer-dialog">
+          <div class="modal-content geoserver-create-layer-modal">
+            <form id="geoserverNewLayerForm">
+              <div class="modal-header">
+                <h5 class="modal-title">New Layer</h5>
+                <button
+                  type="button"
+                  class="btn-close"
+                  data-bs-dismiss="modal"
+                ></button>
+              </div>
+              <div class="modal-body">
+                <label class="geoserver-create-field" for="geoserverNewLayerName">
+                  <span>Layer name</span>
+                  <input
+                    type="text"
+                    id="geoserverNewLayerName"
+                    autocomplete="off"
+                    placeholder="new_points_layer"
+                    required
+                  />
+                </label>
+                <label class="geoserver-create-field" for="geoserverNewLayerGeometry">
+                  <span>Geometry type</span>
+                  <select id="geoserverNewLayerGeometry" required>
+                    <option value="Point">Point</option>
+                    <option value="LineString">Line</option>
+                    <option value="Polygon">Polygon</option>
+                  </select>
+                </label>
+                <div
+                  id="geoserverNewLayerStatus"
+                  class="geoserver-create-status"
+                  hidden
+                ></div>
+              </div>
+              <div class="modal-footer">
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  data-bs-dismiss="modal"
+                >
+                  Cancel
+                </button>
+                <button type="submit" class="btn btn-primary" id="geoserverPublishLayerBtn">
+                  Publish
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       </div>
