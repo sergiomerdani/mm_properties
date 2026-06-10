@@ -930,6 +930,64 @@
         </div>
       </div>
 
+      <div class="modal fade" id="geoserverUpdateGroupModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered geoserver-create-layer-dialog">
+          <div class="modal-content geoserver-create-layer-modal">
+            <form id="geoserverUpdateGroupForm">
+              <div class="modal-header">
+                <h5 class="modal-title">Update Group</h5>
+                <button
+                  type="button"
+                  class="btn-close"
+                  data-bs-dismiss="modal"
+                ></button>
+              </div>
+              <div class="modal-body">
+                <label class="geoserver-create-field" for="geoserverUpdateGroupName">
+                  <span>Group name</span>
+                  <input
+                    type="text"
+                    id="geoserverUpdateGroupName"
+                    readonly
+                  />
+                </label>
+                <div class="geoserver-create-field">
+                  <span>Layers</span>
+                  <div
+                    id="geoserverUpdateGroupLayers"
+                    class="geoserver-create-layer-picker"
+                  ></div>
+                </div>
+                <div class="geoserver-create-field">
+                  <span>Styles</span>
+                  <div
+                    id="geoserverUpdateGroupStyles"
+                    class="geoserver-update-style-list"
+                  ></div>
+                </div>
+                <div
+                  id="geoserverUpdateGroupStatus"
+                  class="geoserver-create-status"
+                  hidden
+                ></div>
+              </div>
+              <div class="modal-footer">
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  data-bs-dismiss="modal"
+                >
+                  Cancel
+                </button>
+                <button type="submit" class="btn btn-primary" id="geoserverSaveGroupUpdateBtn">
+                  Update
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
       <div class="modal fade" id="geoserverNewGroupModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered geoserver-create-layer-dialog">
           <div class="modal-content geoserver-create-layer-modal">
