@@ -7803,17 +7803,35 @@ function renderManagerError(container, message, afterElement = null) {
   container.appendChild(errorBox);
 }
 
-function renderManagerDetails(container, details, afterElement = null) {
+function renderManagerDetails(
+  container,
+  details,
+  afterElement = null,
+  summaryHtml = "",
+) {
+  let summaryBox = null;
+  if (summaryHtml) {
+    summaryBox = document.createElement("div");
+    summaryBox.className = "geoserver-manager-summary";
+    summaryBox.innerHTML = summaryHtml;
+  }
+
   const detailBox = document.createElement("div");
   detailBox.className = "geoserver-manager-details";
   detailBox.textContent = JSON.stringify(details, null, 2);
 
   if (afterElement) {
-    afterElement.insertAdjacentElement("afterend", detailBox);
+    if (summaryBox) {
+      afterElement.insertAdjacentElement("afterend", summaryBox);
+      summaryBox.insertAdjacentElement("afterend", detailBox);
+    } else {
+      afterElement.insertAdjacentElement("afterend", detailBox);
+    }
     detailBox.scrollIntoView({ block: "nearest" });
     return detailBox;
   }
 
+  if (summaryBox) container.appendChild(summaryBox);
   container.appendChild(detailBox);
   return detailBox;
 }
@@ -7840,6 +7858,16 @@ function renderManagerDetailActions(container, actions, afterElement = null) {
 
   container.appendChild(actionBar);
   return actionBar;
+}
+
+function removeAdjacentManagerDetails(row) {
+  while (
+    row.nextElementSibling?.classList.contains("geoserver-manager-summary") ||
+    row.nextElementSibling?.classList.contains("geoserver-manager-details") ||
+    row.nextElementSibling?.classList.contains("geoserver-manager-detail-actions")
+  ) {
+    row.nextElementSibling.remove();
+  }
 }
 
 function setGeoServerNewLayerStatus(message, type = "") {
@@ -7941,8 +7969,23 @@ function getFirstAvailableStyleName(styles) {
   return getStyleName(styles.style || styles);
 }
 
+function getAvailableLayerStyleNames(styles) {
+  if (!styles) return [];
+  if (typeof styles === "string") return [styles];
+  if (Array.isArray(styles)) {
+    return styles.map(getStyleName).filter(Boolean);
+  }
+  if (Array.isArray(styles.style)) {
+    return styles.style.map(getStyleName).filter(Boolean);
+  }
+  return [getStyleName(styles.style || styles)].filter(Boolean);
+}
+
 function getDefaultLayerStyleName(data) {
   return (
+    getStyleName(data?.layer?.defaultStyle) ||
+    getStyleName(data?.restLayer?.layer?.defaultStyle) ||
+    getStyleName(data?.featureType?.layer?.defaultStyle) ||
     getStyleName(data?.featureType?.defaultStyle) ||
     getStyleName(data?.defaultStyle) ||
     getFirstAvailableStyleName(data?.featureType?.styles) ||
@@ -7950,11 +7993,86 @@ function getDefaultLayerStyleName(data) {
   );
 }
 
+function isUsableGeoServerStyleName(styleName) {
+  const value = String(styleName || "").trim().toLowerCase();
+  return Boolean(value) && value !== "assigned style" && value !== "default";
+}
+
+function renderLayerStyleSummary(details) {
+  const assignedStyle = getDefaultLayerStyleName(details);
+  const availableStyles = getAvailableLayerStyleNames(
+    details?.featureType?.styles || details?.styles || details?.layer?.styles,
+  );
+  const styles = availableStyles.length
+    ? availableStyles
+    : assignedStyle
+      ? [assignedStyle]
+      : [];
+
+  return `
+    <div class="geoserver-manager-summary-row">
+      <span>Assigned style</span>
+      <strong>${escapeNearbyHtml(assignedStyle || "No style returned")}</strong>
+    </div>
+    <div class="geoserver-manager-summary-row">
+      <span>Available styles</span>
+      <div class="geoserver-manager-style-chips">
+        ${
+          styles.length
+            ? styles
+                .map(
+                  (style) =>
+                    `<em${style === assignedStyle ? ' class="active"' : ""}>${escapeNearbyHtml(style)}</em>`,
+                )
+                .join("")
+            : "<em>No styles returned</em>"
+        }
+      </div>
+    </div>
+  `;
+}
+
+async function fetchGeoServerRestLayerDetails(layerName) {
+  const qualifiedLayerName = getGeoServerQualifiedLayerName(layerName);
+  const response = await fetch(
+    `http://${host}:${port}/geoserver/rest/layers/${encodeURI(qualifiedLayerName)}.json`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: "Basic " + btoa(`${username}:${password}`),
+        Accept: "application/json",
+      },
+      credentials: "include",
+    },
+  );
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(`Could not read REST layer style for ${qualifiedLayerName}.`);
+  }
+
+  return data;
+}
+
 async function getGeoServerLayerStyle(layerName) {
   const layerNameOnly = getComparableLayerName(layerName);
   const cacheKey = getLayerStyleMapKey(layerNameOnly);
-  if (geoserverLayerStyleCache.has(cacheKey)) {
+  if (
+    geoserverLayerStyleCache.has(cacheKey) &&
+    isUsableGeoServerStyleName(geoserverLayerStyleCache.get(cacheKey))
+  ) {
     return geoserverLayerStyleCache.get(cacheKey);
+  }
+
+  try {
+    const restLayerDetails = await fetchGeoServerRestLayerDetails(layerNameOnly);
+    const restStyleName = getDefaultLayerStyleName(restLayerDetails);
+    if (restStyleName) {
+      geoserverLayerStyleCache.set(cacheKey, restStyleName);
+      return restStyleName;
+    }
+  } catch (error) {
+    console.warn(error);
   }
 
   const response = await fetch(
@@ -7962,26 +8080,58 @@ async function getGeoServerLayerStyle(layerName) {
   );
   const data = await response.json().catch(() => ({}));
 
-  if (!response.ok) {
-    throw new Error(`Could not read style for ${layerNameOnly}.`);
-  }
-
+  if (!response.ok) throw new Error(`Could not read style for ${layerNameOnly}.`);
   const styleName = getDefaultLayerStyleName(data);
   geoserverLayerStyleCache.set(cacheKey, styleName);
   return styleName;
 }
 
-async function ensureGeoServerLayerStyles(layerNames) {
+async function ensureGeoServerLayerStyles(layerNames, forceRefresh = false) {
   await Promise.all(
     layerNames.map(async (layerName) => {
       const styleKey = getLayerStyleMapKey(layerName);
-      if (geoserverUpdateGroupStyleByLayer.get(styleKey)) return;
+      const currentStyle = geoserverUpdateGroupStyleByLayer.get(styleKey);
+      if (!forceRefresh && isUsableGeoServerStyleName(currentStyle)) return;
+      if (forceRefresh) {
+        geoserverLayerStyleCache.delete(styleKey);
+      }
       const styleName = await getGeoServerLayerStyle(layerName);
       if (styleName) {
         geoserverUpdateGroupStyleByLayer.set(styleKey, styleName);
       }
     }),
   );
+}
+
+async function readAssignedStylesForUpdateGroup(layerNames) {
+  const results = await Promise.allSettled(
+    layerNames.map(async (layerName) => {
+      const restLayerDetails = await fetchGeoServerRestLayerDetails(layerName);
+      return {
+        layerName,
+        styleName: getStyleName(restLayerDetails?.layer?.defaultStyle),
+      };
+    }),
+  );
+
+  let failed = false;
+  results.forEach((result) => {
+    if (result.status === "rejected") {
+      failed = true;
+      console.warn(result.reason);
+      return;
+    }
+
+    const { layerName, styleName } = result.value;
+    if (styleName) {
+      geoserverUpdateGroupStyleByLayer.set(
+        getLayerStyleMapKey(layerName),
+        styleName,
+      );
+    }
+  });
+
+  return !failed;
 }
 
 function normalizeLayerGroupLayerNames(layer) {
@@ -8057,10 +8207,13 @@ async function renderGeoServerUpdateGroupStyleRows() {
   geoserverUpdateGroupStyles
     .querySelectorAll("input[data-layer]")
     .forEach((input) => {
-      geoserverUpdateGroupStyleByLayer.set(
-        getLayerStyleMapKey(input.dataset.layer),
-        input.value.trim(),
-      );
+      const inputStyle = input.value.trim();
+      if (isUsableGeoServerStyleName(inputStyle)) {
+        geoserverUpdateGroupStyleByLayer.set(
+          getLayerStyleMapKey(input.dataset.layer),
+          inputStyle,
+        );
+      }
     });
   const selectedLayers = getSelectedGeoServerGroupLayers(
     geoserverUpdateGroupLayers,
@@ -8074,7 +8227,12 @@ async function renderGeoServerUpdateGroupStyleRows() {
   }
 
   try {
-    await ensureGeoServerLayerStyles(selectedLayers);
+    setGeoServerUpdateGroupStatus("Reading assigned styles...");
+    const allStylesRead = await readAssignedStylesForUpdateGroup(selectedLayers);
+    setGeoServerUpdateGroupStatus(
+      allStylesRead ? "" : "Some assigned styles could not be read.",
+      allStylesRead ? "" : "error",
+    );
   } catch (error) {
     console.error(error);
     setGeoServerUpdateGroupStatus(
@@ -8095,7 +8253,8 @@ async function renderGeoServerUpdateGroupStyleRows() {
         type="text"
         data-layer="${escapeNearbyHtml(layerName)}"
         value="${escapeNearbyHtml(styleName)}"
-        placeholder="style name"
+        placeholder="assigned style"
+        readonly
         required
       />
     `;
@@ -8254,11 +8413,7 @@ function renderManagerList(container, items, options) {
       if (row.dataset.expanded === "true") {
         row.classList.remove("active");
         row.dataset.expanded = "false";
-        row.nextElementSibling?.classList.contains("geoserver-manager-details") &&
-          row.nextElementSibling.remove();
-        row.nextElementSibling?.classList.contains(
-          "geoserver-manager-detail-actions",
-        ) && row.nextElementSibling.remove();
+        removeAdjacentManagerDetails(row);
         activeRow = null;
         return;
       }
@@ -8273,6 +8428,9 @@ function renderManagerList(container, items, options) {
         .querySelectorAll(".geoserver-manager-details")
         .forEach((detail) => detail.remove());
       container
+        .querySelectorAll(".geoserver-manager-summary")
+        .forEach((detail) => detail.remove());
+      container
         .querySelectorAll(".geoserver-manager-detail-actions")
         .forEach((detail) => detail.remove());
       row.classList.add("active");
@@ -8282,7 +8440,12 @@ function renderManagerList(container, items, options) {
       try {
         const details = await options.fetchDetails(name);
         if (activeRow !== row || row.dataset.expanded !== "true") return;
-        const detailBox = renderManagerDetails(container, details, row);
+        const detailBox = renderManagerDetails(
+          container,
+          details,
+          row,
+          options.getSummary?.(details, name) || "",
+        );
         if (options.getActions) {
           renderManagerDetailActions(
             container,
@@ -8379,6 +8542,7 @@ async function loadGeoServerManagerData() {
 
     renderManagerList(geoserverLayersList, layers, {
       emptyMessage: "No layers returned.",
+      getSummary: (details) => renderLayerStyleSummary(details),
       fetchDetails: async (layerName) => {
         const detailResponse = await fetch(
           `http://localhost:8000/api/groups/${geoserverManagerWorkspace}/${geoserverManagerDatastore}/${encodeURIComponent(layerName)}/`,
@@ -8388,7 +8552,17 @@ async function loadGeoServerManagerData() {
             `Layer details failed with status ${detailResponse.status}`,
           );
         }
-        return detailResponse.json();
+        const layerDetails = await detailResponse.json();
+        try {
+          const restLayer = await fetchGeoServerRestLayerDetails(layerName);
+          return {
+            ...layerDetails,
+            restLayer,
+          };
+        } catch (error) {
+          console.warn(error);
+          return layerDetails;
+        }
       },
     });
   } catch (error) {
@@ -8549,8 +8723,15 @@ geoserverUpdateGroupForm?.addEventListener("submit", async (event) => {
   }
 
   try {
-    await ensureGeoServerLayerStyles(layerNames);
+    const allStylesRead = await readAssignedStylesForUpdateGroup(layerNames);
     await renderGeoServerUpdateGroupStyleRows();
+    if (!allStylesRead) {
+      setGeoServerUpdateGroupStatus(
+        "Could not read every assigned layer style.",
+        "error",
+      );
+      return;
+    }
   } catch (error) {
     console.error(error);
     setGeoServerUpdateGroupStatus("Could not auto-read layer styles.", "error");
