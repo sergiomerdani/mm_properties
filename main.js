@@ -8229,6 +8229,7 @@ function toggleGeoServerLayerGroupInSwitcher(groupName, details = {}) {
 
 function renderManagerList(container, items, options) {
   container.innerHTML = "";
+  let activeRow = null;
 
   if (!items.length) {
     container.innerHTML = `<div class="geoserver-manager-empty">${options.emptyMessage}</div>`;
@@ -8250,9 +8251,24 @@ function renderManagerList(container, items, options) {
     `;
 
     row.addEventListener("click", async () => {
+      if (row.dataset.expanded === "true") {
+        row.classList.remove("active");
+        row.dataset.expanded = "false";
+        row.nextElementSibling?.classList.contains("geoserver-manager-details") &&
+          row.nextElementSibling.remove();
+        row.nextElementSibling?.classList.contains(
+          "geoserver-manager-detail-actions",
+        ) && row.nextElementSibling.remove();
+        activeRow = null;
+        return;
+      }
+
       container
         .querySelectorAll(".geoserver-manager-row")
-        .forEach((button) => button.classList.remove("active"));
+        .forEach((button) => {
+          button.classList.remove("active");
+          button.dataset.expanded = "false";
+        });
       container
         .querySelectorAll(".geoserver-manager-details")
         .forEach((detail) => detail.remove());
@@ -8260,9 +8276,12 @@ function renderManagerList(container, items, options) {
         .querySelectorAll(".geoserver-manager-detail-actions")
         .forEach((detail) => detail.remove());
       row.classList.add("active");
+      row.dataset.expanded = "true";
+      activeRow = row;
 
       try {
         const details = await options.fetchDetails(name);
+        if (activeRow !== row || row.dataset.expanded !== "true") return;
         const detailBox = renderManagerDetails(container, details, row);
         if (options.getActions) {
           renderManagerDetailActions(
