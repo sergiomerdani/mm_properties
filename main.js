@@ -995,7 +995,9 @@ function getNumericPropertyByName(feature, patterns) {
     const normalizedKey = key.toLowerCase();
     const matches = patterns.some((pattern) => normalizedKey.includes(pattern));
     const numericValue =
-      typeof value === "number" ? value : Number(String(value).replace(",", "."));
+      typeof value === "number"
+        ? value
+        : Number(String(value).replace(",", "."));
 
     if (matches && Number.isFinite(numericValue)) {
       return numericValue;
@@ -2425,10 +2427,10 @@ async function getInfo(evt) {
       }
 
       // render all hits
-    prepareIdentifyContainer(evt);
-    hits.forEach(renderFeatureBlock);
-    container.style.display = "block";
-  });
+      prepareIdentifyContainer(evt);
+      hits.forEach(renderFeatureBlock);
+      container.style.display = "block";
+    });
   }
 }
 
@@ -2555,7 +2557,9 @@ function renderFeatureBlock({ layer, feature }) {
       const valueCell = document.createElement("td");
       keyCell.textContent = key;
       valueCell.textContent =
-        props[key] === null || props[key] === undefined ? "" : String(props[key]);
+        props[key] === null || props[key] === undefined
+          ? ""
+          : String(props[key]);
       row.append(keyCell, valueCell);
       table.appendChild(row);
     });
@@ -7346,12 +7350,7 @@ async function fetchWmtsMetadata(serviceUrl) {
 }
 
 function getWmtsLayerTitle(layer) {
-  return (
-    layer?.Title ||
-    layer?.Identifier ||
-    layer?.Abstract ||
-    "WMTS layer"
-  );
+  return layer?.Title || layer?.Identifier || layer?.Abstract || "WMTS layer";
 }
 
 function getWmtsMatrixSet(layer, metadata) {
@@ -7380,7 +7379,9 @@ function getWmtsMatrixSet(layer, metadata) {
 function addExternalWmtsLayer(serviceUrl, wmtsLayer, metadata) {
   const matrixSet = getWmtsMatrixSet(wmtsLayer, metadata);
   if (!matrixSet) {
-    throw new Error(`No WMTS matrix set found for ${getWmtsLayerTitle(wmtsLayer)}.`);
+    throw new Error(
+      `No WMTS matrix set found for ${getWmtsLayerTitle(wmtsLayer)}.`,
+    );
   }
 
   const options = optionsFromCapabilities(metadata, {
@@ -7435,7 +7436,8 @@ async function addLoadedExternalServiceLayer(
   }
 
   if (type === "wmts") {
-    const metadata = loadedExternalService?.metadata || (await fetchWmtsMetadata(serviceUrl));
+    const metadata =
+      loadedExternalService?.metadata || (await fetchWmtsMetadata(serviceUrl));
     const layerName = externalServiceLayerNameInput.value.trim();
     const wmtsLayer =
       metadata?.Contents?.Layer?.find(
@@ -7790,8 +7792,7 @@ function renderManagerLoading(container, message) {
 
 function renderManagerError(container, message, afterElement = null) {
   const errorBox = document.createElement("div");
-  errorBox.className =
-    "geoserver-manager-empty geoserver-manager-empty--error";
+  errorBox.className = "geoserver-manager-empty geoserver-manager-empty--error";
   errorBox.textContent = message;
 
   if (afterElement) {
@@ -7847,7 +7848,9 @@ function renderManagerDetailActions(container, actions, afterElement = null) {
     button.type = "button";
     button.className = "geoserver-manager-detail-action";
     button.textContent = action.label;
-    button.addEventListener("click", (event) => action.onClick?.(event, button));
+    button.addEventListener("click", (event) =>
+      action.onClick?.(event, button),
+    );
     actionBar.appendChild(button);
   });
 
@@ -7864,7 +7867,9 @@ function removeAdjacentManagerDetails(row) {
   while (
     row.nextElementSibling?.classList.contains("geoserver-manager-summary") ||
     row.nextElementSibling?.classList.contains("geoserver-manager-details") ||
-    row.nextElementSibling?.classList.contains("geoserver-manager-detail-actions")
+    row.nextElementSibling?.classList.contains(
+      "geoserver-manager-detail-actions",
+    )
   ) {
     row.nextElementSibling.remove();
   }
@@ -7901,10 +7906,7 @@ function renderGeoServerGroupLayerPicker(container, selectedLayerNames = []) {
   if (!container) return;
   container.innerHTML = "";
   const selectedLayers = new Set(
-    selectedLayerNames.flatMap((name) => [
-      name,
-      getComparableLayerName(name),
-    ]),
+    selectedLayerNames.flatMap((name) => [name, getComparableLayerName(name)]),
   );
   const layerNames = geoserverManagerLayers
     .map(getManagerItemName)
@@ -7921,7 +7923,8 @@ function renderGeoServerGroupLayerPicker(container, selectedLayerNames = []) {
     option.className = "geoserver-create-layer-option";
     option.innerHTML = `
       <input type="checkbox" value="${escapeNearbyHtml(name)}"${
-        selectedLayers.has(name) || selectedLayers.has(getComparableLayerName(name))
+        selectedLayers.has(name) ||
+        selectedLayers.has(getComparableLayerName(name))
           ? " checked"
           : ""
       } />
@@ -7948,7 +7951,9 @@ function getSelectedGeoServerGroupLayers(container) {
 }
 
 function getComparableLayerName(name) {
-  return String(name || "").split(":").pop();
+  return String(name || "")
+    .split(":")
+    .pop();
 }
 
 function getLayerStyleMapKey(layerName) {
@@ -7994,7 +7999,9 @@ function getDefaultLayerStyleName(data) {
 }
 
 function isUsableGeoServerStyleName(styleName) {
-  const value = String(styleName || "").trim().toLowerCase();
+  const value = String(styleName || "")
+    .trim()
+    .toLowerCase();
   return Boolean(value) && value !== "assigned style" && value !== "default";
 }
 
@@ -8048,7 +8055,9 @@ async function fetchGeoServerRestLayerDetails(layerName) {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(`Could not read REST layer style for ${qualifiedLayerName}.`);
+    throw new Error(
+      `Could not read REST layer style for ${qualifiedLayerName}.`,
+    );
   }
 
   return data;
@@ -8065,7 +8074,8 @@ async function getGeoServerLayerStyle(layerName) {
   }
 
   try {
-    const restLayerDetails = await fetchGeoServerRestLayerDetails(layerNameOnly);
+    const restLayerDetails =
+      await fetchGeoServerRestLayerDetails(layerNameOnly);
     const restStyleName = getDefaultLayerStyleName(restLayerDetails);
     if (restStyleName) {
       geoserverLayerStyleCache.set(cacheKey, restStyleName);
@@ -8080,7 +8090,8 @@ async function getGeoServerLayerStyle(layerName) {
   );
   const data = await response.json().catch(() => ({}));
 
-  if (!response.ok) throw new Error(`Could not read style for ${layerNameOnly}.`);
+  if (!response.ok)
+    throw new Error(`Could not read style for ${layerNameOnly}.`);
   const styleName = getDefaultLayerStyleName(data);
   geoserverLayerStyleCache.set(cacheKey, styleName);
   return styleName;
@@ -8228,7 +8239,8 @@ async function renderGeoServerUpdateGroupStyleRows() {
 
   try {
     setGeoServerUpdateGroupStatus("Reading assigned styles...");
-    const allStylesRead = await readAssignedStylesForUpdateGroup(selectedLayers);
+    const allStylesRead =
+      await readAssignedStylesForUpdateGroup(selectedLayers);
     setGeoServerUpdateGroupStatus(
       allStylesRead ? "" : "Some assigned styles could not be read.",
       allStylesRead ? "" : "error",
@@ -8278,10 +8290,7 @@ function openGeoServerUpdateGroupModal(groupName, details = {}) {
     layerNames,
     getLayerGroupStyleNames(details),
   );
-  renderGeoServerGroupLayerPicker(
-    geoserverUpdateGroupLayers,
-    layerNames,
-  );
+  renderGeoServerGroupLayerPicker(geoserverUpdateGroupLayers, layerNames);
   geoserverUpdateGroupLayers
     ?.querySelectorAll("input[type='checkbox']")
     .forEach((checkbox) =>
@@ -8418,12 +8427,10 @@ function renderManagerList(container, items, options) {
         return;
       }
 
-      container
-        .querySelectorAll(".geoserver-manager-row")
-        .forEach((button) => {
-          button.classList.remove("active");
-          button.dataset.expanded = "false";
-        });
+      container.querySelectorAll(".geoserver-manager-row").forEach((button) => {
+        button.classList.remove("active");
+        button.dataset.expanded = "false";
+      });
       container
         .querySelectorAll(".geoserver-manager-details")
         .forEach((detail) => detail.remove());
@@ -8491,8 +8498,10 @@ async function loadGeoServerManagerData() {
             ? "Hide from LayerSwitcher"
             : "Show in LayerSwitcher",
           onClick: (event, button) => {
-            const isVisibleInSwitcher =
-              toggleGeoServerLayerGroupInSwitcher(groupName, details);
+            const isVisibleInSwitcher = toggleGeoServerLayerGroupInSwitcher(
+              groupName,
+              details,
+            );
             if (button) {
               button.textContent = isVisibleInSwitcher
                 ? "Hide from LayerSwitcher"
@@ -8519,7 +8528,10 @@ async function loadGeoServerManagerData() {
     });
   } catch (error) {
     console.error(error);
-    renderManagerError(geoserverLayerGroupsList, "Could not load layer groups.");
+    renderManagerError(
+      geoserverLayerGroupsList,
+      "Could not load layer groups.",
+    );
   }
 
   try {
@@ -8710,7 +8722,9 @@ geoserverNewGroupForm?.addEventListener("submit", async (event) => {
 geoserverUpdateGroupForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const groupName = geoserverUpdateGroupName?.value.trim();
-  const layerNames = getSelectedGeoServerGroupLayers(geoserverUpdateGroupLayers);
+  const layerNames = getSelectedGeoServerGroupLayers(
+    geoserverUpdateGroupLayers,
+  );
 
   if (!groupName) {
     setGeoServerUpdateGroupStatus("Missing layer group name.", "error");
@@ -8756,7 +8770,10 @@ geoserverUpdateGroupForm?.addEventListener("submit", async (event) => {
 
   try {
     await updateGeoServerLayerGroup(groupName, layerNames, styleNames);
-    setGeoServerUpdateGroupStatus("Layer group updated successfully.", "success");
+    setGeoServerUpdateGroupStatus(
+      "Layer group updated successfully.",
+      "success",
+    );
     await loadGeoServerManagerData();
     setTimeout(() => {
       bootstrap.Modal.getInstance(
@@ -8780,7 +8797,10 @@ geoserverNewLayerForm?.addEventListener("submit", async (event) => {
   const geometryType = geoserverNewLayerGeometry?.value;
 
   if (!layerName || !geometryType) {
-    setGeoServerNewLayerStatus("Fill the layer name and geometry type.", "error");
+    setGeoServerNewLayerStatus(
+      "Fill the layer name and geometry type.",
+      "error",
+    );
     return;
   }
 
@@ -8798,7 +8818,10 @@ geoserverNewLayerForm?.addEventListener("submit", async (event) => {
     }, 700);
   } catch (error) {
     console.error("Create layer failed:", error);
-    setGeoServerNewLayerStatus(error.message || "Could not create layer.", "error");
+    setGeoServerNewLayerStatus(
+      error.message || "Could not create layer.",
+      "error",
+    );
   } finally {
     geoserverPublishLayerBtn.disabled = false;
   }
@@ -9695,17 +9718,37 @@ let geoAdvisorCurrentContext = null;
 let currentSidebarPanel = "assistant";
 
 const nearbyCategories = [
-  { key: "school", group: "school", label: "School", query: '["amenity"="school"]' },
-  { key: "hospital", group: "hospital", label: "Hospital", query: '["amenity"="hospital"]' },
+  {
+    key: "school",
+    group: "school",
+    label: "School",
+    query: '["amenity"="school"]',
+  },
+  {
+    key: "hospital",
+    group: "hospital",
+    label: "Hospital",
+    query: '["amenity"="hospital"]',
+  },
   { key: "park", group: "park", label: "Park", query: '["leisure"="park"]' },
-  { key: "police", group: "police", label: "Police Station", query: '["amenity"="police"]' },
+  {
+    key: "police",
+    group: "police",
+    label: "Police Station",
+    query: '["amenity"="police"]',
+  },
   {
     key: "fire_station",
     group: "fire_station",
     label: "Fire Station",
     query: '["amenity"="fire_station"]',
   },
-  { key: "bus_stop", group: "bus_stop", label: "Bus Stop", query: '["highway"="bus_stop"]' },
+  {
+    key: "bus_stop",
+    group: "bus_stop",
+    label: "Bus Stop",
+    query: '["highway"="bus_stop"]',
+  },
   {
     key: "bus_platform",
     group: "bus_stop",
@@ -9732,7 +9775,8 @@ function showSidebarPanel(activePanel) {
 
   nearbySidebar.hidden = !showNearby;
   if (geoAdvisorSidebar) geoAdvisorSidebar.hidden = !showGeoAdvisor;
-  if (sharedChatSidebar) sharedChatSidebar.hidden = showNearby || showGeoAdvisor;
+  if (sharedChatSidebar)
+    sharedChatSidebar.hidden = showNearby || showGeoAdvisor;
   grid?.classList.toggle("nearby-open", showNearby || showGeoAdvisor);
   grid?.classList.remove("chat-collapsed");
   chatSidebarToggle?.setAttribute("aria-expanded", "true");
@@ -9956,7 +10000,9 @@ const nearbyBusRouteStyle = createDirectionalRouteStyle({
 });
 
 function getNearbyRouteStyle(profile) {
-  return profile === "foot-walking" ? nearbyWalkRouteStyle : nearbyCarRouteStyle;
+  return profile === "foot-walking"
+    ? nearbyWalkRouteStyle
+    : nearbyCarRouteStyle;
 }
 
 function getSelectedNearbyCategories() {
@@ -10081,8 +10127,11 @@ function getNearbyPlaceDetails(tags = {}) {
 }
 
 async function fetchNearbyPlaces(originLonLat) {
-  const response = await fetch("https://overpass-api.de/api/interpreter", {
+  const response = await fetch("https://overpass.kumi.systems/api/interpreter", {
     method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
     body: new URLSearchParams({ data: getOverpassQuery(originLonLat) }),
   });
   if (!response.ok) {
@@ -10300,7 +10349,12 @@ function getGeoAdvisorPercentText(percent) {
   return `${Math.abs(percent).toFixed(1)}%`;
 }
 
-function renderGeoAdvisorCompareChart(referencePrice, userPrice, referenceTotal, propertyValue) {
+function renderGeoAdvisorCompareChart(
+  referencePrice,
+  userPrice,
+  referenceTotal,
+  propertyValue,
+) {
   const canvas = document.getElementById("geoAdvisorCompareChart");
   if (!canvas) return;
   if (geoAdvisorCompareChart) geoAdvisorCompareChart.destroy();
@@ -10313,7 +10367,10 @@ function renderGeoAdvisorCompareChart(referencePrice, userPrice, referenceTotal,
         {
           label: "Value per square meter",
           data: [referencePrice, userPrice],
-          backgroundColor: ["rgba(26, 115, 232, 0.72)", "rgba(249, 115, 22, 0.72)"],
+          backgroundColor: [
+            "rgba(26, 115, 232, 0.72)",
+            "rgba(249, 115, 22, 0.72)",
+          ],
           borderColor: ["#1a73e8", "#f97316"],
           borderWidth: 1,
           borderRadius: 5,
@@ -10349,7 +10406,10 @@ function renderGeoAdvisorCompareChart(referencePrice, userPrice, referenceTotal,
         {
           label: "Total value",
           data: [referenceTotal, propertyValue],
-          backgroundColor: ["rgba(26, 115, 232, 0.72)", "rgba(249, 115, 22, 0.72)"],
+          backgroundColor: [
+            "rgba(26, 115, 232, 0.72)",
+            "rgba(249, 115, 22, 0.72)",
+          ],
           borderColor: ["#1a73e8", "#f97316"],
           borderWidth: 1,
           borderRadius: 5,
@@ -10392,7 +10452,12 @@ function calculateGeoAdvisorProperty() {
     return;
   }
 
-  if (!propertyValue || propertyValue <= 0 || !propertyArea || propertyArea <= 0) {
+  if (
+    !propertyValue ||
+    propertyValue <= 0 ||
+    !propertyArea ||
+    propertyArea <= 0
+  ) {
     output.innerHTML =
       '<div class="geo-advisor-calculation__hint">Enter a property value and area greater than zero.</div>';
     return;
@@ -10465,7 +10530,12 @@ function calculateGeoAdvisorProperty() {
     </div>
   `;
 
-  renderGeoAdvisorCompareChart(referencePrice, userPrice, referenceTotal, propertyValue);
+  renderGeoAdvisorCompareChart(
+    referencePrice,
+    userPrice,
+    referenceTotal,
+    propertyValue,
+  );
 }
 
 function bindGeoAdvisorCalculator() {
@@ -10558,7 +10628,11 @@ async function analyzeGeoAdvisorLocation(coordinate) {
   bindGeoAdvisorCalculator();
 }
 
-async function fetchNearbyRouteFeature(originLonLat, destinationLonLat, profile) {
+async function fetchNearbyRouteFeature(
+  originLonLat,
+  destinationLonLat,
+  profile,
+) {
   const response = await fetch(
     `https://api.openrouteservice.org/v2/directions/${profile}/geojson`,
     {
@@ -10686,8 +10760,11 @@ function getNearbyBusRouteCardHtml(place) {
 }
 
 async function fetchNearbyBusRoutes(place) {
-  const response = await fetch("https://overpass-api.de/api/interpreter", {
+  const response = await fetch("https://overpass.kumi.systems/api/interpreter", {
     method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
     body: new URLSearchParams({
       data: getOverpassBusRoutesQuery(place.lonLat),
     }),
@@ -10705,13 +10782,11 @@ async function fetchNearbyBusRoutes(place) {
         .map((member) =>
           (member.geometry || [])
             .filter(
-              (point) => Number.isFinite(point.lon) && Number.isFinite(point.lat),
+              (point) =>
+                Number.isFinite(point.lon) && Number.isFinite(point.lat),
             )
             .map((point) =>
-              fromLonLat(
-                [point.lon, point.lat],
-                map.getView().getProjection(),
-              ),
+              fromLonLat([point.lon, point.lat], map.getView().getProjection()),
             ),
         )
         .filter((segment) => segment.length > 1);
@@ -10747,7 +10822,9 @@ function showNearbyBusRoute(route) {
 
   nearbyRouteLayer?.getSource().clear();
   nearbyBusRouteLayer.getSource().clear();
-  nearbyBusRouteLayer.getSource().addFeature(createNearbyBusRouteFeature(route));
+  nearbyBusRouteLayer
+    .getSource()
+    .addFeature(createNearbyBusRouteFeature(route));
 
   const extent = nearbyBusRouteLayer.getSource().getExtent();
   map.getView().fit(extent, {
@@ -10776,13 +10853,12 @@ async function loadNearbyBusRoutes(place) {
 }
 
 function bindNearbyBusRouteButtons(card, place) {
-  card.querySelector("[data-load-bus-routes]")?.addEventListener(
-    "click",
-    (event) => {
+  card
+    .querySelector("[data-load-bus-routes]")
+    ?.addEventListener("click", (event) => {
       event.stopPropagation();
       loadNearbyBusRoutes(place);
-    },
-  );
+    });
 
   card.querySelectorAll("[data-bus-route-index]").forEach((button) => {
     button.addEventListener("click", (event) => {
@@ -11029,7 +11105,9 @@ function activateNearbyPick() {
 
 nearbyAnalysisBtn.addEventListener("click", activateNearbyPick);
 nearbySidebarClose.addEventListener("click", () => setNearbySidebarOpen(false));
-geoAdvisorClose?.addEventListener("click", () => setGeoAdvisorSidebarOpen(false));
+geoAdvisorClose?.addEventListener("click", () =>
+  setGeoAdvisorSidebarOpen(false),
+);
 document.querySelectorAll("[data-sidebar-panel]").forEach((button) => {
   button.addEventListener("click", () => {
     showSidebarPanel(button.dataset.sidebarPanel);
@@ -13298,7 +13376,9 @@ const footprintLayer = new VectorLayer({
   title: "Automatic coverage boxes",
   source: footprintSource,
   style: (feature) => [
-    feature.get("isMultiLayer") ? footprintBoxHighlightStyle : footprintBoxStyle,
+    feature.get("isMultiLayer")
+      ? footprintBoxHighlightStyle
+      : footprintBoxStyle,
     new Style({
       text: new Text({
         text: feature.get("label") || "",
@@ -13390,9 +13470,20 @@ function clusterFootprintHits(hits) {
     changed = false;
     for (let i = 0; i < clusters.length; i += 1) {
       for (let j = i + 1; j < clusters.length; j += 1) {
-        if (extentIntersectsOrNear(clusters[i].extent, clusters[j].extent, tolerance)) {
-          clusters[i].extent = mergeExtents(clusters[i].extent, clusters[j].extent);
-          clusters[j].layerTitles.forEach((title) => clusters[i].layerTitles.add(title));
+        if (
+          extentIntersectsOrNear(
+            clusters[i].extent,
+            clusters[j].extent,
+            tolerance,
+          )
+        ) {
+          clusters[i].extent = mergeExtents(
+            clusters[i].extent,
+            clusters[j].extent,
+          );
+          clusters[j].layerTitles.forEach((title) =>
+            clusters[i].layerTitles.add(title),
+          );
           clusters.splice(j, 1);
           changed = true;
           break;
@@ -13455,8 +13546,14 @@ async function sampleFootprintLayer(layer, requestId) {
       const hasFeature = await hasWmsFeatureAtCoordinate(layer, coordinate);
       if (!hasFeature) continue;
 
-      const minCoordinate = map.getCoordinateFromPixel([col * cellWidth, (row + 1) * cellHeight]);
-      const maxCoordinate = map.getCoordinateFromPixel([(col + 1) * cellWidth, row * cellHeight]);
+      const minCoordinate = map.getCoordinateFromPixel([
+        col * cellWidth,
+        (row + 1) * cellHeight,
+      ]);
+      const maxCoordinate = map.getCoordinateFromPixel([
+        (col + 1) * cellWidth,
+        row * cellHeight,
+      ]);
       hits.push({
         layerTitle: layer.get("title"),
         extent: [
@@ -13481,7 +13578,8 @@ function renderFootprintClusters(hits) {
     footprintSource.addFeature(
       new Feature({
         geometry: makeFootprintCellGeometry(cluster.extent),
-        label: titles.length > 1 ? `${titles.length} layers with data` : titles[0],
+        label:
+          titles.length > 1 ? `${titles.length} layers with data` : titles[0],
         isMultiLayer: titles.length > 1,
       }),
     );
