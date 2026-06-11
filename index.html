@@ -138,6 +138,9 @@
                 <button id="btnPointGrid" title="Point Grid">
                   <i class="fa-solid fa-border-all"></i>
                 </button>
+                <button id="btnGridScore" title="Grid Nearby Score">
+                  <i class="fa-solid fa-ranking-star"></i>
+                </button>
               </div>
             </div>
           </div>
@@ -310,6 +313,64 @@
           <div class="buffer-modal-actions">
             <button id="pointGridCancel" type="button">Cancel</button>
             <button id="pointGridApply" type="button">Create Grid</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="gridScoreModal" aria-hidden="true">
+        <div id="gridScoreModalContent">
+          <div class="buffer-modal-header">
+            <h4>Grid Nearby Score</h4>
+            <button id="gridScoreModalClose" type="button" title="Close">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          <label for="gridScoreLayerSelect">Point Grid Layer</label>
+          <select id="gridScoreLayerSelect"></select>
+
+          <label for="gridScoreRadius">Search Radius</label>
+          <div class="buffer-input-row">
+            <input type="number" id="gridScoreRadius" min="1" step="1" value="500" />
+            <select id="gridScoreUnits">
+              <option value="meters">Meters</option>
+              <option value="kilometers">Kilometers</option>
+            </select>
+          </div>
+
+          <label>Categories</label>
+          <div id="gridScoreCategories" class="buffer-scope-options">
+            <label><input type="checkbox" value="school" checked /> Schools</label>
+            <label><input type="checkbox" value="kindergarten" checked /> Kindergartens</label>
+            <label><input type="checkbox" value="bus_stop" checked /> Bus Stops</label>
+            <label><input type="checkbox" value="park" checked /> Parks</label>
+            <label><input type="checkbox" value="hospital" checked /> Hospitals</label>
+            <label><input type="checkbox" value="police" /> Police</label>
+            <label><input type="checkbox" value="fire_station" /> Fire Stations</label>
+          </div>
+
+          <label>Output</label>
+          <div class="buffer-scope-options">
+            <label>
+              <input type="radio" name="gridScoreOutput" value="copy" checked />
+              Create scored copy
+            </label>
+            <label>
+              <input type="radio" name="gridScoreOutput" value="update" />
+              Update selected grid layer
+            </label>
+          </div>
+
+          <div class="buffer-help">
+            Step one: choose the grid, radius, categories, and output. The batch scoring process will be connected next.
+          </div>
+
+          <div id="gridScoreStatus" class="grid-score-status" aria-live="polite"></div>
+
+          <div class="buffer-modal-actions">
+            <button id="gridScoreCancel" type="button">Cancel</button>
+            <button id="gridScorePreview" type="button">Preview</button>
+            <button id="gridScoreRun" type="button">Run Analysis</button>
           </div>
         </div>
       </div>

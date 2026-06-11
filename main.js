@@ -4854,6 +4854,7 @@ function createBufferLayer(
   bufferLayer.set("bufferLayer", true);
 
   map.addLayer(bufferLayer);
+  registerPersistentVectorLayer(bufferLayer, "buffer");
   map.getView().fit(bufferSource.getExtent(), {
     duration: 600,
     padding: [50, 50, 50, 50],
@@ -5246,6 +5247,7 @@ const btnIntersectLayers = document.getElementById("btnIntersectLayers");
 const btnMergeLayers = document.getElementById("btnMergeLayers");
 const btnVerticesLayer = document.getElementById("btnVerticesLayer");
 const btnPointGrid = document.getElementById("btnPointGrid");
+const btnGridScore = document.getElementById("btnGridScore");
 const intersectModal = document.getElementById("intersectModal");
 const intersectModalClose = document.getElementById("intersectModalClose");
 const intersectCancel = document.getElementById("intersectCancel");
@@ -5273,7 +5275,78 @@ const pointGridLayerSelect = document.getElementById("pointGridLayerSelect");
 const pointGridSpacing = document.getElementById("pointGridSpacing");
 const pointGridUnits = document.getElementById("pointGridUnits");
 const pointGridLayerName = document.getElementById("pointGridLayerName");
+const gridScoreModal = document.getElementById("gridScoreModal");
+const gridScoreModalClose = document.getElementById("gridScoreModalClose");
+const gridScoreCancel = document.getElementById("gridScoreCancel");
+const gridScorePreview = document.getElementById("gridScorePreview");
+const gridScoreRun = document.getElementById("gridScoreRun");
+const gridScoreLayerSelect = document.getElementById("gridScoreLayerSelect");
+const gridScoreRadius = document.getElementById("gridScoreRadius");
+const gridScoreUnits = document.getElementById("gridScoreUnits");
+const gridScoreStatus = document.getElementById("gridScoreStatus");
 let currentGeoprocessLayerItems = [];
+let currentGridScoreLayerItems = [];
+
+const gridScoreCategoryDefinitions = [
+  {
+    value: "school",
+    field: "schools_count",
+    label: "Schools",
+    query: '["amenity"="school"]',
+    match: (tags) => tags.amenity === "school",
+    weight: 2,
+  },
+  {
+    value: "kindergarten",
+    field: "kindergartens_count",
+    label: "Kindergartens",
+    query: '["amenity"="kindergarten"]',
+    match: (tags) => tags.amenity === "kindergarten",
+    weight: 2,
+  },
+  {
+    value: "bus_stop",
+    field: "bus_stops_count",
+    label: "Bus Stops",
+    query: '["highway"="bus_stop"]',
+    extraQueries: ['["public_transport"="platform"]'],
+    match: (tags) =>
+      tags.highway === "bus_stop" || tags.public_transport === "platform",
+    weight: 1.5,
+  },
+  {
+    value: "park",
+    field: "parks_count",
+    label: "Parks",
+    query: '["leisure"="park"]',
+    match: (tags) => tags.leisure === "park",
+    weight: 1,
+  },
+  {
+    value: "hospital",
+    field: "hospitals_count",
+    label: "Hospitals",
+    query: '["amenity"="hospital"]',
+    match: (tags) => tags.amenity === "hospital",
+    weight: 2,
+  },
+  {
+    value: "police",
+    field: "police_count",
+    label: "Police",
+    query: '["amenity"="police"]',
+    match: (tags) => tags.amenity === "police",
+    weight: 1,
+  },
+  {
+    value: "fire_station",
+    field: "fire_stations_count",
+    label: "Fire Stations",
+    query: '["amenity"="fire_station"]',
+    match: (tags) => tags.amenity === "fire_station",
+    weight: 1,
+  },
+];
 
 const geoprocessResultStyle = new Style({
   stroke: new Stroke({ color: "#06b6d4", width: 3 }),
@@ -5450,6 +5523,7 @@ function createEditableResultLayer(features, title) {
   resultLayer.set("editableVector", true);
   resultLayer.set("geoprocessLayer", true);
   map.addLayer(resultLayer);
+  registerPersistentVectorLayer(resultLayer, "geoprocess");
 
   const extent = resultSource.getExtent();
   if (features.length && extent.every(Number.isFinite)) {
@@ -5489,6 +5563,7 @@ function createVerticesResultLayer(features, title) {
   ]);
 
   map.addLayer(resultLayer);
+  registerPersistentVectorLayer(resultLayer, "vertices");
 
   const extent = resultSource.getExtent();
   if (features.length && extent.every(Number.isFinite)) {
@@ -5530,6 +5605,7 @@ function createPointGridResultLayer(features, title, spacing, units) {
   ]);
 
   map.addLayer(resultLayer);
+  registerPersistentVectorLayer(resultLayer, "pointGrid");
 
   const extent = resultSource.getExtent();
   if (features.length && extent.every(Number.isFinite)) {
@@ -5542,6 +5618,174 @@ function createPointGridResultLayer(features, title, spacing, units) {
 
   return resultLayer;
 }
+
+const PERSISTED_VECTOR_LAYERS_KEY = "mmPropertiesCreatedVectorLayers";
+
+function getPersistedVectorLayers() {
+  try {
+    const raw = localStorage.getItem(PERSISTED_VECTOR_LAYERS_KEY);
+    const layers = raw ? JSON.parse(raw) : [];
+    return Array.isArray(layers) ? layers : [];
+  } catch (error) {
+    console.warn("Could not read saved vector layers.", error);
+    return [];
+  }
+}
+
+function writePersistedVectorLayers(layers) {
+  try {
+    localStorage.setItem(PERSISTED_VECTOR_LAYERS_KEY, JSON.stringify(layers));
+  } catch (error) {
+    console.warn("Could not save vector layers to local storage.", error);
+  }
+}
+
+function getPersistentLayerId(layer) {
+  let id = layer.get("persistentLayerId");
+  if (!id) {
+    id = `local-vector-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 9)}`;
+    layer.set("persistentLayerId", id);
+  }
+  return id;
+}
+
+function getPersistentVectorStyleType(layer, layerKind) {
+  if (layer.get("styleConfig")) return "created";
+  if (layerKind === "pointGrid" || layer.get("pointGridLayer")) return "vertices";
+  if (layer.get("geoprocessLayer")) return "geoprocess";
+  return "geoprocess";
+}
+
+function getPersistentVectorLayerRecord(layer, layerKind = "vector") {
+  const sourceProjection =
+    layer.get("sourceProjection") ||
+    layer.get("featureProjection") ||
+    map.getView().getProjection().getCode();
+  const format = new GeoJSON();
+  const features = layer.getSource?.().getFeatures?.() || [];
+
+  return {
+    id: getPersistentLayerId(layer),
+    title: layer.get("title") || "Vector layer",
+    kind: layerKind,
+    visible: layer.getVisible?.() !== false,
+    geometryType: layer.get("geometryType") || "",
+    featureProjection: layer.get("featureProjection") || sourceProjection,
+    sourceProjection,
+    attributeSchema: layer.get("attributeSchema") || [],
+    styleConfig: layer.get("styleConfig") || null,
+    styleType: getPersistentVectorStyleType(layer, layerKind),
+    createdVectorLayer: Boolean(layer.get("createdVectorLayer")),
+    geoprocessLayer: Boolean(layer.get("geoprocessLayer")),
+    pointGridLayer: Boolean(layer.get("pointGridLayer")),
+    gridSpacing: layer.get("gridSpacing") || null,
+    gridUnits: layer.get("gridUnits") || null,
+    scoreRadiusMeters: layer.get("scoreRadiusMeters") || null,
+    geojson: format.writeFeaturesObject(features, {
+      dataProjection: sourceProjection,
+      featureProjection: sourceProjection,
+    }),
+  };
+}
+
+function savePersistentVectorLayer(layer, layerKind = "vector") {
+  if (!layer?.getSource?.()) return;
+  const record = getPersistentVectorLayerRecord(layer, layerKind);
+  const layers = getPersistedVectorLayers();
+  const existingIndex = layers.findIndex((item) => item.id === record.id);
+  if (existingIndex >= 0) {
+    layers[existingIndex] = record;
+  } else {
+    layers.push(record);
+  }
+  writePersistedVectorLayers(layers);
+}
+
+function registerPersistentVectorLayer(layer, layerKind = "vector") {
+  if (!layer?.getSource?.() || layer.get("persistentVectorRegistered")) return;
+  layer.set("persistentVectorRegistered", true);
+  layer.set("persistentLayerKind", layerKind);
+  getPersistentLayerId(layer);
+
+  const source = layer.getSource();
+  let saveTimer = null;
+  const scheduleSave = () => {
+    window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(
+      () => savePersistentVectorLayer(layer, layerKind),
+      250,
+    );
+  };
+
+  source.on("addfeature", scheduleSave);
+  source.on("removefeature", scheduleSave);
+  source.on("changefeature", scheduleSave);
+  source.on("clear", scheduleSave);
+  layer.on("change:visible", scheduleSave);
+  savePersistentVectorLayer(layer, layerKind);
+}
+
+function getRestoredVectorLayerStyle(record) {
+  if (record.styleConfig) return createVectorLayerStyle(record.styleConfig);
+  if (record.styleType === "vertices") return verticesResultStyle;
+  return geoprocessResultStyle;
+}
+
+function restorePersistedVectorLayers() {
+  const records = getPersistedVectorLayers();
+  if (!records.length) return;
+
+  const format = new GeoJSON();
+  records.forEach((record) => {
+    try {
+      const sourceProjection =
+        record.sourceProjection ||
+        record.featureProjection ||
+        map.getView().getProjection().getCode();
+      const features = format.readFeatures(record.geojson || {}, {
+        dataProjection: sourceProjection,
+        featureProjection: sourceProjection,
+      });
+      features.forEach((feature) =>
+        feature.set("_featureProjection", sourceProjection, true),
+      );
+      const restoredLayer = new VectorLayer({
+        title: record.title || "Vector layer",
+        source: new VectorSource({ features }),
+        visible: record.visible !== false,
+        displayInLayerSwitcher: true,
+        style: getRestoredVectorLayerStyle(record),
+      });
+
+      restoredLayer.set("persistentLayerId", record.id);
+      restoredLayer.set("editableVector", true);
+      restoredLayer.set("createdVectorLayer", Boolean(record.createdVectorLayer));
+      restoredLayer.set("geoprocessLayer", Boolean(record.geoprocessLayer));
+      restoredLayer.set("pointGridLayer", Boolean(record.pointGridLayer));
+      restoredLayer.set("geometryType", record.geometryType || "");
+      restoredLayer.set("attributeSchema", record.attributeSchema || []);
+      restoredLayer.set("styleConfig", record.styleConfig || null);
+      restoredLayer.set("featureProjection", record.featureProjection || sourceProjection);
+      restoredLayer.set("sourceProjection", sourceProjection);
+      if (record.gridSpacing) restoredLayer.set("gridSpacing", record.gridSpacing);
+      if (record.gridUnits) restoredLayer.set("gridUnits", record.gridUnits);
+      if (record.scoreRadiusMeters) {
+        restoredLayer.set("scoreRadiusMeters", record.scoreRadiusMeters);
+      }
+
+      map.addLayer(restoredLayer);
+      registerPersistentVectorLayer(restoredLayer, record.kind || "vector");
+    } catch (error) {
+      console.warn("Could not restore saved vector layer.", record?.title, error);
+    }
+  });
+
+  layerSwitcher?.drawPanel?.();
+}
+
+restorePersistedVectorLayers();
 
 async function createPointGridFromLayer() {
   const layerItem = getSelectedLayerItem(
@@ -5686,6 +5930,16 @@ function getPointGridLayerItems() {
   });
 }
 
+function getGridScoreLayerItems() {
+  return getGeoprocessLayerItems().filter((item) => {
+    if (item.sourceType !== "vector") return false;
+    const hasPointGeometry = ["Point", "MultiPoint"].includes(
+      item.geometryType,
+    );
+    return hasPointGeometry && item.layer.get("displayInLayerSwitcher") === true;
+  });
+}
+
 function openVerticesDialog() {
   currentGeoprocessLayerItems = getVerticesLayerItems();
   fillLayerSelect(verticesLayerSelect, currentGeoprocessLayerItems);
@@ -5714,6 +5968,345 @@ function openPointGridDialog() {
 function closePointGridDialog() {
   pointGridModal.classList.remove("open");
   pointGridModal.setAttribute("aria-hidden", "true");
+}
+
+function openGridScoreDialog() {
+  currentGridScoreLayerItems = getGridScoreLayerItems();
+  fillLayerSelect(gridScoreLayerSelect, currentGridScoreLayerItems);
+  gridScoreRadius.value = "500";
+  gridScoreUnits.value = "meters";
+  setGridScoreStatus("Ready. One Overpass request will be sent for the grid extent plus radius.");
+  geoprocessOptions.classList.remove("dropdown-show");
+  gridScoreModal.classList.add("open");
+  gridScoreModal.setAttribute("aria-hidden", "false");
+}
+
+function closeGridScoreDialog() {
+  gridScoreModal.classList.remove("open");
+  gridScoreModal.setAttribute("aria-hidden", "true");
+}
+
+function setGridScoreStatus(message, type = "") {
+  if (!gridScoreStatus) return;
+  gridScoreStatus.textContent = message;
+  gridScoreStatus.classList.toggle("is-error", type === "error");
+  gridScoreStatus.classList.toggle("is-success", type === "success");
+  gridScoreStatus.classList.toggle("is-loading", type === "loading");
+}
+
+function setGridScoreProcessing(isProcessing) {
+  gridScorePreview.disabled = isProcessing;
+  gridScoreRun.disabled = isProcessing;
+  gridScoreCancel.disabled = isProcessing;
+  gridScoreModalClose.disabled = isProcessing;
+  gridScoreLayerSelect.disabled = isProcessing;
+  gridScoreRadius.disabled = isProcessing;
+  gridScoreUnits.disabled = isProcessing;
+}
+
+function getSelectedGridScoreCategories() {
+  return Array.from(
+    document.querySelectorAll("#gridScoreCategories input:checked"),
+  ).map((input) => input.value);
+}
+
+function getGridScoreOutputMode() {
+  return (
+    document.querySelector('input[name="gridScoreOutput"]:checked')?.value ||
+    "copy"
+  );
+}
+
+function getGridScoreRequestState() {
+  const layerItem = getSelectedLayerItem(
+    gridScoreLayerSelect,
+    currentGridScoreLayerItems,
+  );
+  if (!layerItem) {
+    throw new Error("Choose a point grid layer first.");
+  }
+
+  const radius = Number(gridScoreRadius.value);
+  if (!Number.isFinite(radius) || radius <= 0) {
+    throw new Error("Set a valid search radius.");
+  }
+
+  const selectedValues = getSelectedGridScoreCategories();
+  const categories = gridScoreCategoryDefinitions.filter((category) =>
+    selectedValues.includes(category.value),
+  );
+  if (!categories.length) {
+    throw new Error("Choose at least one category.");
+  }
+
+  const radiusMeters =
+    gridScoreUnits.value === "kilometers" ? radius * 1000 : radius;
+
+  return { layerItem, radius, radiusMeters, categories };
+}
+
+function getGridScorePointLonLats(features) {
+  const mapProjection = map.getView().getProjection().getCode();
+  return features
+    .map((feature) => {
+      const geometry = feature.getGeometry?.();
+      if (!geometry) return null;
+      const type = geometry.getType();
+      const coordinate =
+        type === "Point"
+          ? geometry.getCoordinates()
+          : type === "MultiPoint"
+            ? geometry.getCoordinates()[0]
+            : null;
+      if (!coordinate) return null;
+      const featureProjection =
+        feature.get("_featureProjection") ||
+        feature.get("featureProjection") ||
+        mapProjection;
+      const mapCoordinate =
+        featureProjection === mapProjection
+          ? coordinate
+          : transform(coordinate, featureProjection, mapProjection);
+      return { feature, lonLat: toLonLat(mapCoordinate, mapProjection) };
+    })
+    .filter(Boolean);
+}
+
+function getExpandedLonLatBbox(pointLonLats, radiusMeters) {
+  const lons = pointLonLats.map((item) => item.lonLat[0]);
+  const lats = pointLonLats.map((item) => item.lonLat[1]);
+  const minLon = Math.min(...lons);
+  const maxLon = Math.max(...lons);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const avgLat = (minLat + maxLat) / 2;
+  const latBuffer = radiusMeters / 111320;
+  const lonBuffer =
+    radiusMeters /
+    (111320 * Math.max(Math.cos((avgLat * Math.PI) / 180), 0.2));
+
+  return [
+    minLat - latBuffer,
+    minLon - lonBuffer,
+    maxLat + latBuffer,
+    maxLon + lonBuffer,
+  ];
+}
+
+function getGridScoreOverpassQuery(bbox, categories) {
+  const [south, west, north, east] = bbox;
+  const blocks = categories
+    .flatMap((category) => [category.query, ...(category.extraQueries || [])])
+    .map(
+      (query) =>
+        `node${query}(${south},${west},${north},${east});` +
+        `way${query}(${south},${west},${north},${east});` +
+        `relation${query}(${south},${west},${north},${east});`,
+    )
+    .join("");
+
+  return `[out:json][timeout:35];(${blocks});out center tags;`;
+}
+
+async function fetchGridScorePlaces(bbox, categories) {
+  const response = await fetch("https://overpass.kumi.systems/api/interpreter", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: new URLSearchParams({
+      data: getGridScoreOverpassQuery(bbox, categories),
+    }),
+  });
+
+  const responseText = await response.text();
+  if (!response.ok) {
+    throw new Error(
+      `Overpass stopped with HTTP ${response.status}: ${responseText.slice(0, 180)}`,
+    );
+  }
+
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch (error) {
+    throw new Error(`Overpass returned unreadable data: ${error.message}`);
+  }
+
+  const seen = new Set();
+  return (data.elements || [])
+    .map((element) => {
+      const lon = element.lon ?? element.center?.lon;
+      const lat = element.lat ?? element.center?.lat;
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+      const id = `${element.type}.${element.id}`;
+      if (seen.has(id)) return null;
+      seen.add(id);
+      return { id, lonLat: [lon, lat], tags: element.tags || {} };
+    })
+    .filter(Boolean);
+}
+
+function scoreGridPoint(originLonLat, places, categories, radiusMeters) {
+  const result = {};
+  let totalServices = 0;
+  let weightedScore = 0;
+
+  categories.forEach((category) => {
+    const count = places.filter(
+      (place) =>
+        category.match(place.tags) &&
+        getHaversineDistanceMeters(originLonLat, place.lonLat) <= radiusMeters,
+    ).length;
+    result[category.field] = count;
+    totalServices += count;
+    weightedScore += count * category.weight;
+  });
+
+  result.services_count = totalServices;
+  result.service_score = Math.round(weightedScore * 10) / 10;
+  return result;
+}
+
+function addGridScoreFieldsToLayer(layer, categories) {
+  const existingSchema = layer.get("attributeSchema") || [];
+  const existingNames = new Set(existingSchema.map((field) => field.name));
+  const newFields = [
+    ...categories.map((category) => ({
+      name: category.field,
+      type: "number",
+    })),
+    { name: "services_count", type: "number" },
+    { name: "service_score", type: "number" },
+    { name: "score_radius_m", type: "number" },
+  ].filter((field) => !existingNames.has(field.name));
+
+  if (newFields.length) {
+    layer.set("attributeSchema", [...existingSchema, ...newFields]);
+  }
+}
+
+function createScoredGridCopy(layerItem, categories, radiusMeters) {
+  const sourceProjection =
+    layerItem.layer.get("sourceProjection") ||
+    layerItem.layer.get("featureProjection") ||
+    map.getView().getProjection().getCode();
+  const clonedFeatures = layerItem.features.map((feature) => {
+    const clone = feature.clone();
+    clone.setProperties(feature.getProperties());
+    clone.set("_featureProjection", sourceProjection, true);
+    return clone;
+  });
+  const resultLayer = new VectorLayer({
+    source: new VectorSource({ features: clonedFeatures }),
+    title: `${layerItem.title} - Nearby Score`,
+    displayInLayerSwitcher: true,
+    visible: true,
+    style: geoprocessResultStyle,
+  });
+
+  resultLayer.set("editableVector", true);
+  resultLayer.set("geoprocessLayer", true);
+  resultLayer.set("pointGridLayer", true);
+  resultLayer.set("geometryType", "Point");
+  resultLayer.set("featureProjection", sourceProjection);
+  resultLayer.set("sourceProjection", sourceProjection);
+  resultLayer.set(
+    "attributeSchema",
+    layerItem.layer.get("attributeSchema") || [],
+  );
+  addGridScoreFieldsToLayer(resultLayer, categories);
+  resultLayer.set("scoreRadiusMeters", radiusMeters);
+  map.addLayer(resultLayer);
+  registerPersistentVectorLayer(resultLayer, "gridScore");
+  return resultLayer;
+}
+
+function refreshOpenAttributeTableForLayer(layer) {
+  const tableContainer = document.getElementById("attribute-table-container");
+  if (tableContainer?.hidden || selectedLayer2 !== layer) return;
+  attributeTableFeatures = (layer.getSource?.().getFeatures?.() || []).filter(
+    (feature) => feature.getGeometry?.(),
+  );
+  refreshAttributeTableView();
+}
+
+async function runGridScoreAnalysis({ preview = false } = {}) {
+  let state;
+  try {
+    state = getGridScoreRequestState();
+  } catch (error) {
+    setGridScoreStatus(error.message, "error");
+    return;
+  }
+
+  const { layerItem, radiusMeters, categories } = state;
+  const outputMode = preview ? "copy" : getGridScoreOutputMode();
+  setGridScoreProcessing(true);
+  setGridScoreStatus("Preparing point grid features...", "loading");
+
+  let actionLayer = null;
+  try {
+    await loadGeoprocessFeatures(layerItem);
+    if (!layerItem.features?.length) {
+      throw new Error("The selected grid layer has no point features.");
+    }
+
+    actionLayer =
+      outputMode === "copy"
+        ? createScoredGridCopy(layerItem, categories, radiusMeters)
+        : layerItem.layer;
+
+    const targetFeatures =
+      outputMode === "copy"
+        ? actionLayer.getSource().getFeatures()
+        : layerItem.features;
+    const featuresToScore = preview
+      ? targetFeatures.slice(0, 10)
+      : targetFeatures;
+    const pointLonLats = getGridScorePointLonLats(featuresToScore);
+    if (!pointLonLats.length) {
+      throw new Error("No readable point geometry was found.");
+    }
+
+    const bbox = getExpandedLonLatBbox(pointLonLats, radiusMeters);
+    const bboxText = bbox.map((value) => value.toFixed(5)).join(", ");
+    setGridScoreStatus(
+      `Fetching OSM services from Overpass once. BBOX: ${bboxText}`,
+      "loading",
+    );
+    const places = await fetchGridScorePlaces(bbox, categories);
+    setGridScoreStatus(
+      `Overpass returned ${places.length} services. Scoring ${featuresToScore.length} grid points...`,
+      "loading",
+    );
+
+    pointLonLats.forEach(({ feature, lonLat }) => {
+      const score = scoreGridPoint(lonLat, places, categories, radiusMeters);
+      feature.setProperties({ ...score, score_radius_m: radiusMeters });
+      feature.set("_featureProjection", actionLayer.get("sourceProjection"), true);
+    });
+
+    addGridScoreFieldsToLayer(actionLayer, categories);
+    actionLayer.changed?.();
+    savePersistentVectorLayer(
+      actionLayer,
+      actionLayer.get("persistentLayerKind") || "gridScore",
+    );
+    refreshOpenAttributeTableForLayer(actionLayer);
+    setGridScoreStatus(
+      `${preview ? "Preview" : "Analysis"} finished. ${featuresToScore.length} points scored from ${places.length} OSM services.`,
+      "success",
+    );
+  } catch (error) {
+    console.error("Grid score analysis failed:", error);
+    if (outputMode === "copy" && actionLayer) {
+      map.removeLayer(actionLayer);
+    }
+    setGridScoreStatus(error.message, "error");
+  } finally {
+    setGridScoreProcessing(false);
+  }
 }
 
 async function createVerticesFromLayer() {
@@ -5991,6 +6584,7 @@ btnIntersectLayers.addEventListener("click", openIntersectionDialog);
 btnMergeLayers.addEventListener("click", openMergeLayersDialog);
 btnVerticesLayer.addEventListener("click", openVerticesDialog);
 btnPointGrid.addEventListener("click", openPointGridDialog);
+btnGridScore.addEventListener("click", openGridScoreDialog);
 intersectModalClose.addEventListener("click", closeIntersectionDialog);
 intersectCancel.addEventListener("click", closeIntersectionDialog);
 intersectApply.addEventListener("click", applyIntersectionDialog);
@@ -6003,6 +6597,14 @@ verticesApply.addEventListener("click", createVerticesFromLayer);
 pointGridModalClose.addEventListener("click", closePointGridDialog);
 pointGridCancel.addEventListener("click", closePointGridDialog);
 pointGridApply.addEventListener("click", createPointGridFromLayer);
+gridScoreModalClose.addEventListener("click", closeGridScoreDialog);
+gridScoreCancel.addEventListener("click", closeGridScoreDialog);
+gridScorePreview.addEventListener("click", () =>
+  runGridScoreAnalysis({ preview: true }),
+);
+gridScoreRun.addEventListener("click", () =>
+  runGridScoreAnalysis({ preview: false }),
+);
 intersectModal.addEventListener("click", (event) => {
   if (event.target === intersectModal) closeIntersectionDialog();
 });
@@ -6014,6 +6616,9 @@ verticesModal.addEventListener("click", (event) => {
 });
 pointGridModal.addEventListener("click", (event) => {
   if (event.target === pointGridModal) closePointGridDialog();
+});
+gridScoreModal.addEventListener("click", (event) => {
+  if (event.target === gridScoreModal) closeGridScoreDialog();
 });
 
 // SAVE FEATURE EVENT
@@ -6271,6 +6876,7 @@ let ft, featuresInView;
 const attributeLayerSelect = document.getElementById("attribute-layer-select");
 const attributeVisibleOnly = document.getElementById("attribute-visible-only");
 const attributeRecordCount = document.getElementById("attribute-record-count");
+let attributeLayerItems = [];
 
 // Listen for layer selection changes
 selectLayers.addEventListener("change", (event) => {
@@ -6282,19 +6888,48 @@ selectLayers.addEventListener("change", (event) => {
 
 function getLayers2() {
   attributeLayerSelect.innerHTML = "";
+  attributeLayerItems = [];
   const defaultOption = document.createElement("option");
   defaultOption.value = "";
   defaultOption.text = "Select a layer...";
   attributeLayerSelect.appendChild(defaultOption);
-  layersArray.forEach((wmsLayer, index) => {
-    if (wmsLayer.getVisible()) {
-      const layerToAdd = layersArray[index];
-      const option = document.createElement("option");
-      option.value = index;
-      option.text = layerToAdd.get("title");
-      attributeLayerSelect.appendChild(option);
+
+  function addLayerOption(layer) {
+    const source = layer.getSource?.();
+    const params = source?.getParams?.();
+    const typeName = params?.LAYERS || params?.layers;
+    const isVectorLayer = layer instanceof VectorLayer;
+    const displayInSwitcher = layer.get("displayInLayerSwitcher") === true;
+
+    if (!typeName && !(isVectorLayer && displayInSwitcher)) {
+      return;
     }
-  });
+
+    const item = {
+      layer,
+      source,
+      title: layer.get("title") || typeName || "Vector layer",
+      typeName,
+      sourceType: typeName ? "wfs" : "vector",
+    };
+    const option = document.createElement("option");
+    option.value = String(attributeLayerItems.length);
+    option.text =
+      item.sourceType === "vector" ? `${item.title} (Vector)` : item.title;
+    attributeLayerItems.push(item);
+    attributeLayerSelect.appendChild(option);
+  }
+
+  function visitLayer(layer) {
+    if (layer instanceof LayerGroup) {
+      layer.getLayers().forEach(visitLayer);
+      return;
+    }
+
+    addLayerOption(layer);
+  }
+
+  map.getLayers().forEach(visitLayer);
 }
 
 let layerIndex, selectedLayer2, tableLayerSelected;
@@ -6358,20 +6993,61 @@ document
 
 attributeLayerSelect.addEventListener("change", (event) => {
   layerIndex = event.target.value;
-  selectedLayer2 = layersArray[layerIndex];
-  getSelectedLayerTable(selectedLayer2);
+  const selectedItem = attributeLayerItems[Number(layerIndex)];
+  selectedLayer2 = selectedItem?.layer || null;
+  getSelectedLayerTable(selectedItem);
 });
 
 attributeVisibleOnly.addEventListener("change", refreshAttributeTableView);
 
-function getSelectedLayerTable(selectedLayer) {
-  const layerParams = selectedLayer.getSource()?.getParams?.();
-  tableLayerSelected = layerParams?.LAYERS;
+function getVectorAttributeFeatures(layerItem) {
+  const layerProjection =
+    layerItem.layer.get("featureProjection") ||
+    layerItem.layer.get("sourceProjection") ||
+    map.getView().getProjection().getCode();
+  return (layerItem.source?.getFeatures?.() || [])
+    .filter((feature) => feature.getGeometry?.())
+    .map((feature) => {
+      feature.set("_featureProjection", layerProjection, true);
+      return feature;
+    });
+}
+
+function setAttributeTableEditAvailability(canEditWithWfs) {
+  const editButton = document.getElementById("edit-btn");
+  const saveButton = document.getElementById("save-btn");
+  if (editButton) editButton.disabled = !canEditWithWfs;
+  if (saveButton) saveButton.disabled = true;
+}
+
+function getSelectedLayerTable(layerItem) {
+  if (!layerItem) {
+    tableLayerSelected = "";
+    attributeTableFeatures = [];
+    populateAttributeTable([]);
+    attributeRecordCount.textContent = "0 / 0 records";
+    setAttributeTableEditAvailability(false);
+    return;
+  }
+
+  if (layerItem.sourceType === "vector") {
+    tableLayerSelected = "";
+    attributeTableFeatures = getVectorAttributeFeatures(layerItem);
+    featuresInView = getVisibleAttributeFeatures(attributeTableFeatures);
+    refreshAttributeTableView();
+    setAttributeTableEditAvailability(false);
+    return;
+  }
+
+  tableLayerSelected = layerItem.typeName;
+  setAttributeTableEditAvailability(true);
 
   if (!tableLayerSelected) {
     console.warn("Selected layer does not expose WMS LAYERS params.");
     attributeTableFeatures = [];
     populateAttributeTable([]);
+    attributeRecordCount.textContent = "0 / 0 records";
+    setAttributeTableEditAvailability(false);
     return;
   }
 
@@ -9692,6 +10368,7 @@ function generateChartLegend(fields, colors) {
 const heatmapBtn = document.getElementById("heatmap");
 const heatmapModal = document.getElementById("heatmapModal");
 const layerSelectInHeatmap = document.getElementById("layerSelectInHeatmap");
+let heatmapLayerItems = [];
 
 heatmapBtn.addEventListener("click", () => {
   populateHeatmapLayerSelect();
@@ -9700,18 +10377,101 @@ heatmapBtn.addEventListener("click", () => {
 
 function populateHeatmapLayerSelect() {
   layerSelectInHeatmap.innerHTML = "";
+  heatmapLayerItems = [];
   const defaultOption = document.createElement("option");
   defaultOption.value = "";
   defaultOption.text = "Select a layer...";
   layerSelectInHeatmap.appendChild(defaultOption);
 
-  layersArray.forEach((layer, index) => {
-    if (!layer.getVisible()) return;
+  function addHeatmapOption(layer) {
+    if (!layer.getVisible?.()) return;
+    const source = layer.getSource?.();
+    const params = source?.getParams?.();
+    const typeName = params?.LAYERS || params?.layers;
+    const isSwitcherVector =
+      layer instanceof VectorLayer &&
+      layer.get("displayInLayerSwitcher") === true;
+
+    if (!typeName && !isSwitcherVector) return;
+
+    if (isSwitcherVector) {
+      const features = source?.getFeatures?.() || [];
+      const hasPointFeature = features.some((feature) =>
+        ["Point", "MultiPoint"].includes(feature.getGeometry?.()?.getType?.()),
+      );
+      if (!hasPointFeature) return;
+    }
+
+    const item = {
+      layer,
+      source,
+      typeName,
+      sourceType: typeName ? "wfs" : "vector",
+      title: layer.get("title") || typeName || "Vector layer",
+    };
     const option = document.createElement("option");
-    option.value = index;
-    option.text = layer.get("title") || `Layer ${index}`;
+    option.value = String(heatmapLayerItems.length);
+    option.text =
+      item.sourceType === "vector" ? `${item.title} (Vector)` : item.title;
+    heatmapLayerItems.push(item);
     layerSelectInHeatmap.appendChild(option);
+  }
+
+  function visitLayer(layer) {
+    if (layer instanceof LayerGroup) {
+      layer.getLayers().forEach(visitLayer);
+      return;
+    }
+    addHeatmapOption(layer);
+  }
+
+  map.getLayers().forEach(visitLayer);
+}
+
+function getHeatmapVectorFeatures(layerItem) {
+  const mapProjection = map.getView().getProjection().getCode();
+  const featureProjection =
+    layerItem.layer.get("featureProjection") ||
+    layerItem.layer.get("sourceProjection") ||
+    mapProjection;
+
+  return (layerItem.source?.getFeatures?.() || [])
+    .filter((feature) =>
+      ["Point", "MultiPoint"].includes(feature.getGeometry?.()?.getType?.()),
+    )
+    .map((feature) => {
+      const clone = feature.clone();
+      clone.setProperties(feature.getProperties());
+      if (featureProjection !== mapProjection) {
+        clone.getGeometry()?.transform(featureProjection, mapProjection);
+      }
+      clone.set("_featureProjection", mapProjection, true);
+      return clone;
+    });
+}
+
+function getNumericFieldsFromFeatures(features) {
+  const firstFeature = features.find((feature) => feature.getProperties);
+  if (!firstFeature) return [];
+  return Object.keys(firstFeature.getProperties()).filter((key) => {
+    if (key === "geometry") return false;
+    return features.some((feature) => Number.isFinite(Number(feature.get(key))));
   });
+}
+
+function getHeatmapWfsUrl(layerItem) {
+  const layerParams = layerItem.typeName;
+  const [workspace, layerName] = layerParams.split(":");
+  const params = layerItem.source?.getParams?.() || {};
+  const cqlFilter = params.CQL_FILTER;
+  const baseUrl =
+    `http://${host}:${port}/geoserver/${workspace}/ows?` +
+    `service=WFS&version=1.1.0&request=GetFeature` +
+    `&typeName=${workspace}:${layerName}` +
+    `&outputFormat=application/json&srsName=EPSG:3857`;
+
+  if (!cqlFilter) return baseUrl;
+  return `${baseUrl}&CQL_FILTER=${encodeURIComponent(cqlFilter)}`;
 }
 
 document
@@ -9723,29 +10483,26 @@ document
     const idx = parseInt(this.value, 10);
     if (isNaN(idx)) return;
 
-    const layer = layersArray[idx];
-    const layerParams = layer.getSource().getParams().LAYERS;
-    const [workspace, layerName] = layerParams.split(":");
+    const layerItem = heatmapLayerItems[idx];
+    if (!layerItem) return;
 
-    const params = layer.getSource().getParams();
-    const cqlFilter = params.CQL_FILTER;
-    console.log(cqlFilter);
-    let wfsUrl;
-    const baseUrl =
-      `http://${host}:${port}/geoserver/${workspace}/ows?` +
-      `service=WFS&version=1.1.0&request=GetFeature` +
-      `&typeName=${workspace}:${layerName}` +
-      `&outputFormat=application/json&srsName=EPSG:3857`;
-
-    if (cqlFilter) {
-      const encoded = encodeURIComponent(cqlFilter);
-      wfsUrl = `${baseUrl}&CQL_FILTER=${encoded}`;
-    } else {
-      wfsUrl = baseUrl;
+    if (layerItem.sourceType === "vector") {
+      const fields = getNumericFieldsFromFeatures(
+        getHeatmapVectorFeatures(layerItem),
+      );
+      fields.forEach((field) => {
+        const option = document.createElement("option");
+        option.value = field;
+        option.textContent = field;
+        weightFieldSelect.appendChild(option);
+      });
+      return;
     }
 
-    async function fetchAndExtractKeys(wfsUrl) {
-      const response = await fetch(wfsUrl);
+    const wfsUrl = getHeatmapWfsUrl(layerItem);
+
+    async function fetchAndExtractKeys(url) {
+      const response = await fetch(url);
       const data = await response.json();
       const firstFeature = data.features?.[0];
 
@@ -9764,7 +10521,7 @@ document
         weightFieldSelect.appendChild(option);
       });
 
-    layer.set("wfsUrl", wfsUrl); // store for later use
+    layerItem.layer.set("wfsUrl", wfsUrl); // store for later use
   });
 
 document
@@ -9775,18 +10532,24 @@ document
     const idx = parseInt(layerSelectInHeatmap.value, 10);
     if (isNaN(idx)) return;
 
-    const selectedLayer = layersArray[idx];
-    const wfsUrl = selectedLayer.get("wfsUrl");
+    const selectedItem = heatmapLayerItems[idx];
+    if (!selectedItem) return;
+
     const weightField = document.getElementById("weightFieldSelect").value;
     const blur = parseInt(document.getElementById("blurRange").value, 10);
     const radius = parseInt(document.getElementById("radiusRange").value, 10);
 
     if (window.heatmapLayer) map.removeLayer(window.heatmapLayer);
 
-    const vectorSource = new VectorSource({
-      url: wfsUrl,
-      format: new GeoJSON(),
-    });
+    const vectorSource =
+      selectedItem.sourceType === "vector"
+        ? new VectorSource({
+            features: getHeatmapVectorFeatures(selectedItem),
+          })
+        : new VectorSource({
+            url: selectedItem.layer.get("wfsUrl") || getHeatmapWfsUrl(selectedItem),
+            format: new GeoJSON(),
+          });
     let minWeight, maxWeight;
 
     window.heatmapLayer = new Heatmap({
@@ -9797,9 +10560,9 @@ document
         if (!weightField) return 1; // uniform heatmap
         const raw = parseFloat(f.get(weightField));
         if (isNaN(raw)) return 0;
-        console.log(minWeight, maxWeight);
 
         // Normalize between 0 and 1 based on actual dataset range
+        if (maxWeight === minWeight) return raw > 0 ? 1 : 0;
         return (raw - minWeight) / (maxWeight - minWeight);
       },
       title: "Heatmap Layer",
@@ -9808,10 +10571,7 @@ document
     map.addLayer(window.heatmapLayer);
     window.heatmapLayer.setZIndex(98);
 
-    // Wait until source loads features
-    vectorSource.on("change", () => {
-      if (vectorSource.getState() !== "ready") return;
-
+    function updateHeatmapLegend() {
       const featuresHeatmap = vectorSource.getFeatures();
       if (!featuresHeatmap.length) return;
 
@@ -9834,7 +10594,16 @@ document
       legendMinEl.textContent = `Min: ${minWeight}`;
       legendMaxEl.textContent = `Max: ${maxWeight}`;
       heatmapLegend.style.display = "block";
-    });
+    }
+
+    if (selectedItem.sourceType === "vector") {
+      updateHeatmapLegend();
+    } else {
+      vectorSource.on("change", () => {
+        if (vectorSource.getState() !== "ready") return;
+        updateHeatmapLegend();
+      });
+    }
 
     heatmapModal.close();
   });
@@ -10151,6 +10920,12 @@ const nearbyCategories = [
     group: "school",
     label: "School",
     query: '["amenity"="school"]',
+  },
+  {
+    key: "kindergarten",
+    group: "kindergarten",
+    label: "Kindergarten",
+    query: '["amenity"="kindergarten"]',
   },
   {
     key: "hospital",
@@ -10529,6 +11304,7 @@ function getOverpassBusRoutesQuery([lon, lat], radius = 90) {
 
 function getNearbyCategory(tags = {}) {
   if (tags.amenity === "school") return "School";
+  if (tags.amenity === "kindergarten") return "Kindergarten";
   if (tags.amenity === "hospital") return "Hospital";
   if (tags.leisure === "park") return "Park";
   if (tags.amenity === "police") return "Police Station";
@@ -11940,6 +12716,7 @@ function createEmptyVectorLayer() {
   createdVectorLayer.set("sourceProjection", layerProjection);
 
   map.addLayer(createdVectorLayer);
+  registerPersistentVectorLayer(createdVectorLayer, "created");
   selectedLayer = createdVectorLayer;
   layerTitle = createdLayerName;
   layerName = layerTitle;
@@ -12731,6 +13508,7 @@ document.getElementById("xyCreateLayer").addEventListener("click", () => {
 
   // Add to map
   map.addLayer(pointLayer);
+  registerPersistentVectorLayer(pointLayer, "xy");
 
   // Zoom to extent
   map.getView().fit(vectorSource.getExtent(), {

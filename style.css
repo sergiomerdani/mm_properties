@@ -2827,7 +2827,8 @@ button.fa-button.active {
 #intersectModal,
 #mergeLayersModal,
 #verticesModal,
-#pointGridModal {
+#pointGridModal,
+#gridScoreModal {
   display: none;
   position: fixed;
   inset: 0;
@@ -2843,7 +2844,8 @@ button.fa-button.active {
 #intersectModal.open,
 #mergeLayersModal.open,
 #verticesModal.open,
-#pointGridModal.open {
+#pointGridModal.open,
+#gridScoreModal.open {
   display: flex;
 }
 
@@ -2852,7 +2854,8 @@ button.fa-button.active {
 #intersectModalContent,
 #mergeLayersModalContent,
 #verticesModalContent,
-#pointGridModalContent {
+#pointGridModalContent,
+#gridScoreModalContent {
   width: min(360px, 100%);
   background: #ffffff;
   border: 1px solid #cbd5e1;
@@ -2885,7 +2888,8 @@ button.fa-button.active {
 #intersectModalClose,
 #mergeLayersModalClose,
 #verticesModalClose,
-#pointGridModalClose {
+#pointGridModalClose,
+#gridScoreModalClose {
   width: 28px;
   height: 28px;
   border: 0;
@@ -2901,7 +2905,8 @@ button.fa-button.active {
 #intersectModalContent label,
 #mergeLayersModalContent label,
 #verticesModalContent label,
-#pointGridModalContent label {
+#pointGridModalContent label,
+#gridScoreModalContent label {
   display: block;
   margin: 10px 0 5px;
   font-size: 12px;
@@ -2922,7 +2927,10 @@ button.fa-button.active {
 #pointGridLayerSelect,
 #pointGridSpacing,
 #pointGridUnits,
-#pointGridLayerName {
+#pointGridLayerName,
+#gridScoreLayerSelect,
+#gridScoreRadius,
+#gridScoreUnits {
   height: 32px;
   border: 1px solid #bfccd8;
   border-radius: 4px;
@@ -2948,12 +2956,14 @@ button.fa-button.active {
 #verticesLayerSelect,
 #verticesLayerName,
 #pointGridLayerSelect,
-#pointGridLayerName {
+#pointGridLayerName,
+#gridScoreLayerSelect {
   width: 100%;
   background: white;
 }
 
-#bufferUnits {
+#bufferUnits,
+#gridScoreUnits {
   width: 128px;
   background: white;
 }
@@ -2981,6 +2991,58 @@ button.fa-button.active {
   color: #526173;
   font-size: 12px;
   line-height: 1.35;
+}
+
+.grid-score-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid #d8e1ea;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.grid-score-status.is-loading::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border: 2px solid #bfdbfe;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: grid-score-spin 0.8s linear infinite;
+}
+
+.grid-score-status.is-error {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #b91c1c;
+}
+
+.grid-score-status.is-success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+@keyframes grid-score-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+#gridScorePreview:disabled,
+#gridScoreRun:disabled,
+#gridScoreCancel:disabled,
+#gridScoreModalClose:disabled {
+  opacity: 0.58;
+  cursor: wait;
 }
 
 #bufferStartSelect,
@@ -3012,7 +3074,9 @@ button.fa-button.active {
 #mergeApply,
 #intersectApply,
 #mergeLayersApply,
-#verticesApply {
+#verticesApply,
+#pointGridApply,
+#gridScoreRun {
   background: #2563eb;
   border-color: #2563eb;
   color: white;
@@ -3083,6 +3147,15 @@ button.fa-button.active {
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
+}
+
+#gridScoreModalClose i {
+  font-size: 18px;
+  color: #475569;
+}
+
+#gridScoreModalClose:hover {
+  background: #eef2f7;
 }
 
 .dropdown-arrow:hover {
