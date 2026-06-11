@@ -5245,6 +5245,7 @@ const geoprocessOptions = document.getElementById("geoprocessOptions");
 const btnIntersectLayers = document.getElementById("btnIntersectLayers");
 const btnMergeLayers = document.getElementById("btnMergeLayers");
 const btnVerticesLayer = document.getElementById("btnVerticesLayer");
+const btnPointGrid = document.getElementById("btnPointGrid");
 const intersectModal = document.getElementById("intersectModal");
 const intersectModalClose = document.getElementById("intersectModalClose");
 const intersectCancel = document.getElementById("intersectCancel");
@@ -5264,6 +5265,14 @@ const verticesCancel = document.getElementById("verticesCancel");
 const verticesApply = document.getElementById("verticesApply");
 const verticesLayerSelect = document.getElementById("verticesLayerSelect");
 const verticesLayerName = document.getElementById("verticesLayerName");
+const pointGridModal = document.getElementById("pointGridModal");
+const pointGridModalClose = document.getElementById("pointGridModalClose");
+const pointGridCancel = document.getElementById("pointGridCancel");
+const pointGridApply = document.getElementById("pointGridApply");
+const pointGridLayerSelect = document.getElementById("pointGridLayerSelect");
+const pointGridSpacing = document.getElementById("pointGridSpacing");
+const pointGridUnits = document.getElementById("pointGridUnits");
+const pointGridLayerName = document.getElementById("pointGridLayerName");
 let currentGeoprocessLayerItems = [];
 
 const geoprocessResultStyle = new Style({
@@ -5388,16 +5397,35 @@ async function loadGeoprocessFeatures(layerItem) {
     srsName: map.getView().getProjection().getCode(),
   });
   const response = await fetch(wfsUrl);
+  const responseText = await response.text();
   if (!response.ok) {
     throw new Error(
       `Could not load ${layerItem.title}: HTTP ${response.status}`,
     );
   }
 
-  const geojson = await response.json();
+  if (responseText.trim().startsWith("<")) {
+    const xml = new DOMParser().parseFromString(responseText, "text/xml");
+    const exceptionText =
+      xml.querySelector("ExceptionText")?.textContent ||
+      xml.querySelector("ServiceException")?.textContent ||
+      responseText.slice(0, 240);
+    throw new Error(
+      `GeoServer returned XML instead of GeoJSON for ${layerItem.title}: ${exceptionText}`,
+    );
+  }
+
+  let geojson;
+  try {
+    geojson = JSON.parse(responseText);
+  } catch (error) {
+    throw new Error(
+      `Could not parse GeoJSON for ${layerItem.title}: ${error.message}`,
+    );
+  }
   const format = new GeoJSON();
   layerItem.features = format.readFeatures(geojson, {
-    dataProjection: "EPSG:3857",
+    dataProjection: map.getView().getProjection().getCode(),
     featureProjection: map.getView().getProjection().getCode(),
   });
   const firstFeature = layerItem.features.find((feature) =>
@@ -5474,6 +5502,158 @@ function createVerticesResultLayer(features, title) {
   return resultLayer;
 }
 
+function createPointGridResultLayer(features, title, spacing, units) {
+  const resultSource = new VectorSource({ features });
+  const resultLayer = new VectorLayer({
+    source: resultSource,
+    title,
+    displayInLayerSwitcher: true,
+    visible: true,
+    style: verticesResultStyle,
+  });
+
+  const mapProjection = map.getView().getProjection().getCode();
+  features.forEach((feature) => feature.set("_featureProjection", mapProjection));
+  resultLayer.set("editableVector", true);
+  resultLayer.set("geoprocessLayer", true);
+  resultLayer.set("pointGridLayer", true);
+  resultLayer.set("geometryType", "Point");
+  resultLayer.set("featureProjection", mapProjection);
+  resultLayer.set("sourceProjection", mapProjection);
+  resultLayer.set("gridSpacing", spacing);
+  resultLayer.set("gridUnits", units);
+  resultLayer.set("attributeSchema", [
+    { name: "grid_id", type: "number" },
+    { name: "source_layer", type: "text" },
+    { name: "spacing", type: "number" },
+    { name: "units", type: "text" },
+  ]);
+
+  map.addLayer(resultLayer);
+
+  const extent = resultSource.getExtent();
+  if (features.length && extent.every(Number.isFinite)) {
+    map.getView().fit(extent, {
+      duration: 600,
+      padding: [60, 60, 60, 60],
+      maxZoom: 18,
+    });
+  }
+
+  return resultLayer;
+}
+
+async function createPointGridFromLayer() {
+  const layerItem = getSelectedLayerItem(
+    pointGridLayerSelect,
+    currentGeoprocessLayerItems,
+  );
+  if (!layerItem) {
+    alert("Choose a polygon reference layer first.");
+    return;
+  }
+
+  const turfApi = getTurf();
+  if (!turfApi?.pointGrid || !turfApi?.booleanPointInPolygon) {
+    alert("Turf point grid tools are not loaded.");
+    return;
+  }
+
+  const spacing = Number(pointGridSpacing.value);
+  const units = pointGridUnits.value || "meters";
+  if (!Number.isFinite(spacing) || spacing <= 0) {
+    alert("Set a positive grid spacing.");
+    return;
+  }
+
+  pointGridApply.disabled = true;
+  pointGridApply.textContent = "Creating...";
+
+  try {
+    await loadGeoprocessFeatures(layerItem);
+    if (!layerItem.features?.length) {
+      alert("The selected layer has no polygon features.");
+      return;
+    }
+
+    const format = new GeoJSON();
+    const polygonGeoJsonFeatures = layerItem.features
+      .filter((feature) =>
+        ["Polygon", "MultiPolygon"].includes(getBaseGeometryType(feature)),
+      )
+      .map((feature) =>
+        format.writeFeatureObject(feature, {
+          featureProjection: map.getView().getProjection().getCode(),
+          dataProjection: "EPSG:4326",
+        }),
+      );
+
+    if (!polygonGeoJsonFeatures.length) {
+      alert("The selected layer does not contain polygon features.");
+      return;
+    }
+
+    const collection = turfApi.featureCollection(polygonGeoJsonFeatures);
+    const grid = turfApi.pointGrid(turfApi.bbox(collection), spacing, {
+      units,
+    });
+    const pointFeatures = [];
+
+    grid.features.forEach((pointFeature) => {
+      const inside = polygonGeoJsonFeatures.some((polygonFeature) => {
+        try {
+          return turfApi.booleanPointInPolygon(pointFeature, polygonFeature);
+        } catch (error) {
+          console.warn("Point grid containment check failed:", error);
+          return false;
+        }
+      });
+      if (!inside) return;
+
+      pointFeature.properties = {
+        ...(pointFeature.properties || {}),
+        grid_id: pointFeatures.length + 1,
+        source_layer: layerItem.title,
+        spacing,
+        units,
+      };
+      pointFeatures.push(
+        format.readFeature(pointFeature, {
+          dataProjection: "EPSG:4326",
+          featureProjection: map.getView().getProjection().getCode(),
+        }),
+      );
+    });
+
+    if (!pointFeatures.length) {
+      alert("No grid points were created inside the selected polygon layer.");
+      return;
+    }
+
+    const resultLayer = createPointGridResultLayer(
+      pointFeatures,
+      pointGridLayerName.value.trim() || `${layerItem.title} point grid`,
+      spacing,
+      units,
+    );
+    selectedLayer = resultLayer;
+    vectorLayer = resultLayer;
+    source = resultLayer.getSource();
+    wfsVectorLayer = resultLayer;
+    wfsVectorSource = source;
+    layerTitle = resultLayer.get("title");
+    layerName = layerTitle;
+    layerType = "Point";
+    closePointGridDialog();
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "Could not create the point grid.");
+  } finally {
+    pointGridApply.disabled = false;
+    pointGridApply.textContent = "Create Grid";
+  }
+}
+
 function showFeaturesInAttributeTable(features) {
   const tableContainer = document.getElementById("attribute-table-container");
   tableContainer.hidden = false;
@@ -5499,6 +5679,13 @@ function getVerticesLayerItems() {
   );
 }
 
+function getPointGridLayerItems() {
+  return getGeoprocessLayerItems().filter((item) => {
+    if (item.sourceType === "wfs") return true;
+    return ["Polygon", "MultiPolygon"].includes(item.geometryType);
+  });
+}
+
 function openVerticesDialog() {
   currentGeoprocessLayerItems = getVerticesLayerItems();
   fillLayerSelect(verticesLayerSelect, currentGeoprocessLayerItems);
@@ -5511,6 +5698,22 @@ function openVerticesDialog() {
 function closeVerticesDialog() {
   verticesModal.classList.remove("open");
   verticesModal.setAttribute("aria-hidden", "true");
+}
+
+function openPointGridDialog() {
+  currentGeoprocessLayerItems = getPointGridLayerItems();
+  fillLayerSelect(pointGridLayerSelect, currentGeoprocessLayerItems);
+  pointGridLayerName.value = "Point grid";
+  pointGridSpacing.value = "25";
+  pointGridUnits.value = "meters";
+  geoprocessOptions.classList.remove("dropdown-show");
+  pointGridModal.classList.add("open");
+  pointGridModal.setAttribute("aria-hidden", "false");
+}
+
+function closePointGridDialog() {
+  pointGridModal.classList.remove("open");
+  pointGridModal.setAttribute("aria-hidden", "true");
 }
 
 async function createVerticesFromLayer() {
@@ -5787,6 +5990,7 @@ document.addEventListener("click", (event) => {
 btnIntersectLayers.addEventListener("click", openIntersectionDialog);
 btnMergeLayers.addEventListener("click", openMergeLayersDialog);
 btnVerticesLayer.addEventListener("click", openVerticesDialog);
+btnPointGrid.addEventListener("click", openPointGridDialog);
 intersectModalClose.addEventListener("click", closeIntersectionDialog);
 intersectCancel.addEventListener("click", closeIntersectionDialog);
 intersectApply.addEventListener("click", applyIntersectionDialog);
@@ -5796,6 +6000,9 @@ mergeLayersApply.addEventListener("click", applyMergeLayersDialog);
 verticesModalClose.addEventListener("click", closeVerticesDialog);
 verticesCancel.addEventListener("click", closeVerticesDialog);
 verticesApply.addEventListener("click", createVerticesFromLayer);
+pointGridModalClose.addEventListener("click", closePointGridDialog);
+pointGridCancel.addEventListener("click", closePointGridDialog);
+pointGridApply.addEventListener("click", createPointGridFromLayer);
 intersectModal.addEventListener("click", (event) => {
   if (event.target === intersectModal) closeIntersectionDialog();
 });
@@ -5804,6 +6011,9 @@ mergeLayersModal.addEventListener("click", (event) => {
 });
 verticesModal.addEventListener("click", (event) => {
   if (event.target === verticesModal) closeVerticesDialog();
+});
+pointGridModal.addEventListener("click", (event) => {
+  if (event.target === pointGridModal) closePointGridDialog();
 });
 
 // SAVE FEATURE EVENT

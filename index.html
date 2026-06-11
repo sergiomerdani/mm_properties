@@ -135,6 +135,9 @@
                 <button id="btnVerticesLayer" title="Feature vertices to points">
                   <i class="fa-solid fa-circle-nodes"></i>
                 </button>
+                <button id="btnPointGrid" title="Point Grid">
+                  <i class="fa-solid fa-border-all"></i>
+                </button>
               </div>
             </div>
           </div>
@@ -274,6 +277,39 @@
           <div class="buffer-modal-actions">
             <button id="verticesCancel" type="button">Cancel</button>
             <button id="verticesApply" type="button">Create Points</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="pointGridModal" aria-hidden="true">
+        <div id="pointGridModalContent">
+          <div class="buffer-modal-header">
+            <h4>Point Grid</h4>
+            <button id="pointGridModalClose" type="button" title="Close">×</button>
+          </div>
+
+          <label for="pointGridLayerSelect">Reference Polygon Layer</label>
+          <select id="pointGridLayerSelect"></select>
+
+          <label for="pointGridSpacing">Spacing</label>
+          <div class="buffer-input-row">
+            <input type="number" id="pointGridSpacing" min="0.1" step="0.1" value="25" />
+            <select id="pointGridUnits">
+              <option value="meters">Meters</option>
+              <option value="kilometers">Kilometers</option>
+            </select>
+          </div>
+
+          <label for="pointGridLayerName">Output Layer Name</label>
+          <input type="text" id="pointGridLayerName" value="Point grid" />
+
+          <div class="buffer-help">
+            Creates points inside polygon features from the selected reference layer.
+          </div>
+
+          <div class="buffer-modal-actions">
+            <button id="pointGridCancel" type="button">Cancel</button>
+            <button id="pointGridApply" type="button">Create Grid</button>
           </div>
         </div>
       </div>

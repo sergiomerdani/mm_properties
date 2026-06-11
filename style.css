@@ -2826,7 +2826,8 @@ button.fa-button.active {
 #mergeModal,
 #intersectModal,
 #mergeLayersModal,
-#verticesModal {
+#verticesModal,
+#pointGridModal {
   display: none;
   position: fixed;
   inset: 0;
@@ -2841,7 +2842,8 @@ button.fa-button.active {
 #mergeModal.open,
 #intersectModal.open,
 #mergeLayersModal.open,
-#verticesModal.open {
+#verticesModal.open,
+#pointGridModal.open {
   display: flex;
 }
 
@@ -2849,7 +2851,8 @@ button.fa-button.active {
 #mergeModalContent,
 #intersectModalContent,
 #mergeLayersModalContent,
-#verticesModalContent {
+#verticesModalContent,
+#pointGridModalContent {
   width: min(360px, 100%);
   background: #ffffff;
   border: 1px solid #cbd5e1;
@@ -2881,7 +2884,8 @@ button.fa-button.active {
 #mergeModalClose,
 #intersectModalClose,
 #mergeLayersModalClose,
-#verticesModalClose {
+#verticesModalClose,
+#pointGridModalClose {
   width: 28px;
   height: 28px;
   border: 0;
@@ -2896,7 +2900,8 @@ button.fa-button.active {
 #mergeModalContent label,
 #intersectModalContent label,
 #mergeLayersModalContent label,
-#verticesModalContent label {
+#verticesModalContent label,
+#pointGridModalContent label {
   display: block;
   margin: 10px 0 5px;
   font-size: 12px;
@@ -2913,7 +2918,11 @@ button.fa-button.active {
 #mergeLayerB,
 #mergeLayersName,
 #verticesLayerSelect,
-#verticesLayerName {
+#verticesLayerName,
+#pointGridLayerSelect,
+#pointGridSpacing,
+#pointGridUnits,
+#pointGridLayerName {
   height: 32px;
   border: 1px solid #bfccd8;
   border-radius: 4px;
@@ -2937,7 +2946,9 @@ button.fa-button.active {
 #mergeLayerB,
 #mergeLayersName,
 #verticesLayerSelect,
-#verticesLayerName {
+#verticesLayerName,
+#pointGridLayerSelect,
+#pointGridLayerName {
   width: 100%;
   background: white;
 }
