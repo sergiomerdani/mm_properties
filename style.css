@@ -586,7 +586,7 @@ hr {
 
 .geoserver-manager-modal .modal-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
   flex: 1 1 auto;
   min-height: 0;
@@ -832,6 +832,97 @@ hr {
   border-color: #93c5fd;
   background: #dbeafe;
   color: #1d4ed8;
+}
+
+.geoserver-manager-style-section {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.geoserver-manager-style-section h6 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0;
+  color: #172033;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.geoserver-manager-style-section h6 span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: none;
+}
+
+.geoserver-manager-style-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d8e1ea;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #172033;
+  text-align: left;
+  cursor: pointer;
+}
+
+.geoserver-manager-style-row:hover,
+.geoserver-manager-style-row.active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.geoserver-manager-style-row > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.geoserver-manager-style-row strong {
+  overflow: hidden;
+  color: #172033;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geoserver-manager-style-row small {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geoserver-manager-style-row i {
+  color: #94a3b8;
+  font-size: 11px;
+  transition: transform 0.16s ease;
+}
+
+.geoserver-manager-style-row.active i {
+  transform: rotate(90deg);
+}
+
+.geoserver-manager-legend {
+  margin: -2px 0 8px;
+  padding: 10px;
+  border: 1px solid #d8e1ea;
+  border-radius: 7px;
+  background: #f8fafc;
+}
+
+.geoserver-manager-legend img {
+  display: block;
+  max-width: 100%;
+  height: auto;
 }
 
 .geoserver-create-layer-dialog {

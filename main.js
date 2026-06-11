@@ -7659,6 +7659,7 @@ const geoserverLayerGroupsList = document.getElementById(
   "geoserverLayerGroupsList",
 );
 const geoserverLayersList = document.getElementById("geoserverLayersList");
+const geoserverStylesList = document.getElementById("geoserverStylesList");
 const geoserverNewGroupBtn = document.getElementById("geoserverNewGroupBtn");
 const geoserverNewGroupForm = document.getElementById("geoserverNewGroupForm");
 const geoserverNewGroupName = document.getElementById("geoserverNewGroupName");
@@ -7707,6 +7708,7 @@ const geoserverManagerWmsUrl = `http://localhost:8080/geoserver/${geoserverManag
 let geoserverManagerLayers = [];
 let geoserverUpdateGroupStyleByLayer = new Map();
 const geoserverLayerStyleCache = new Map();
+let geoserverStyleLegendLayerByStyle = new Map();
 
 function normalizeManagerItems(data, preferredKeys = []) {
   if (!data) return [];
@@ -8003,6 +8005,219 @@ function isUsableGeoServerStyleName(styleName) {
     .trim()
     .toLowerCase();
   return Boolean(value) && value !== "assigned style" && value !== "default";
+}
+
+function getStyleDisplayName(style) {
+  return getStyleName(style) || getManagerItemName(style);
+}
+
+function getStyleMeta(style) {
+  if (!style || typeof style === "string") return "";
+  return (
+    style.workspace ||
+    style.type ||
+    style.format ||
+    style.kind ||
+    style.description ||
+    style.href ||
+    ""
+  );
+}
+
+function getStyleLegendKeys(styleName) {
+  const qualifiedStyleName = String(styleName || "").trim();
+  const plainStyleName = getComparableLayerName(qualifiedStyleName);
+  return [
+    qualifiedStyleName.toLowerCase(),
+    plainStyleName.toLowerCase(),
+  ].filter(Boolean);
+}
+
+async function buildStyleLegendLayerLookup(layers) {
+  geoserverStyleLegendLayerByStyle = new Map();
+  const layerNames = layers
+    .map(getManagerItemName)
+    .filter((name) => name && name !== "Unnamed");
+
+  const results = await Promise.allSettled(
+    layerNames.map(async (layerName) => {
+      const restLayerDetails = await fetchGeoServerRestLayerDetails(layerName);
+      const styleName = getStyleName(restLayerDetails?.layer?.defaultStyle);
+      const legendLayer =
+        restLayerDetails?.layer?.resource?.name ||
+        getGeoServerQualifiedLayerName(layerName);
+      return { styleName, legendLayer };
+    }),
+  );
+
+  results.forEach((result) => {
+    if (result.status !== "fulfilled" || !result.value.styleName) return;
+    getStyleLegendKeys(result.value.styleName).forEach((key) => {
+      geoserverStyleLegendLayerByStyle.set(key, result.value.legendLayer);
+    });
+  });
+}
+
+function getLegendLayerForStyle(styleName) {
+  return (
+    geoserverStyleLegendLayerByStyle.get(String(styleName || "").toLowerCase()) ||
+    geoserverStyleLegendLayerByStyle.get(
+      getComparableLayerName(styleName).toLowerCase(),
+    ) ||
+    (styleName.includes(":")
+      ? styleName
+      : `${geoserverManagerWorkspace}:${styleName}`)
+  );
+}
+
+async function fetchGeoServerWorkspaceStyles() {
+  const requestOptions = {
+      method: "GET",
+      headers: {
+        Authorization: "Basic " + btoa(`${username}:${password}`),
+        Accept: "application/json",
+      },
+      credentials: "include",
+    };
+  const urls = [
+    `http://${host}:${port}/geoserver/rest/workspaces/${encodeURIComponent(geoserverManagerWorkspace)}/styles.json`,
+    `http://localhost:8000/geoserver-proxy/${geoserverManagerWorkspace}/rest/workspaces/${encodeURIComponent(geoserverManagerWorkspace)}/styles.json`,
+  ];
+  let lastError = null;
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, requestOptions);
+      const data = await response.json().catch(async () => ({
+        message: await response.text().catch(() => ""),
+      }));
+
+      if (!response.ok) {
+        throw new Error(
+          `Workspace styles failed with status ${response.status} at ${url}`,
+        );
+      }
+
+      return normalizeManagerItems(data, [
+        "style",
+        "styles",
+        "items",
+        "results",
+      ]);
+    } catch (error) {
+      lastError = error;
+      console.warn(error);
+    }
+  }
+
+  throw lastError || new Error("Workspace styles request failed.");
+}
+
+function renderStyleCategory(title, styles, emptyMessage) {
+  const rows = styles.length
+    ? styles
+        .map((style) => {
+          const name = getStyleDisplayName(style);
+          const details = style.details || style.raw || style;
+          const meta = style.layer
+            ? `Layer: ${style.layer}`
+            : getStyleMeta(details || style);
+          const legendLayer = getLegendLayerForStyle(name);
+          const legendUrl =
+            `http://localhost:8000/geoserver-proxy/${geoserverManagerWorkspace}/wms?` +
+            new URLSearchParams({
+              REQUEST: "GetLegendGraphic",
+              VERSION: "1.0.0",
+              FORMAT: "image/png",
+              WIDTH: "20",
+              HEIGHT: "20",
+              LAYER: legendLayer,
+            }).toString();
+          return `
+            <button
+              type="button"
+              class="geoserver-manager-style-row"
+              data-legend-url="${escapeNearbyHtml(legendUrl)}"
+              data-style-name="${escapeNearbyHtml(name)}"
+            >
+              <span>
+                <strong>${escapeNearbyHtml(name)}</strong>
+                ${meta ? `<small>${escapeNearbyHtml(meta)}</small>` : ""}
+              </span>
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          `;
+        })
+        .join("")
+    : `<div class="geoserver-manager-empty">${emptyMessage}</div>`;
+
+  return `
+    <section class="geoserver-manager-style-section">
+      <h6>${escapeNearbyHtml(title)} <span>${styles.length}</span></h6>
+      ${rows}
+    </section>
+  `;
+}
+
+function attachGeoServerStyleLegendToggles() {
+  geoserverStylesList
+    ?.querySelectorAll(".geoserver-manager-style-row")
+    .forEach((row) => {
+      row.addEventListener("click", () => {
+        if (row.dataset.expanded === "true") {
+          row.dataset.expanded = "false";
+          row.classList.remove("active");
+          row.nextElementSibling?.classList.contains(
+            "geoserver-manager-legend",
+          ) && row.nextElementSibling.remove();
+          return;
+        }
+
+        geoserverStylesList
+          .querySelectorAll(".geoserver-manager-style-row")
+          .forEach((button) => {
+            button.dataset.expanded = "false";
+            button.classList.remove("active");
+          });
+        geoserverStylesList
+          .querySelectorAll(".geoserver-manager-legend")
+          .forEach((legend) => legend.remove());
+
+        row.dataset.expanded = "true";
+        row.classList.add("active");
+
+        const legend = document.createElement("div");
+        legend.className = "geoserver-manager-legend";
+        legend.innerHTML = `
+          <img
+            src="${row.dataset.legendUrl}"
+            alt="${escapeNearbyHtml(row.dataset.styleName || "Style")} legend"
+          />
+        `;
+        row.insertAdjacentElement("afterend", legend);
+      });
+    });
+}
+
+async function loadGeoServerManagerStyles(layers = []) {
+  renderManagerLoading(geoserverStylesList, "Loading styles...");
+
+  try {
+    await buildStyleLegendLayerLookup(layers);
+    const styles = await fetchGeoServerWorkspaceStyles();
+    geoserverStylesList.innerHTML = renderStyleCategory(
+      "Workspace Styles",
+      styles,
+      "No workspace styles returned.",
+    );
+    attachGeoServerStyleLegendToggles();
+  } catch (error) {
+    console.error(error);
+    renderManagerError(
+      geoserverStylesList,
+      error.message || "Could not load styles.",
+    );
+  }
 }
 
 function renderLayerStyleSummary(details) {
@@ -8473,6 +8688,7 @@ function renderManagerList(container, items, options) {
 async function loadGeoServerManagerData() {
   renderManagerLoading(geoserverLayerGroupsList, "Loading layer groups...");
   renderManagerLoading(geoserverLayersList, "Loading layers...");
+  renderManagerLoading(geoserverStylesList, "Waiting for layers...");
 
   try {
     const response = await fetch("http://localhost:8000/api/layergroups/");
@@ -8577,9 +8793,11 @@ async function loadGeoServerManagerData() {
         }
       },
     });
+    loadGeoServerManagerStyles(layers);
   } catch (error) {
     console.error(error);
     renderManagerError(geoserverLayersList, "Could not load layers.");
+    loadGeoServerManagerStyles([]);
   }
 }
 
