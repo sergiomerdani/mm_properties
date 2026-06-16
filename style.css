@@ -2826,8 +2826,11 @@ button.fa-button.active {
 #mergeModal,
 #intersectModal,
 #mergeLayersModal,
+#clipDifferenceModal,
 #verticesModal,
 #pointGridModal,
+#centroidModal,
+#pointOnFeatureModal,
 #gridScoreModal {
   display: none;
   position: fixed;
@@ -2843,8 +2846,11 @@ button.fa-button.active {
 #mergeModal.open,
 #intersectModal.open,
 #mergeLayersModal.open,
+#clipDifferenceModal.open,
 #verticesModal.open,
 #pointGridModal.open,
+#centroidModal.open,
+#pointOnFeatureModal.open,
 #gridScoreModal.open {
   display: flex;
 }
@@ -2853,8 +2859,11 @@ button.fa-button.active {
 #mergeModalContent,
 #intersectModalContent,
 #mergeLayersModalContent,
+#clipDifferenceModalContent,
 #verticesModalContent,
 #pointGridModalContent,
+#centroidModalContent,
+#pointOnFeatureModalContent,
 #gridScoreModalContent {
   width: min(360px, 100%);
   background: #ffffff;
@@ -2887,8 +2896,11 @@ button.fa-button.active {
 #mergeModalClose,
 #intersectModalClose,
 #mergeLayersModalClose,
+#clipDifferenceModalClose,
 #verticesModalClose,
 #pointGridModalClose,
+#centroidModalClose,
+#pointOnFeatureModalClose,
 #gridScoreModalClose {
   width: 28px;
   height: 28px;
@@ -2904,8 +2916,11 @@ button.fa-button.active {
 #mergeModalContent label,
 #intersectModalContent label,
 #mergeLayersModalContent label,
+#clipDifferenceModalContent label,
 #verticesModalContent label,
 #pointGridModalContent label,
+#centroidModalContent label,
+#pointOnFeatureModalContent label,
 #gridScoreModalContent label {
   display: block;
   margin: 10px 0 5px;
@@ -2922,12 +2937,19 @@ button.fa-button.active {
 #mergeLayerA,
 #mergeLayerB,
 #mergeLayersName,
+#clipDifferenceInputLayer,
+#clipDifferenceClipLayer,
+#clipDifferenceLayerName,
 #verticesLayerSelect,
 #verticesLayerName,
 #pointGridLayerSelect,
 #pointGridSpacing,
 #pointGridUnits,
 #pointGridLayerName,
+#centroidLayerSelect,
+#centroidLayerName,
+#pointOnFeatureLayerSelect,
+#pointOnFeatureLayerName,
 #gridScoreLayerSelect,
 #gridScoreRadius,
 #gridScoreUnits {
@@ -2953,10 +2975,17 @@ button.fa-button.active {
 #mergeLayerA,
 #mergeLayerB,
 #mergeLayersName,
+#clipDifferenceInputLayer,
+#clipDifferenceClipLayer,
+#clipDifferenceLayerName,
 #verticesLayerSelect,
 #verticesLayerName,
 #pointGridLayerSelect,
 #pointGridLayerName,
+#centroidLayerSelect,
+#centroidLayerName,
+#pointOnFeatureLayerSelect,
+#pointOnFeatureLayerName,
 #gridScoreLayerSelect {
   width: 100%;
   background: white;
@@ -3074,8 +3103,11 @@ button.fa-button.active {
 #mergeApply,
 #intersectApply,
 #mergeLayersApply,
+#clipDifferenceApply,
 #verticesApply,
 #pointGridApply,
+#centroidApply,
+#pointOnFeatureApply,
 #gridScoreRun {
   background: #2563eb;
   border-color: #2563eb;

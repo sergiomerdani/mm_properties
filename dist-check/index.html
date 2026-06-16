@@ -13,8 +13,8 @@
       crossorigin="anonymous"
     ></script>
     <title>INOVACIONI</title>
-    <script type="module" crossorigin src="/assets/index-LnAkhdI4.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-IZj36PCG.css">
+    <script type="module" crossorigin src="/assets/index-9fCbaXUN.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CJJmWY8T.css">
   </head>
   <body>
     <div class="grid-container">
@@ -127,11 +127,20 @@
                 <button id="btnIntersectLayers" title="Intersect Layers">
                   <i class="fa-solid fa-vector-square"></i>
                 </button>
+                <button id="btnClipDifference" title="Clip Difference">
+                  <i class="fa-solid fa-crop-simple"></i>
+                </button>
                 <button id="btnMergeLayers" title="Merge Layers">
                   <i class="fa-solid fa-layer-group"></i>
                 </button>
                 <button id="btnVerticesLayer" title="Feature vertices to points">
                   <i class="fa-solid fa-circle-nodes"></i>
+                </button>
+                <button id="btnCentroidLayer" title="Polygon Centroids">
+                  <i class="fa-solid fa-location-crosshairs"></i>
+                </button>
+                <button id="btnPointOnFeatureLayer" title="Point On Feature">
+                  <i class="fa-solid fa-map-pin"></i>
                 </button>
                 <button id="btnPointGrid" title="Point Grid">
                   <i class="fa-solid fa-border-all"></i>
@@ -258,6 +267,33 @@
         </div>
       </div>
 
+      <div id="clipDifferenceModal" aria-hidden="true">
+        <div id="clipDifferenceModalContent">
+          <div class="buffer-modal-header">
+            <h4>Clip Difference</h4>
+            <button id="clipDifferenceModalClose" type="button" title="Close">Ã—</button>
+          </div>
+
+          <label for="clipDifferenceInputLayer">Input Polygon Layer</label>
+          <select id="clipDifferenceInputLayer"></select>
+
+          <label for="clipDifferenceClipLayer">Remove Overlap With</label>
+          <select id="clipDifferenceClipLayer"></select>
+
+          <label for="clipDifferenceLayerName">Output Layer Name</label>
+          <input type="text" id="clipDifferenceLayerName" value="Clipped difference" />
+
+          <div class="buffer-help">
+            Removes the overlapping area from the input polygons and creates a new editable polygon layer.
+          </div>
+
+          <div class="buffer-modal-actions">
+            <button id="clipDifferenceCancel" type="button">Cancel</button>
+            <button id="clipDifferenceApply" type="button">Create Clip</button>
+          </div>
+        </div>
+      </div>
+
       <div id="verticesModal" aria-hidden="true">
         <div id="verticesModalContent">
           <div class="buffer-modal-header">
@@ -311,6 +347,54 @@
           <div class="buffer-modal-actions">
             <button id="pointGridCancel" type="button">Cancel</button>
             <button id="pointGridApply" type="button">Create Grid</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="centroidModal" aria-hidden="true">
+        <div id="centroidModalContent">
+          <div class="buffer-modal-header">
+            <h4>Polygon Centroids</h4>
+            <button id="centroidModalClose" type="button" title="Close">Ã—</button>
+          </div>
+
+          <label for="centroidLayerSelect">Polygon Layer</label>
+          <select id="centroidLayerSelect"></select>
+
+          <label for="centroidLayerName">Output Layer Name</label>
+          <input type="text" id="centroidLayerName" value="Polygon centroids" />
+
+          <div class="buffer-help">
+            Creates one centroid point for each polygon and keeps the source attributes.
+          </div>
+
+          <div class="buffer-modal-actions">
+            <button id="centroidCancel" type="button">Cancel</button>
+            <button id="centroidApply" type="button">Create Centroids</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="pointOnFeatureModal" aria-hidden="true">
+        <div id="pointOnFeatureModalContent">
+          <div class="buffer-modal-header">
+            <h4>Point On Feature</h4>
+            <button id="pointOnFeatureModalClose" type="button" title="Close">Ã—</button>
+          </div>
+
+          <label for="pointOnFeatureLayerSelect">Vector Layer</label>
+          <select id="pointOnFeatureLayerSelect"></select>
+
+          <label for="pointOnFeatureLayerName">Output Layer Name</label>
+          <input type="text" id="pointOnFeatureLayerName" value="Point on feature" />
+
+          <div class="buffer-help">
+            Creates one point on each selected feature and keeps the source attributes.
+          </div>
+
+          <div class="buffer-modal-actions">
+            <button id="pointOnFeatureCancel" type="button">Cancel</button>
+            <button id="pointOnFeatureApply" type="button">Create Points</button>
           </div>
         </div>
       </div>

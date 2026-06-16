@@ -5244,8 +5244,11 @@ const btnGeoprocess = document.getElementById("btnGeoprocess");
 const btnGeoprocessDropdown = document.getElementById("btnGeoprocessDropdown");
 const geoprocessOptions = document.getElementById("geoprocessOptions");
 const btnIntersectLayers = document.getElementById("btnIntersectLayers");
+const btnClipDifference = document.getElementById("btnClipDifference");
 const btnMergeLayers = document.getElementById("btnMergeLayers");
 const btnVerticesLayer = document.getElementById("btnVerticesLayer");
+const btnCentroidLayer = document.getElementById("btnCentroidLayer");
+const btnPointOnFeatureLayer = document.getElementById("btnPointOnFeatureLayer");
 const btnPointGrid = document.getElementById("btnPointGrid");
 const btnGridScore = document.getElementById("btnGridScore");
 const intersectModal = document.getElementById("intersectModal");
@@ -5254,6 +5257,21 @@ const intersectCancel = document.getElementById("intersectCancel");
 const intersectApply = document.getElementById("intersectApply");
 const intersectLayerA = document.getElementById("intersectLayerA");
 const intersectLayerB = document.getElementById("intersectLayerB");
+const clipDifferenceModal = document.getElementById("clipDifferenceModal");
+const clipDifferenceModalClose = document.getElementById(
+  "clipDifferenceModalClose",
+);
+const clipDifferenceCancel = document.getElementById("clipDifferenceCancel");
+const clipDifferenceApply = document.getElementById("clipDifferenceApply");
+const clipDifferenceInputLayer = document.getElementById(
+  "clipDifferenceInputLayer",
+);
+const clipDifferenceClipLayer = document.getElementById(
+  "clipDifferenceClipLayer",
+);
+const clipDifferenceLayerName = document.getElementById(
+  "clipDifferenceLayerName",
+);
 const mergeLayersModal = document.getElementById("mergeLayersModal");
 const mergeLayersModalClose = document.getElementById("mergeLayersModalClose");
 const mergeLayersCancel = document.getElementById("mergeLayersCancel");
@@ -5267,6 +5285,24 @@ const verticesCancel = document.getElementById("verticesCancel");
 const verticesApply = document.getElementById("verticesApply");
 const verticesLayerSelect = document.getElementById("verticesLayerSelect");
 const verticesLayerName = document.getElementById("verticesLayerName");
+const centroidModal = document.getElementById("centroidModal");
+const centroidModalClose = document.getElementById("centroidModalClose");
+const centroidCancel = document.getElementById("centroidCancel");
+const centroidApply = document.getElementById("centroidApply");
+const centroidLayerSelect = document.getElementById("centroidLayerSelect");
+const centroidLayerName = document.getElementById("centroidLayerName");
+const pointOnFeatureModal = document.getElementById("pointOnFeatureModal");
+const pointOnFeatureModalClose = document.getElementById(
+  "pointOnFeatureModalClose",
+);
+const pointOnFeatureCancel = document.getElementById("pointOnFeatureCancel");
+const pointOnFeatureApply = document.getElementById("pointOnFeatureApply");
+const pointOnFeatureLayerSelect = document.getElementById(
+  "pointOnFeatureLayerSelect",
+);
+const pointOnFeatureLayerName = document.getElementById(
+  "pointOnFeatureLayerName",
+);
 const pointGridModal = document.getElementById("pointGridModal");
 const pointGridModalClose = document.getElementById("pointGridModalClose");
 const pointGridCancel = document.getElementById("pointGridCancel");
@@ -5368,6 +5404,8 @@ function getGeoprocessLayerItems() {
     }
 
     if (layer instanceof VectorLayer) {
+      if (layer.get("displayInLayerSwitcher") !== true) return;
+
       const layerSource = layer.getSource?.();
       const layerFeatures = layerSource?.getFeatures?.() || [];
       const firstFeature = layerFeatures.find((feature) =>
@@ -5384,20 +5422,6 @@ function getGeoprocessLayerItems() {
       });
       return;
     }
-
-    const params = layer.getSource?.()?.getParams?.();
-    const typeName = params?.LAYERS || params?.layers;
-    if (!typeName) return;
-
-    items.push({
-      layer,
-      source: layer.getSource?.(),
-      title: layer.get("title") || typeName,
-      features: null,
-      geometryType: "",
-      typeName,
-      sourceType: "wfs",
-    });
   }
 
   map.getLayers().forEach(visitLayer);
@@ -5409,8 +5433,7 @@ function fillLayerSelect(selectElement, items) {
   items.forEach((item, index) => {
     const option = document.createElement("option");
     option.value = String(index);
-    const sourceLabel =
-      item.sourceType === "wfs" ? "WFS" : item.geometryType || "Vector";
+    const sourceLabel = item.geometryType || "Vector";
     option.textContent = `${item.title} (${sourceLabel})`;
     selectElement.appendChild(option);
   });
@@ -5579,20 +5602,28 @@ function createVerticesResultLayer(features, title) {
 
 function createPointGridResultLayer(features, title, spacing, units) {
   const resultSource = new VectorSource({ features });
+  const styleConfig = {
+    strokeColor: "#0891b2",
+    fillColor: "#06b6d4",
+    strokeWidth: 2,
+    pointSize: 6,
+  };
   const resultLayer = new VectorLayer({
     source: resultSource,
     title,
     displayInLayerSwitcher: true,
     visible: true,
-    style: verticesResultStyle,
+    style: createVectorLayerStyle(styleConfig),
   });
 
   const mapProjection = map.getView().getProjection().getCode();
   features.forEach((feature) => feature.set("_featureProjection", mapProjection));
   resultLayer.set("editableVector", true);
+  resultLayer.set("createdVectorLayer", true);
   resultLayer.set("geoprocessLayer", true);
   resultLayer.set("pointGridLayer", true);
   resultLayer.set("geometryType", "Point");
+  resultLayer.set("styleConfig", styleConfig);
   resultLayer.set("featureProjection", mapProjection);
   resultLayer.set("sourceProjection", mapProjection);
   resultLayer.set("gridSpacing", spacing);
@@ -5605,7 +5636,12 @@ function createPointGridResultLayer(features, title, spacing, units) {
   ]);
 
   map.addLayer(resultLayer);
-  registerPersistentVectorLayer(resultLayer, "pointGrid");
+  const gridSaved = ensurePersistentVectorLayerSaved(resultLayer, "pointGrid");
+  if (!gridSaved) {
+    alert(
+      "The point grid was created, but browser storage could not save it. Check available local storage space.",
+    );
+  }
 
   const extent = resultSource.getExtent();
   if (features.length && extent.every(Number.isFinite)) {
@@ -5620,8 +5656,44 @@ function createPointGridResultLayer(features, title, spacing, units) {
 }
 
 const PERSISTED_VECTOR_LAYERS_KEY = "mmPropertiesCreatedVectorLayers";
+const PERSISTED_VECTOR_LAYER_INDEX_KEY =
+  "mmPropertiesCreatedVectorLayerIndexV2";
+const PERSISTED_VECTOR_LAYER_PREFIX = "mmPropertiesCreatedVectorLayerV2:";
+
+function getPersistedVectorLayerIndex() {
+  try {
+    const raw = localStorage.getItem(PERSISTED_VECTOR_LAYER_INDEX_KEY);
+    const ids = raw ? JSON.parse(raw) : [];
+    return Array.isArray(ids) ? ids : [];
+  } catch (error) {
+    console.warn("Could not read saved vector layer index.", error);
+    return [];
+  }
+}
+
+function writePersistedVectorLayerIndex(ids) {
+  localStorage.setItem(
+    PERSISTED_VECTOR_LAYER_INDEX_KEY,
+    JSON.stringify([...new Set(ids)]),
+  );
+}
 
 function getPersistedVectorLayers() {
+  const indexedRecords = getPersistedVectorLayerIndex()
+    .map((id) => {
+      try {
+        const raw = localStorage.getItem(
+          `${PERSISTED_VECTOR_LAYER_PREFIX}${id}`,
+        );
+        return raw ? JSON.parse(raw) : null;
+      } catch (error) {
+        console.warn(`Could not read saved vector layer ${id}.`, error);
+        return null;
+      }
+    })
+    .filter(Boolean);
+  if (indexedRecords.length) return indexedRecords;
+
   try {
     const raw = localStorage.getItem(PERSISTED_VECTOR_LAYERS_KEY);
     const layers = raw ? JSON.parse(raw) : [];
@@ -5634,9 +5706,25 @@ function getPersistedVectorLayers() {
 
 function writePersistedVectorLayers(layers) {
   try {
-    localStorage.setItem(PERSISTED_VECTOR_LAYERS_KEY, JSON.stringify(layers));
+    const previousIds = getPersistedVectorLayerIndex();
+    const nextIds = layers.map((layer) => layer.id);
+    layers.forEach((layer) => {
+      localStorage.setItem(
+        `${PERSISTED_VECTOR_LAYER_PREFIX}${layer.id}`,
+        JSON.stringify(layer),
+      );
+    });
+    previousIds
+      .filter((id) => !nextIds.includes(id))
+      .forEach((id) =>
+        localStorage.removeItem(`${PERSISTED_VECTOR_LAYER_PREFIX}${id}`),
+      );
+    writePersistedVectorLayerIndex(nextIds);
+    localStorage.removeItem(PERSISTED_VECTOR_LAYERS_KEY);
+    return true;
   } catch (error) {
     console.warn("Could not save vector layers to local storage.", error);
+    return false;
   }
 }
 
@@ -5680,9 +5768,14 @@ function getPersistentVectorLayerRecord(layer, layerKind = "vector") {
     createdVectorLayer: Boolean(layer.get("createdVectorLayer")),
     geoprocessLayer: Boolean(layer.get("geoprocessLayer")),
     pointGridLayer: Boolean(layer.get("pointGridLayer")),
+    gridScoreLayer: Boolean(layer.get("gridScoreLayer")),
+    centroidLayer: Boolean(layer.get("centroidLayer")),
+    pointOnFeatureLayer: Boolean(layer.get("pointOnFeatureLayer")),
+    clipDifferenceLayer: Boolean(layer.get("clipDifferenceLayer")),
     gridSpacing: layer.get("gridSpacing") || null,
     gridUnits: layer.get("gridUnits") || null,
     scoreRadiusMeters: layer.get("scoreRadiusMeters") || null,
+    scoreCategories: layer.get("scoreCategories") || [],
     geojson: format.writeFeaturesObject(features, {
       dataProjection: sourceProjection,
       featureProjection: sourceProjection,
@@ -5691,16 +5784,49 @@ function getPersistentVectorLayerRecord(layer, layerKind = "vector") {
 }
 
 function savePersistentVectorLayer(layer, layerKind = "vector") {
-  if (!layer?.getSource?.()) return;
+  if (!layer?.getSource?.()) return false;
   const record = getPersistentVectorLayerRecord(layer, layerKind);
-  const layers = getPersistedVectorLayers();
-  const existingIndex = layers.findIndex((item) => item.id === record.id);
-  if (existingIndex >= 0) {
-    layers[existingIndex] = record;
-  } else {
-    layers.push(record);
+  try {
+    localStorage.setItem(
+      `${PERSISTED_VECTOR_LAYER_PREFIX}${record.id}`,
+      JSON.stringify(record),
+    );
+    const ids = getPersistedVectorLayerIndex();
+    if (!ids.includes(record.id)) {
+      writePersistedVectorLayerIndex([...ids, record.id]);
+    }
+    return true;
+  } catch (error) {
+    console.warn(
+      `Could not save vector layer "${record.title}" to local storage.`,
+      error,
+    );
+    return false;
   }
-  writePersistedVectorLayers(layers);
+}
+
+function deletePersistentVectorLayer(layer) {
+  const persistentLayerId = layer?.get?.("persistentLayerId");
+  if (!persistentLayerId) return;
+
+  const layers = getPersistedVectorLayers();
+  const remainingLayers = layers.filter(
+    (record) => record.id !== persistentLayerId,
+  );
+  if (remainingLayers.length !== layers.length) {
+    try {
+      localStorage.removeItem(
+        `${PERSISTED_VECTOR_LAYER_PREFIX}${persistentLayerId}`,
+      );
+      writePersistedVectorLayerIndex(
+        getPersistedVectorLayerIndex().filter(
+          (id) => id !== persistentLayerId,
+        ),
+      );
+    } catch (error) {
+      console.warn("Could not delete saved vector layer.", error);
+    }
+  }
 }
 
 function registerPersistentVectorLayer(layer, layerKind = "vector") {
@@ -5713,10 +5839,10 @@ function registerPersistentVectorLayer(layer, layerKind = "vector") {
   let saveTimer = null;
   const scheduleSave = () => {
     window.clearTimeout(saveTimer);
-    saveTimer = window.setTimeout(
-      () => savePersistentVectorLayer(layer, layerKind),
-      250,
-    );
+    saveTimer = window.setTimeout(() => {
+      if (!map.getLayers().getArray().includes(layer)) return;
+      savePersistentVectorLayer(layer, layerKind);
+    }, 250);
   };
 
   source.on("addfeature", scheduleSave);
@@ -5724,7 +5850,30 @@ function registerPersistentVectorLayer(layer, layerKind = "vector") {
   source.on("changefeature", scheduleSave);
   source.on("clear", scheduleSave);
   layer.on("change:visible", scheduleSave);
+  layer.on("change:title", scheduleSave);
+  layer.on("change:attributeSchema", scheduleSave);
+  layer.on("change:styleConfig", scheduleSave);
+  layer.on("change:featureProjection", scheduleSave);
+  layer.on("change:sourceProjection", scheduleSave);
   savePersistentVectorLayer(layer, layerKind);
+}
+
+function ensurePersistentVectorLayerSaved(layer, layerKind) {
+  registerPersistentVectorLayer(layer, layerKind);
+  const saved = savePersistentVectorLayer(layer, layerKind);
+  if (!saved) {
+    console.warn(`Layer "${layer.get("title")}" could not be persisted.`);
+    layer.set("persistenceError", true);
+    return false;
+  }
+
+  layer.unset("persistenceError", true);
+
+  window.setTimeout(() => {
+    if (!map.getLayers().getArray().includes(layer)) return;
+    savePersistentVectorLayer(layer, layerKind);
+  }, 500);
+  return true;
 }
 
 function getRestoredVectorLayerStyle(record) {
@@ -5764,6 +5913,16 @@ function restorePersistedVectorLayers() {
       restoredLayer.set("createdVectorLayer", Boolean(record.createdVectorLayer));
       restoredLayer.set("geoprocessLayer", Boolean(record.geoprocessLayer));
       restoredLayer.set("pointGridLayer", Boolean(record.pointGridLayer));
+      restoredLayer.set("gridScoreLayer", Boolean(record.gridScoreLayer));
+      restoredLayer.set("centroidLayer", Boolean(record.centroidLayer));
+      restoredLayer.set(
+        "pointOnFeatureLayer",
+        Boolean(record.pointOnFeatureLayer),
+      );
+      restoredLayer.set(
+        "clipDifferenceLayer",
+        Boolean(record.clipDifferenceLayer),
+      );
       restoredLayer.set("geometryType", record.geometryType || "");
       restoredLayer.set("attributeSchema", record.attributeSchema || []);
       restoredLayer.set("styleConfig", record.styleConfig || null);
@@ -5774,6 +5933,9 @@ function restorePersistedVectorLayers() {
       if (record.scoreRadiusMeters) {
         restoredLayer.set("scoreRadiusMeters", record.scoreRadiusMeters);
       }
+      if (record.scoreCategories?.length) {
+        restoredLayer.set("scoreCategories", record.scoreCategories);
+      }
 
       map.addLayer(restoredLayer);
       registerPersistentVectorLayer(restoredLayer, record.kind || "vector");
@@ -5783,9 +5945,14 @@ function restorePersistedVectorLayers() {
   });
 
   layerSwitcher?.drawPanel?.();
+  window.setTimeout(() => layerSwitcher?.drawPanel?.(), 0);
 }
 
 restorePersistedVectorLayers();
+
+map.getLayers().on("remove", (event) => {
+  deletePersistentVectorLayer(event.element);
+});
 
 async function createPointGridFromLayer() {
   const layerItem = getSelectedLayerItem(
@@ -5924,10 +6091,21 @@ function getVerticesLayerItems() {
 }
 
 function getPointGridLayerItems() {
-  return getGeoprocessLayerItems().filter((item) => {
-    if (item.sourceType === "wfs") return true;
-    return ["Polygon", "MultiPolygon"].includes(item.geometryType);
-  });
+  return getGeoprocessLayerItems().filter((item) =>
+    ["Polygon", "MultiPolygon"].includes(item.geometryType),
+  );
+}
+
+function getPolygonGeoprocessLayerItems() {
+  return getPointGridLayerItems();
+}
+
+function getCentroidLayerItems() {
+  return getPolygonGeoprocessLayerItems();
+}
+
+function getPointOnFeatureLayerItems() {
+  return getGeoprocessLayerItems();
 }
 
 function getGridScoreLayerItems() {
@@ -5952,6 +6130,34 @@ function openVerticesDialog() {
 function closeVerticesDialog() {
   verticesModal.classList.remove("open");
   verticesModal.setAttribute("aria-hidden", "true");
+}
+
+function openCentroidDialog() {
+  currentGeoprocessLayerItems = getCentroidLayerItems();
+  fillLayerSelect(centroidLayerSelect, currentGeoprocessLayerItems);
+  centroidLayerName.value = "Polygon centroids";
+  geoprocessOptions.classList.remove("dropdown-show");
+  centroidModal.classList.add("open");
+  centroidModal.setAttribute("aria-hidden", "false");
+}
+
+function closeCentroidDialog() {
+  centroidModal.classList.remove("open");
+  centroidModal.setAttribute("aria-hidden", "true");
+}
+
+function openPointOnFeatureDialog() {
+  currentGeoprocessLayerItems = getPointOnFeatureLayerItems();
+  fillLayerSelect(pointOnFeatureLayerSelect, currentGeoprocessLayerItems);
+  pointOnFeatureLayerName.value = "Point on feature";
+  geoprocessOptions.classList.remove("dropdown-show");
+  pointOnFeatureModal.classList.add("open");
+  pointOnFeatureModal.setAttribute("aria-hidden", "false");
+}
+
+function closePointOnFeatureDialog() {
+  pointOnFeatureModal.classList.remove("open");
+  pointOnFeatureModal.setAttribute("aria-hidden", "true");
 }
 
 function openPointGridDialog() {
@@ -6191,6 +6397,12 @@ function createScoredGridCopy(layerItem, categories, radiusMeters) {
     layerItem.layer.get("sourceProjection") ||
     layerItem.layer.get("featureProjection") ||
     map.getView().getProjection().getCode();
+  const styleConfig = {
+    strokeColor: "#7c3aed",
+    fillColor: "#8b5cf6",
+    strokeWidth: 2,
+    pointSize: 7,
+  };
   const clonedFeatures = layerItem.features.map((feature) => {
     const clone = feature.clone();
     clone.setProperties(feature.getProperties());
@@ -6202,13 +6414,16 @@ function createScoredGridCopy(layerItem, categories, radiusMeters) {
     title: `${layerItem.title} - Nearby Score`,
     displayInLayerSwitcher: true,
     visible: true,
-    style: geoprocessResultStyle,
+    style: createVectorLayerStyle(styleConfig),
   });
 
   resultLayer.set("editableVector", true);
+  resultLayer.set("createdVectorLayer", true);
   resultLayer.set("geoprocessLayer", true);
   resultLayer.set("pointGridLayer", true);
+  resultLayer.set("gridScoreLayer", true);
   resultLayer.set("geometryType", "Point");
+  resultLayer.set("styleConfig", styleConfig);
   resultLayer.set("featureProjection", sourceProjection);
   resultLayer.set("sourceProjection", sourceProjection);
   resultLayer.set(
@@ -6217,8 +6432,12 @@ function createScoredGridCopy(layerItem, categories, radiusMeters) {
   );
   addGridScoreFieldsToLayer(resultLayer, categories);
   resultLayer.set("scoreRadiusMeters", radiusMeters);
+  resultLayer.set(
+    "scoreCategories",
+    categories.map((category) => category.value),
+  );
   map.addLayer(resultLayer);
-  registerPersistentVectorLayer(resultLayer, "gridScore");
+  ensurePersistentVectorLayerSaved(resultLayer, "gridScore");
   return resultLayer;
 }
 
@@ -6288,6 +6507,12 @@ async function runGridScoreAnalysis({ preview = false } = {}) {
     });
 
     addGridScoreFieldsToLayer(actionLayer, categories);
+    actionLayer.set("gridScoreLayer", true);
+    actionLayer.set("scoreRadiusMeters", radiusMeters);
+    actionLayer.set(
+      "scoreCategories",
+      categories.map((category) => category.value),
+    );
     actionLayer.changed?.();
     savePersistentVectorLayer(
       actionLayer,
@@ -6380,9 +6605,251 @@ async function createVerticesFromLayer() {
   closeVerticesDialog();
 }
 
+function getCentroidAttributeSchema(layerItem, features) {
+  const existingSchema = layerItem.layer.get("attributeSchema") || [];
+  if (existingSchema.length) return existingSchema;
+
+  const firstFeature = features.find((feature) => feature.getProperties);
+  if (!firstFeature) return [];
+
+  return Object.keys(firstFeature.getProperties())
+    .filter((key) => key !== "geometry")
+    .map((key) => {
+      const value = firstFeature.get(key);
+      return {
+        name: key,
+        type: typeof value === "number" ? "number" : "text",
+      };
+    });
+}
+
+async function createCentroidsFromLayer() {
+  const layerItem = getSelectedLayerItem(
+    centroidLayerSelect,
+    currentGeoprocessLayerItems,
+  );
+  if (!layerItem) {
+    alert("Choose a polygon layer first.");
+    return;
+  }
+
+  const turfApi = getTurf();
+  if (!turfApi?.centroid) {
+    alert("Turf centroid is not loaded.");
+    return;
+  }
+
+  centroidApply.disabled = true;
+  centroidApply.textContent = "Creating...";
+
+  try {
+    await loadGeoprocessFeatures(layerItem);
+    const polygonFeatures = (layerItem.features || []).filter((feature) =>
+      ["Polygon", "MultiPolygon"].includes(getBaseGeometryType(feature)),
+    );
+
+    if (!polygonFeatures.length) {
+      alert("The selected layer does not contain polygon features.");
+      return;
+    }
+
+    const mapProjection = map.getView().getProjection().getCode();
+    const format = new GeoJSON();
+    const centroidFeatures = polygonFeatures.map((feature, index) => {
+      const polygonObject = format.writeFeatureObject(feature, {
+        featureProjection: mapProjection,
+        dataProjection: "EPSG:4326",
+      });
+      const centroidObject = turfApi.centroid(polygonObject);
+      centroidObject.properties = {
+        ...(polygonObject.properties || {}),
+        centroid_id: index + 1,
+        source_layer: layerItem.title,
+      };
+      const centroidFeature = format.readFeature(centroidObject, {
+        dataProjection: "EPSG:4326",
+        featureProjection: mapProjection,
+      });
+      centroidFeature.set("_featureProjection", mapProjection, true);
+      return centroidFeature;
+    });
+
+    const styleConfig = {
+      strokeColor: "#be123c",
+      fillColor: "#e11d48",
+      strokeWidth: 2,
+      pointSize: 7,
+    };
+    const centroidSource = new VectorSource({ features: centroidFeatures });
+    const centroidLayer = new VectorLayer({
+      source: centroidSource,
+      title: centroidLayerName.value.trim() || `${layerItem.title} centroids`,
+      displayInLayerSwitcher: true,
+      visible: true,
+      style: createVectorLayerStyle(styleConfig),
+    });
+
+    centroidLayer.set("editableVector", true);
+    centroidLayer.set("createdVectorLayer", true);
+    centroidLayer.set("geoprocessLayer", true);
+    centroidLayer.set("centroidLayer", true);
+    centroidLayer.set("geometryType", "Point");
+    centroidLayer.set("styleConfig", styleConfig);
+    centroidLayer.set("featureProjection", mapProjection);
+    centroidLayer.set("sourceProjection", mapProjection);
+    centroidLayer.set("attributeSchema", [
+      ...getCentroidAttributeSchema(layerItem, polygonFeatures),
+      { name: "centroid_id", type: "number" },
+      { name: "source_layer", type: "text" },
+    ]);
+
+    map.addLayer(centroidLayer);
+    ensurePersistentVectorLayerSaved(centroidLayer, "centroid");
+
+    const extent = centroidSource.getExtent();
+    if (centroidFeatures.length && extent.every(Number.isFinite)) {
+      map.getView().fit(extent, {
+        duration: 600,
+        padding: [60, 60, 60, 60],
+        maxZoom: 18,
+      });
+    }
+
+    closeCentroidDialog();
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "Could not create centroid layer.");
+  } finally {
+    centroidApply.disabled = false;
+    centroidApply.textContent = "Create Centroids";
+  }
+}
+
+async function createPointsOnFeaturesFromLayer() {
+  const layerItem = getSelectedLayerItem(
+    pointOnFeatureLayerSelect,
+    currentGeoprocessLayerItems,
+  );
+  if (!layerItem) {
+    alert("Choose a vector layer first.");
+    return;
+  }
+
+  const turfApi = getTurf();
+  if (!turfApi?.pointOnFeature) {
+    alert("Turf pointOnFeature is not loaded.");
+    return;
+  }
+
+  pointOnFeatureApply.disabled = true;
+  pointOnFeatureApply.textContent = "Creating...";
+
+  try {
+    await loadGeoprocessFeatures(layerItem);
+    const sourceFeatures = (layerItem.features || []).filter((feature) =>
+      feature.getGeometry?.(),
+    );
+
+    if (!sourceFeatures.length) {
+      alert("The selected layer has no features.");
+      return;
+    }
+
+    const mapProjection = map.getView().getProjection().getCode();
+    const format = new GeoJSON();
+    const pointFeatures = sourceFeatures.map((feature, index) => {
+      const sourceObject = format.writeFeatureObject(feature, {
+        featureProjection: mapProjection,
+        dataProjection: "EPSG:4326",
+      });
+      const pointObject = turfApi.pointOnFeature(sourceObject);
+      pointObject.properties = {
+        ...(sourceObject.properties || {}),
+        point_on_feature_id: index + 1,
+        source_layer: layerItem.title,
+      };
+      const pointFeature = format.readFeature(pointObject, {
+        dataProjection: "EPSG:4326",
+        featureProjection: mapProjection,
+      });
+      pointFeature.set("_featureProjection", mapProjection, true);
+      return pointFeature;
+    });
+
+    const styleConfig = {
+      strokeColor: "#166534",
+      fillColor: "#22c55e",
+      strokeWidth: 2,
+      pointSize: 7,
+    };
+    const pointSource = new VectorSource({ features: pointFeatures });
+    const pointLayer = new VectorLayer({
+      source: pointSource,
+      title:
+        pointOnFeatureLayerName.value.trim() ||
+        `${layerItem.title} point on feature`,
+      displayInLayerSwitcher: true,
+      visible: true,
+      style: createVectorLayerStyle(styleConfig),
+    });
+
+    pointLayer.set("editableVector", true);
+    pointLayer.set("createdVectorLayer", true);
+    pointLayer.set("geoprocessLayer", true);
+    pointLayer.set("pointOnFeatureLayer", true);
+    pointLayer.set("geometryType", "Point");
+    pointLayer.set("styleConfig", styleConfig);
+    pointLayer.set("featureProjection", mapProjection);
+    pointLayer.set("sourceProjection", mapProjection);
+    pointLayer.set("attributeSchema", [
+      ...getCentroidAttributeSchema(layerItem, sourceFeatures),
+      { name: "point_on_feature_id", type: "number" },
+      { name: "source_layer", type: "text" },
+    ]);
+
+    map.addLayer(pointLayer);
+    ensurePersistentVectorLayerSaved(pointLayer, "pointOnFeature");
+
+    const extent = pointSource.getExtent();
+    if (pointFeatures.length && extent.every(Number.isFinite)) {
+      map.getView().fit(extent, {
+        duration: 600,
+        padding: [60, 60, 60, 60],
+        maxZoom: 18,
+      });
+    }
+
+    closePointOnFeatureDialog();
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "Could not create point-on-feature layer.");
+  } finally {
+    pointOnFeatureApply.disabled = false;
+    pointOnFeatureApply.textContent = "Create Points";
+  }
+}
+
 function closeIntersectionDialog() {
   intersectModal.classList.remove("open");
   intersectModal.setAttribute("aria-hidden", "true");
+}
+
+function openClipDifferenceDialog() {
+  currentGeoprocessLayerItems = getPolygonGeoprocessLayerItems();
+  fillLayerSelect(clipDifferenceInputLayer, currentGeoprocessLayerItems);
+  fillLayerSelect(clipDifferenceClipLayer, currentGeoprocessLayerItems);
+  clipDifferenceLayerName.value = "Clipped difference";
+  if (currentGeoprocessLayerItems.length > 1) {
+    clipDifferenceClipLayer.value = "1";
+  }
+  geoprocessOptions.classList.remove("dropdown-show");
+  clipDifferenceModal.classList.add("open");
+  clipDifferenceModal.setAttribute("aria-hidden", "false");
+}
+
+function closeClipDifferenceDialog() {
+  clipDifferenceModal.classList.remove("open");
+  clipDifferenceModal.setAttribute("aria-hidden", "true");
 }
 
 function createIntersectingOverlayFeatures(inputLayerItem, overlayLayerItem) {
@@ -6478,6 +6945,165 @@ async function applyIntersectionDialog() {
 
   showFeaturesInAttributeTable(results);
   closeIntersectionDialog();
+}
+
+function runTurfDifference(turfApi, inputFeature, clipFeature) {
+  try {
+    return turfApi.difference(inputFeature, clipFeature);
+  } catch (error) {
+    try {
+      return turfApi.difference(turfApi.featureCollection([inputFeature, clipFeature]));
+    } catch (collectionError) {
+      console.warn("Turf difference failed:", error, collectionError);
+      return null;
+    }
+  }
+}
+
+function createDifferenceFeatures(inputLayerItem, clipLayerItem) {
+  const turfApi = getTurf();
+  if (!turfApi?.difference || !turfApi?.featureCollection) {
+    alert("Turf difference is not loaded.");
+    return [];
+  }
+
+  const format = new GeoJSON();
+  const mapProjection = map.getView().getProjection().getCode();
+  const clipGeoJsonFeatures = clipLayerItem.features
+    .filter((feature) =>
+      ["Polygon", "MultiPolygon"].includes(getBaseGeometryType(feature)),
+    )
+    .map((feature) =>
+      format.writeFeatureObject(feature, {
+        featureProjection: mapProjection,
+        dataProjection: "EPSG:4326",
+      }),
+    );
+
+  const outputFeatures = [];
+  inputLayerItem.features
+    .filter((feature) =>
+      ["Polygon", "MultiPolygon"].includes(getBaseGeometryType(feature)),
+    )
+    .forEach((feature, featureIndex) => {
+      let currentDifference = format.writeFeatureObject(feature, {
+        featureProjection: mapProjection,
+        dataProjection: "EPSG:4326",
+      });
+
+      clipGeoJsonFeatures.forEach((clipFeature) => {
+        if (!currentDifference) return;
+        currentDifference = runTurfDifference(
+          turfApi,
+          currentDifference,
+          clipFeature,
+        );
+      });
+
+      if (!currentDifference) return;
+      currentDifference.properties = {
+        ...(currentDifference.properties || {}),
+        clipped_from_layer: inputLayerItem.title,
+        clipped_by_layer: clipLayerItem.title,
+        difference_id: featureIndex + 1,
+      };
+
+      const readFeatures = format.readFeatures(currentDifference, {
+        dataProjection: "EPSG:4326",
+        featureProjection: mapProjection,
+      });
+      readFeatures.forEach((differenceFeature) => {
+        differenceFeature.set("_featureProjection", mapProjection, true);
+        outputFeatures.push(differenceFeature);
+      });
+    });
+
+  return outputFeatures;
+}
+
+async function applyClipDifferenceDialog() {
+  const inputLayerItem = getSelectedLayerItem(
+    clipDifferenceInputLayer,
+    currentGeoprocessLayerItems,
+  );
+  const clipLayerItem = getSelectedLayerItem(
+    clipDifferenceClipLayer,
+    currentGeoprocessLayerItems,
+  );
+
+  if (!inputLayerItem || !clipLayerItem || inputLayerItem === clipLayerItem) {
+    alert("Choose two different polygon layers.");
+    return;
+  }
+
+  clipDifferenceApply.disabled = true;
+  clipDifferenceApply.textContent = "Processing...";
+
+  try {
+    await loadGeoprocessFeatures(inputLayerItem);
+    await loadGeoprocessFeatures(clipLayerItem);
+    const differenceFeatures = createDifferenceFeatures(
+      inputLayerItem,
+      clipLayerItem,
+    );
+
+    if (!differenceFeatures.length) {
+      alert("No difference features were created. The input may be fully clipped.");
+      return;
+    }
+
+    const styleConfig = {
+      strokeColor: "#0f766e",
+      fillColor: "#14b8a6",
+      strokeWidth: 2,
+      pointSize: 7,
+    };
+    const differenceSource = new VectorSource({ features: differenceFeatures });
+    const differenceLayer = new VectorLayer({
+      source: differenceSource,
+      title:
+        clipDifferenceLayerName.value.trim() ||
+        `${inputLayerItem.title} difference`,
+      displayInLayerSwitcher: true,
+      visible: true,
+      style: createVectorLayerStyle(styleConfig),
+    });
+    const mapProjection = map.getView().getProjection().getCode();
+    differenceLayer.set("editableVector", true);
+    differenceLayer.set("createdVectorLayer", true);
+    differenceLayer.set("geoprocessLayer", true);
+    differenceLayer.set("clipDifferenceLayer", true);
+    differenceLayer.set("geometryType", "Polygon");
+    differenceLayer.set("styleConfig", styleConfig);
+    differenceLayer.set("featureProjection", mapProjection);
+    differenceLayer.set("sourceProjection", mapProjection);
+    differenceLayer.set("attributeSchema", [
+      ...(inputLayerItem.layer.get("attributeSchema") || []),
+      { name: "clipped_from_layer", type: "text" },
+      { name: "clipped_by_layer", type: "text" },
+      { name: "difference_id", type: "number" },
+    ]);
+
+    map.addLayer(differenceLayer);
+    ensurePersistentVectorLayerSaved(differenceLayer, "clipDifference");
+
+    const extent = differenceSource.getExtent();
+    if (extent.every(Number.isFinite)) {
+      map.getView().fit(extent, {
+        duration: 600,
+        padding: [60, 60, 60, 60],
+        maxZoom: 18,
+      });
+    }
+
+    closeClipDifferenceDialog();
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "Could not create clip difference.");
+  } finally {
+    clipDifferenceApply.disabled = false;
+    clipDifferenceApply.textContent = "Create Clip";
+  }
 }
 
 function openMergeLayersDialog() {
@@ -6581,19 +7207,31 @@ document.addEventListener("click", (event) => {
   }
 });
 btnIntersectLayers.addEventListener("click", openIntersectionDialog);
+btnClipDifference.addEventListener("click", openClipDifferenceDialog);
 btnMergeLayers.addEventListener("click", openMergeLayersDialog);
 btnVerticesLayer.addEventListener("click", openVerticesDialog);
+btnCentroidLayer.addEventListener("click", openCentroidDialog);
+btnPointOnFeatureLayer.addEventListener("click", openPointOnFeatureDialog);
 btnPointGrid.addEventListener("click", openPointGridDialog);
 btnGridScore.addEventListener("click", openGridScoreDialog);
 intersectModalClose.addEventListener("click", closeIntersectionDialog);
 intersectCancel.addEventListener("click", closeIntersectionDialog);
 intersectApply.addEventListener("click", applyIntersectionDialog);
+clipDifferenceModalClose.addEventListener("click", closeClipDifferenceDialog);
+clipDifferenceCancel.addEventListener("click", closeClipDifferenceDialog);
+clipDifferenceApply.addEventListener("click", applyClipDifferenceDialog);
 mergeLayersModalClose.addEventListener("click", closeMergeLayersDialog);
 mergeLayersCancel.addEventListener("click", closeMergeLayersDialog);
 mergeLayersApply.addEventListener("click", applyMergeLayersDialog);
 verticesModalClose.addEventListener("click", closeVerticesDialog);
 verticesCancel.addEventListener("click", closeVerticesDialog);
 verticesApply.addEventListener("click", createVerticesFromLayer);
+centroidModalClose.addEventListener("click", closeCentroidDialog);
+centroidCancel.addEventListener("click", closeCentroidDialog);
+centroidApply.addEventListener("click", createCentroidsFromLayer);
+pointOnFeatureModalClose.addEventListener("click", closePointOnFeatureDialog);
+pointOnFeatureCancel.addEventListener("click", closePointOnFeatureDialog);
+pointOnFeatureApply.addEventListener("click", createPointsOnFeaturesFromLayer);
 pointGridModalClose.addEventListener("click", closePointGridDialog);
 pointGridCancel.addEventListener("click", closePointGridDialog);
 pointGridApply.addEventListener("click", createPointGridFromLayer);
@@ -6608,11 +7246,20 @@ gridScoreRun.addEventListener("click", () =>
 intersectModal.addEventListener("click", (event) => {
   if (event.target === intersectModal) closeIntersectionDialog();
 });
+clipDifferenceModal.addEventListener("click", (event) => {
+  if (event.target === clipDifferenceModal) closeClipDifferenceDialog();
+});
 mergeLayersModal.addEventListener("click", (event) => {
   if (event.target === mergeLayersModal) closeMergeLayersDialog();
 });
 verticesModal.addEventListener("click", (event) => {
   if (event.target === verticesModal) closeVerticesDialog();
+});
+centroidModal.addEventListener("click", (event) => {
+  if (event.target === centroidModal) closeCentroidDialog();
+});
+pointOnFeatureModal.addEventListener("click", (event) => {
+  if (event.target === pointOnFeatureModal) closePointOnFeatureDialog();
 });
 pointGridModal.addEventListener("click", (event) => {
   if (event.target === pointGridModal) closePointGridDialog();
