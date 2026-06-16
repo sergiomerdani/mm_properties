@@ -5244,6 +5244,7 @@ const btnGeoprocess = document.getElementById("btnGeoprocess");
 const btnGeoprocessDropdown = document.getElementById("btnGeoprocessDropdown");
 const geoprocessOptions = document.getElementById("geoprocessOptions");
 const btnIntersectLayers = document.getElementById("btnIntersectLayers");
+const btnIntersectGeometry = document.getElementById("btnIntersectGeometry");
 const btnClipDifference = document.getElementById("btnClipDifference");
 const btnMergeLayers = document.getElementById("btnMergeLayers");
 const btnVerticesLayer = document.getElementById("btnVerticesLayer");
@@ -5257,6 +5258,25 @@ const intersectCancel = document.getElementById("intersectCancel");
 const intersectApply = document.getElementById("intersectApply");
 const intersectLayerA = document.getElementById("intersectLayerA");
 const intersectLayerB = document.getElementById("intersectLayerB");
+const intersectGeometryModal = document.getElementById("intersectGeometryModal");
+const intersectGeometryModalClose = document.getElementById(
+  "intersectGeometryModalClose",
+);
+const intersectGeometryCancel = document.getElementById(
+  "intersectGeometryCancel",
+);
+const intersectGeometryApply = document.getElementById(
+  "intersectGeometryApply",
+);
+const intersectGeometryInputLayer = document.getElementById(
+  "intersectGeometryInputLayer",
+);
+const intersectGeometryOverlayLayer = document.getElementById(
+  "intersectGeometryOverlayLayer",
+);
+const intersectGeometryLayerName = document.getElementById(
+  "intersectGeometryLayerName",
+);
 const clipDifferenceModal = document.getElementById("clipDifferenceModal");
 const clipDifferenceModalClose = document.getElementById(
   "clipDifferenceModalClose",
@@ -5772,6 +5792,7 @@ function getPersistentVectorLayerRecord(layer, layerKind = "vector") {
     centroidLayer: Boolean(layer.get("centroidLayer")),
     pointOnFeatureLayer: Boolean(layer.get("pointOnFeatureLayer")),
     clipDifferenceLayer: Boolean(layer.get("clipDifferenceLayer")),
+    intersectGeometryLayer: Boolean(layer.get("intersectGeometryLayer")),
     gridSpacing: layer.get("gridSpacing") || null,
     gridUnits: layer.get("gridUnits") || null,
     scoreRadiusMeters: layer.get("scoreRadiusMeters") || null,
@@ -5922,6 +5943,10 @@ function restorePersistedVectorLayers() {
       restoredLayer.set(
         "clipDifferenceLayer",
         Boolean(record.clipDifferenceLayer),
+      );
+      restoredLayer.set(
+        "intersectGeometryLayer",
+        Boolean(record.intersectGeometryLayer),
       );
       restoredLayer.set("geometryType", record.geometryType || "");
       restoredLayer.set("attributeSchema", record.attributeSchema || []);
@@ -6834,6 +6859,24 @@ function closeIntersectionDialog() {
   intersectModal.setAttribute("aria-hidden", "true");
 }
 
+function openIntersectGeometryDialog() {
+  currentGeoprocessLayerItems = getPolygonGeoprocessLayerItems();
+  fillLayerSelect(intersectGeometryInputLayer, currentGeoprocessLayerItems);
+  fillLayerSelect(intersectGeometryOverlayLayer, currentGeoprocessLayerItems);
+  intersectGeometryLayerName.value = "Intersection geometry";
+  if (currentGeoprocessLayerItems.length > 1) {
+    intersectGeometryOverlayLayer.value = "1";
+  }
+  geoprocessOptions.classList.remove("dropdown-show");
+  intersectGeometryModal.classList.add("open");
+  intersectGeometryModal.setAttribute("aria-hidden", "false");
+}
+
+function closeIntersectGeometryDialog() {
+  intersectGeometryModal.classList.remove("open");
+  intersectGeometryModal.setAttribute("aria-hidden", "true");
+}
+
 function openClipDifferenceDialog() {
   currentGeoprocessLayerItems = getPolygonGeoprocessLayerItems();
   fillLayerSelect(clipDifferenceInputLayer, currentGeoprocessLayerItems);
@@ -6945,6 +6988,171 @@ async function applyIntersectionDialog() {
 
   showFeaturesInAttributeTable(results);
   closeIntersectionDialog();
+}
+
+function runTurfIntersect(turfApi, inputFeature, overlayFeature) {
+  try {
+    return turfApi.intersect(inputFeature, overlayFeature);
+  } catch (error) {
+    try {
+      return turfApi.intersect(
+        turfApi.featureCollection([inputFeature, overlayFeature]),
+      );
+    } catch (collectionError) {
+      console.warn("Turf intersect failed:", error, collectionError);
+      return null;
+    }
+  }
+}
+
+function createGeometryIntersectionFeatures(inputLayerItem, overlayLayerItem) {
+  const turfApi = getTurf();
+  if (!turfApi?.intersect || !turfApi?.featureCollection) {
+    alert("Turf intersect is not loaded.");
+    return [];
+  }
+
+  const format = new GeoJSON();
+  const mapProjection = map.getView().getProjection().getCode();
+  const inputGeoJsonFeatures = inputLayerItem.features
+    .filter((feature) =>
+      ["Polygon", "MultiPolygon"].includes(getBaseGeometryType(feature)),
+    )
+    .map((feature) =>
+      format.writeFeatureObject(feature, {
+        featureProjection: mapProjection,
+        dataProjection: "EPSG:4326",
+      }),
+    );
+  const overlayGeoJsonFeatures = overlayLayerItem.features
+    .filter((feature) =>
+      ["Polygon", "MultiPolygon"].includes(getBaseGeometryType(feature)),
+    )
+    .map((feature) =>
+      format.writeFeatureObject(feature, {
+        featureProjection: mapProjection,
+        dataProjection: "EPSG:4326",
+      }),
+    );
+
+  const results = [];
+  inputGeoJsonFeatures.forEach((inputFeature, inputIndex) => {
+    overlayGeoJsonFeatures.forEach((overlayFeature, overlayIndex) => {
+      const intersection = runTurfIntersect(
+        turfApi,
+        inputFeature,
+        overlayFeature,
+      );
+      if (!intersection) return;
+
+      intersection.properties = {
+        ...(inputFeature.properties || {}),
+        intersect_input_layer: inputLayerItem.title,
+        intersect_overlay_layer: overlayLayerItem.title,
+        input_feature_index: inputIndex + 1,
+        overlay_feature_index: overlayIndex + 1,
+      };
+
+      const readFeatures = format.readFeatures(intersection, {
+        dataProjection: "EPSG:4326",
+        featureProjection: mapProjection,
+      });
+      readFeatures.forEach((feature) => {
+        feature.set("_featureProjection", mapProjection, true);
+        results.push(feature);
+      });
+    });
+  });
+
+  return results;
+}
+
+async function applyIntersectGeometryDialog() {
+  const inputLayerItem = getSelectedLayerItem(
+    intersectGeometryInputLayer,
+    currentGeoprocessLayerItems,
+  );
+  const overlayLayerItem = getSelectedLayerItem(
+    intersectGeometryOverlayLayer,
+    currentGeoprocessLayerItems,
+  );
+
+  if (!inputLayerItem || !overlayLayerItem || inputLayerItem === overlayLayerItem) {
+    alert("Choose two different polygon layers.");
+    return;
+  }
+
+  intersectGeometryApply.disabled = true;
+  intersectGeometryApply.textContent = "Processing...";
+
+  try {
+    await loadGeoprocessFeatures(inputLayerItem);
+    await loadGeoprocessFeatures(overlayLayerItem);
+    const intersectionFeatures = createGeometryIntersectionFeatures(
+      inputLayerItem,
+      overlayLayerItem,
+    );
+
+    if (!intersectionFeatures.length) {
+      alert("No overlapping geometry was created.");
+      return;
+    }
+
+    const styleConfig = {
+      strokeColor: "#7c2d12",
+      fillColor: "#f97316",
+      strokeWidth: 2,
+      pointSize: 7,
+    };
+    const intersectionSource = new VectorSource({
+      features: intersectionFeatures,
+    });
+    const intersectionLayer = new VectorLayer({
+      source: intersectionSource,
+      title:
+        intersectGeometryLayerName.value.trim() ||
+        `${inputLayerItem.title} intersection`,
+      displayInLayerSwitcher: true,
+      visible: true,
+      style: createVectorLayerStyle(styleConfig),
+    });
+    const mapProjection = map.getView().getProjection().getCode();
+    intersectionLayer.set("editableVector", true);
+    intersectionLayer.set("createdVectorLayer", true);
+    intersectionLayer.set("geoprocessLayer", true);
+    intersectionLayer.set("intersectGeometryLayer", true);
+    intersectionLayer.set("geometryType", "Polygon");
+    intersectionLayer.set("styleConfig", styleConfig);
+    intersectionLayer.set("featureProjection", mapProjection);
+    intersectionLayer.set("sourceProjection", mapProjection);
+    intersectionLayer.set("attributeSchema", [
+      ...(inputLayerItem.layer.get("attributeSchema") || []),
+      { name: "intersect_input_layer", type: "text" },
+      { name: "intersect_overlay_layer", type: "text" },
+      { name: "input_feature_index", type: "number" },
+      { name: "overlay_feature_index", type: "number" },
+    ]);
+
+    map.addLayer(intersectionLayer);
+    ensurePersistentVectorLayerSaved(intersectionLayer, "intersectGeometry");
+
+    const extent = intersectionSource.getExtent();
+    if (extent.every(Number.isFinite)) {
+      map.getView().fit(extent, {
+        duration: 600,
+        padding: [60, 60, 60, 60],
+        maxZoom: 18,
+      });
+    }
+
+    closeIntersectGeometryDialog();
+  } catch (error) {
+    console.error(error);
+    alert(error.message || "Could not create intersection geometry.");
+  } finally {
+    intersectGeometryApply.disabled = false;
+    intersectGeometryApply.textContent = "Create Intersection";
+  }
 }
 
 function runTurfDifference(turfApi, inputFeature, clipFeature) {
@@ -7217,6 +7425,13 @@ btnGridScore.addEventListener("click", openGridScoreDialog);
 intersectModalClose.addEventListener("click", closeIntersectionDialog);
 intersectCancel.addEventListener("click", closeIntersectionDialog);
 intersectApply.addEventListener("click", applyIntersectionDialog);
+btnIntersectGeometry.addEventListener("click", openIntersectGeometryDialog);
+intersectGeometryModalClose.addEventListener(
+  "click",
+  closeIntersectGeometryDialog,
+);
+intersectGeometryCancel.addEventListener("click", closeIntersectGeometryDialog);
+intersectGeometryApply.addEventListener("click", applyIntersectGeometryDialog);
 clipDifferenceModalClose.addEventListener("click", closeClipDifferenceDialog);
 clipDifferenceCancel.addEventListener("click", closeClipDifferenceDialog);
 clipDifferenceApply.addEventListener("click", applyClipDifferenceDialog);
@@ -7245,6 +7460,9 @@ gridScoreRun.addEventListener("click", () =>
 );
 intersectModal.addEventListener("click", (event) => {
   if (event.target === intersectModal) closeIntersectionDialog();
+});
+intersectGeometryModal.addEventListener("click", (event) => {
+  if (event.target === intersectGeometryModal) closeIntersectGeometryDialog();
 });
 clipDifferenceModal.addEventListener("click", (event) => {
   if (event.target === clipDifferenceModal) closeClipDifferenceDialog();

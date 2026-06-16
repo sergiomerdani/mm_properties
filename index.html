@@ -129,6 +129,9 @@
                 <button id="btnIntersectLayers" title="Intersect Layers">
                   <i class="fa-solid fa-vector-square"></i>
                 </button>
+                <button id="btnIntersectGeometry" title="Intersect Geometry">
+                  <i class="fa-solid fa-object-intersect"></i>
+                </button>
                 <button id="btnClipDifference" title="Clip Difference">
                   <i class="fa-solid fa-crop-simple"></i>
                 </button>
@@ -265,6 +268,33 @@
           <div class="buffer-modal-actions">
             <button id="mergeLayersCancel" type="button">Cancel</button>
             <button id="mergeLayersApply" type="button">Merge</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="intersectGeometryModal" aria-hidden="true">
+        <div id="intersectGeometryModalContent">
+          <div class="buffer-modal-header">
+            <h4>Intersect Geometry</h4>
+            <button id="intersectGeometryModalClose" type="button" title="Close">Ã—</button>
+          </div>
+
+          <label for="intersectGeometryInputLayer">Input Polygon Layer</label>
+          <select id="intersectGeometryInputLayer"></select>
+
+          <label for="intersectGeometryOverlayLayer">Overlay Polygon Layer</label>
+          <select id="intersectGeometryOverlayLayer"></select>
+
+          <label for="intersectGeometryLayerName">Output Layer Name</label>
+          <input type="text" id="intersectGeometryLayerName" value="Intersection geometry" />
+
+          <div class="buffer-help">
+            Creates a new polygon layer from the actual overlapping geometry between two polygon layers.
+          </div>
+
+          <div class="buffer-modal-actions">
+            <button id="intersectGeometryCancel" type="button">Cancel</button>
+            <button id="intersectGeometryApply" type="button">Create Intersection</button>
           </div>
         </div>
       </div>
