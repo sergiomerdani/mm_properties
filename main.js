@@ -1144,6 +1144,110 @@ const map = new Map({
   }),
 });
 
+const cesiumContainer = document.getElementById("cesiumContainer");
+const toggle3dMapButton = document.getElementById("toggle3dMap");
+let cesiumViewer = null;
+let isCesiumMode = false;
+
+function getCesiumCameraHeightFromZoom(zoom) {
+  if (!Number.isFinite(zoom)) return 2500000;
+  return Math.max(350, 22000000 / Math.pow(2, zoom));
+}
+
+function initCesiumViewer() {
+  if (cesiumViewer) return cesiumViewer;
+
+  const Cesium = window.Cesium;
+  if (!Cesium || !cesiumContainer) {
+    alert("Cesium is not loaded. Check your internet connection or add Cesium locally.");
+    return null;
+  }
+
+  cesiumViewer = new Cesium.Viewer(cesiumContainer, {
+    animation: false,
+    timeline: false,
+    baseLayerPicker: false,
+    geocoder: false,
+    homeButton: false,
+    sceneModePicker: false,
+    navigationHelpButton: false,
+    fullscreenButton: false,
+    infoBox: false,
+    selectionIndicator: false,
+    terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+    baseLayer: false,
+  });
+
+  const cartoImageryProvider = new Cesium.UrlTemplateImageryProvider({
+    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+    subdomains: ["1", "2", "3", "4"],
+    credit: "CARTO, OpenStreetMap contributors",
+    maximumLevel: 19,
+  });
+  cartoImageryProvider.errorEvent.addEventListener((error) => {
+    console.warn("Cesium basemap tile failed:", error);
+  });
+  cesiumViewer.imageryLayers.removeAll();
+  cesiumViewer.imageryLayers.addImageryProvider(cartoImageryProvider);
+  cesiumViewer.scene.globe.baseColor = Cesium.Color.WHITE;
+  cesiumViewer.scene.globe.depthTestAgainstTerrain = false;
+  return cesiumViewer;
+}
+
+function flyCesiumToOpenLayersView() {
+  const viewer = initCesiumViewer();
+  if (!viewer) return;
+
+  const view = map.getView();
+  const center = view.getCenter() || [0, 0];
+  const lonLat = toLonLat(center, view.getProjection());
+  const height = getCesiumCameraHeightFromZoom(view.getZoom());
+  const Cesium = window.Cesium;
+
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(lonLat[0], lonLat[1], height),
+    duration: 0.45,
+  });
+}
+
+function syncOpenLayersToCesiumCamera() {
+  if (!cesiumViewer) return;
+
+  const Cesium = window.Cesium;
+  const cartographic = Cesium.Cartographic.fromCartesian(
+    cesiumViewer.camera.positionWC,
+  );
+  const lonLat = [
+    Cesium.Math.toDegrees(cartographic.longitude),
+    Cesium.Math.toDegrees(cartographic.latitude),
+  ];
+  const view = map.getView();
+  view.setCenter(fromLonLat(lonLat, view.getProjection()));
+}
+
+function setMapMode3d(enabled) {
+  if (!cesiumContainer || !toggle3dMapButton) return;
+  if (enabled && !initCesiumViewer()) return;
+
+  isCesiumMode = enabled;
+  cesiumContainer.hidden = !enabled;
+  toggle3dMapButton.classList.toggle("is-active", enabled);
+  toggle3dMapButton.title = enabled ? "Switch to 2D Map" : "Switch to 3D Globe";
+  toggle3dMapButton.querySelector("span").textContent = enabled ? "2D" : "3D";
+
+  if (enabled) {
+    flyCesiumToOpenLayersView();
+    cesiumViewer.resize();
+  } else {
+    syncOpenLayersToCesiumCamera();
+    map.updateSize();
+  }
+}
+
+toggle3dMapButton?.addEventListener("click", () => {
+  setMapMode3d(!isCesiumMode);
+});
+
 function saveCurrentMapViewForSession() {
   const view = map.getView();
   sessionStorage.setItem(
@@ -13711,6 +13815,107 @@ function transformGeorefCoordinate(coord, inputProjection) {
     : transform(coord, inputProjection, mapProjection);
 }
 
+function getGeorefImagePixelFromEvent(preview, event) {
+  if (!georefImageSize) return null;
+
+  const rect = preview.getBoundingClientRect();
+  const sourceX = ((event.clientX - rect.left) / rect.width) * georefImageSize.width;
+  const sourceY = ((event.clientY - rect.top) / rect.height) * georefImageSize.height;
+
+  if (
+    sourceX < 0 ||
+    sourceY < 0 ||
+    sourceX > georefImageSize.width ||
+    sourceY > georefImageSize.height
+  ) {
+    return null;
+  }
+
+  return { sourceX, sourceY };
+}
+
+function getLinearFit(sourceValues, targetValues, axisName) {
+  const count = sourceValues.length;
+  const sourceMean =
+    sourceValues.reduce((sum, value) => sum + value, 0) / count;
+  const targetMean =
+    targetValues.reduce((sum, value) => sum + value, 0) / count;
+  let numerator = 0;
+  let denominator = 0;
+
+  sourceValues.forEach((sourceValue, index) => {
+    const sourceDelta = sourceValue - sourceMean;
+    numerator += sourceDelta * (targetValues[index] - targetMean);
+    denominator += sourceDelta * sourceDelta;
+  });
+
+  if (!Number.isFinite(denominator) || denominator === 0) {
+    throw new Error(`Use points with different source ${axisName} values.`);
+  }
+
+  const scale = numerator / denominator;
+  const offset = targetMean - scale * sourceMean;
+  if (!Number.isFinite(scale) || !Number.isFinite(offset)) {
+    throw new Error(`Could not calculate ${axisName} georeference scale.`);
+  }
+
+  return { scale, offset };
+}
+
+function getGeorefExtentFromControlPoints(points, inputProjection) {
+  if (!georefImageSize) {
+    throw new Error("Upload an image first so its pixel size can be read.");
+  }
+
+  const completePoints = points
+    .filter(
+      (point) =>
+        Number.isFinite(point.sourceX) &&
+        Number.isFinite(point.sourceY) &&
+        Number.isFinite(point.destX) &&
+        Number.isFinite(point.destY),
+    )
+    .map((point) => {
+      const mapCoord = transformGeorefCoordinate(
+        [point.destX, point.destY],
+        inputProjection,
+      );
+      return {
+        sourceX: point.sourceX,
+        sourceY: point.sourceY,
+        mapX: mapCoord[0],
+        mapY: mapCoord[1],
+      };
+    });
+
+  if (completePoints.length < 2) {
+    throw new Error("Georeferencing needs at least two complete point pairs.");
+  }
+
+  const xFit = getLinearFit(
+    completePoints.map((point) => point.sourceX),
+    completePoints.map((point) => point.mapX),
+    "X",
+  );
+  const yFit = getLinearFit(
+    completePoints.map((point) => point.sourceY),
+    completePoints.map((point) => point.mapY),
+    "Y",
+  );
+
+  const left = xFit.offset;
+  const right = xFit.offset + xFit.scale * georefImageSize.width;
+  const top = yFit.offset;
+  const bottom = yFit.offset + yFit.scale * georefImageSize.height;
+
+  return [
+    Math.min(left, right),
+    Math.min(bottom, top),
+    Math.max(left, right),
+    Math.max(bottom, top),
+  ];
+}
+
 function getGeorefExtentFromAbsolute(inputProjection) {
   if (!georefImageSize) {
     throw new Error("Upload an image first so its pixel size can be read.");
@@ -13720,33 +13925,7 @@ function getGeorefExtentFromAbsolute(inputProjection) {
     throw new Error("Absolute mode needs at least two added point pairs.");
   }
 
-  const [point1, point2] = georefAbsolutePoints;
-  const map1 = transformGeorefCoordinate(
-    [point1.destX, point1.destY],
-    inputProjection,
-  );
-  const map2 = transformGeorefCoordinate(
-    [point2.destX, point2.destY],
-    inputProjection,
-  );
-  const resolutionX = (map2[0] - map1[0]) / (point2.sourceX - point1.sourceX);
-  const resolutionY = (map1[1] - map2[1]) / (point2.sourceY - point1.sourceY);
-
-  if (!Number.isFinite(resolutionX) || !Number.isFinite(resolutionY)) {
-    throw new Error("Use two points with different source X and Y values.");
-  }
-
-  const minX = map1[0] - point1.sourceX * resolutionX;
-  const maxY = map1[1] + point1.sourceY * resolutionY;
-  const maxX = minX + georefImageSize.width * resolutionX;
-  const minY = maxY - georefImageSize.height * resolutionY;
-
-  return [
-    Math.min(minX, maxX),
-    Math.min(minY, maxY),
-    Math.max(minX, maxX),
-    Math.max(minY, maxY),
-  ];
+  return getGeorefExtentFromControlPoints(georefAbsolutePoints, inputProjection);
 }
 
 function getGeorefExtentFromTiepoints(inputProjection) {
@@ -13766,39 +13945,7 @@ function getGeorefExtentFromTiepoints(inputProjection) {
     throw new Error("Tie point mode needs at least two complete point pairs.");
   }
 
-  const [point1, point2] = completeTiepoints;
-  const px1 = point1.sourceX;
-  const py1 = point1.sourceY;
-  const map1 = transformGeorefCoordinate(
-    [point1.destX, point1.destY],
-    inputProjection,
-  );
-
-  const px2 = point2.sourceX;
-  const py2 = point2.sourceY;
-  const map2 = transformGeorefCoordinate(
-    [point2.destX, point2.destY],
-    inputProjection,
-  );
-
-  const resolutionX = (map2[0] - map1[0]) / (px2 - px1);
-  const resolutionY = (map1[1] - map2[1]) / (py2 - py1);
-
-  if (!Number.isFinite(resolutionX) || !Number.isFinite(resolutionY)) {
-    throw new Error("Tie points must use different pixel X and Y values.");
-  }
-
-  const minX = map1[0] - px1 * resolutionX;
-  const maxY = map1[1] + py1 * resolutionY;
-  const maxX = minX + georefImageSize.width * resolutionX;
-  const minY = maxY - georefImageSize.height * resolutionY;
-
-  return [
-    Math.min(minX, maxX),
-    Math.min(minY, maxY),
-    Math.max(minX, maxX),
-    Math.max(minY, maxY),
-  ];
+  return getGeorefExtentFromControlPoints(completeTiepoints, inputProjection);
 }
 
 function addGeoreferencedImageLayer(extent) {
@@ -13931,22 +14078,12 @@ function setGeorefSourcePoint(event) {
   const preview = document.getElementById("georefImagePreview");
   if (!georefImageUrl || !georefImageSize) return;
 
-  const rect = preview.getBoundingClientRect();
-  const sourceX = (event.clientX - rect.left) / georefImageScale;
-  const sourceY = (event.clientY - rect.top) / georefImageScale;
-
-  if (
-    sourceX < 0 ||
-    sourceY < 0 ||
-    sourceX > georefImageSize.width ||
-    sourceY > georefImageSize.height
-  ) {
-    return;
-  }
+  const sourcePixel = getGeorefImagePixelFromEvent(preview, event);
+  if (!sourcePixel) return;
 
   const point = ensureActiveGeorefTiepoint();
-  point.sourceX = sourceX;
-  point.sourceY = sourceY;
+  point.sourceX = sourcePixel.sourceX;
+  point.sourceY = sourcePixel.sourceY;
   renderGeorefTiepoints();
 }
 
@@ -14027,22 +14164,14 @@ function setGeorefAbsoluteSourcePoint(event) {
   if (!georefImageUrl || !georefImageSize) return;
 
   const preview = document.getElementById("georefAbsoluteImagePreview");
-  const rect = preview.getBoundingClientRect();
-  const sourceX = (event.clientX - rect.left) / georefImageScale;
-  const sourceY = (event.clientY - rect.top) / georefImageScale;
+  const sourcePixel = getGeorefImagePixelFromEvent(preview, event);
+  if (!sourcePixel) return;
 
-  if (
-    sourceX < 0 ||
-    sourceY < 0 ||
-    sourceX > georefImageSize.width ||
-    sourceY > georefImageSize.height
-  ) {
-    return;
-  }
-
-  georefAbsolutePoint = { sourceX, sourceY };
-  document.getElementById("georefAbsPx").value = sourceX.toFixed(3);
-  document.getElementById("georefAbsPy").value = sourceY.toFixed(3);
+  georefAbsolutePoint = sourcePixel;
+  document.getElementById("georefAbsPx").value =
+    sourcePixel.sourceX.toFixed(3);
+  document.getElementById("georefAbsPy").value =
+    sourcePixel.sourceY.toFixed(3);
   renderGeorefAbsolutePoint();
 }
 

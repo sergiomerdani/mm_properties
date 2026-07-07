@@ -12,9 +12,14 @@
       src="https://kit.fontawesome.com/ddf386aee4.js"
       crossorigin="anonymous"
     ></script>
+    <link
+      href="https://cdn.jsdelivr.net/npm/cesium@1.119.0/Build/Cesium/Widgets/widgets.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/cesium@1.119.0/Build/Cesium/Cesium.js"></script>
     <title>INOVACIONI</title>
-    <script type="module" crossorigin src="/assets/index-BoNeY9UX.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-BycgLG6q.css">
+    <script type="module" crossorigin src="/assets/index-B1K3IZWG.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BxSp2a6n.css">
   </head>
   <body>
     <div class="grid-container">
@@ -1411,6 +1416,11 @@
       </div>
 
       <div id="map">
+        <div id="cesiumContainer" hidden></div>
+        <button id="toggle3dMap" class="map-mode-toggle" title="Switch to 3D Globe">
+          <i class="fa-solid fa-globe"></i>
+          <span>3D</span>
+        </button>
         <div class="map-projection-control" title="Map Projection">
           <select id="mapProjectionSelect">
             <option value="EPSG:3857">EPSG:3857 Web Mercator</option>
