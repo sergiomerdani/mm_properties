@@ -1196,6 +1196,15 @@ const toggleKufiNsTerrainWmsButton = document.getElementById(
 const toggleKategoriTokeTerrainWmsButton = document.getElementById(
   "toggleKategoriTokeTerrainWms",
 );
+const himareTerrainOpacityInput = document.getElementById("himareTerrainOpacity");
+const dhermiTerrainOpacityInput = document.getElementById("dhermiTerrainOpacity");
+const palaseTerrainOpacityInput = document.getElementById("palaseTerrainOpacity");
+const ashkTerrainOpacityInput = document.getElementById("ashkTerrainOpacity");
+const qkdTerrainOpacityInput = document.getElementById("qkdTerrainOpacity");
+const kufiNsTerrainOpacityInput = document.getElementById("kufiNsTerrainOpacity");
+const kategoriTokeTerrainOpacityInput = document.getElementById(
+  "kategoriTokeTerrainOpacity",
+);
 const cesiumIonAccessToken =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyZjlhZTVlOS1hZDg2LTQxNTgtYmFjYS1iYTRjNDcxOWFhNjQiLCJpZCI6MTE1MTg4LCJpYXQiOjE2Nzg0NjMyNTJ9.FntmGyy-qhgprvx60qrCryPonYG7hKjdxTi11M3j9yA";
 let cesiumViewer = null;
@@ -1231,6 +1240,20 @@ let kufiNsTerrainWmsLayer = null;
 let isKufiNsTerrainWmsVisible = false;
 let kategoriTokeTerrainWmsLayer = null;
 let isKategoriTokeTerrainWmsVisible = false;
+
+function getTerrainOpacity(input) {
+  const value = Number(input?.value);
+  return Number.isFinite(value) ? value : 0.85;
+}
+
+function bindTerrainOpacitySlider(input, getLayer) {
+  input?.addEventListener("input", () => {
+    const layer = getLayer();
+    if (layer) {
+      layer.alpha = getTerrainOpacity(input);
+    }
+  });
+}
 
 function getCesiumCameraHeightFromZoom(zoom) {
   if (!Number.isFinite(zoom)) return 2500000;
@@ -1571,7 +1594,7 @@ function setHimareTerrainWmsVisible(enabled) {
       credit: "Kadaster Himare WMS",
     });
     himareTerrainWmsLayer = viewer.imageryLayers.addImageryProvider(provider);
-    himareTerrainWmsLayer.alpha = 0.85;
+    himareTerrainWmsLayer.alpha = getTerrainOpacity(himareTerrainOpacityInput);
   }
 
   isHimareTerrainWmsVisible = enabled;
@@ -1608,7 +1631,7 @@ function setDhermiTerrainWmsVisible(enabled) {
       credit: "Kadaster Dhermi WMS",
     });
     dhermiTerrainWmsLayer = viewer.imageryLayers.addImageryProvider(provider);
-    dhermiTerrainWmsLayer.alpha = 0.85;
+    dhermiTerrainWmsLayer.alpha = getTerrainOpacity(dhermiTerrainOpacityInput);
   }
 
   isDhermiTerrainWmsVisible = enabled;
@@ -1645,7 +1668,7 @@ function setPalaseTerrainWmsVisible(enabled) {
       credit: "Kadaster Palase WMS",
     });
     palaseTerrainWmsLayer = viewer.imageryLayers.addImageryProvider(provider);
-    palaseTerrainWmsLayer.alpha = 0.85;
+    palaseTerrainWmsLayer.alpha = getTerrainOpacity(palaseTerrainOpacityInput);
   }
 
   isPalaseTerrainWmsVisible = enabled;
@@ -1682,7 +1705,7 @@ function setAshkTerrainWmsVisible(enabled) {
       credit: "ASIG P Kadastrale ASHK 04/2025",
     });
     ashkTerrainWmsLayer = viewer.imageryLayers.addImageryProvider(provider);
-    ashkTerrainWmsLayer.alpha = 0.85;
+    ashkTerrainWmsLayer.alpha = getTerrainOpacity(ashkTerrainOpacityInput);
   }
 
   isAshkTerrainWmsVisible = enabled;
@@ -1719,7 +1742,7 @@ function setQkdTerrainWmsVisible(enabled) {
       credit: "ASIG Parcela Kadastrale QKD 04/2025",
     });
     qkdTerrainWmsLayer = viewer.imageryLayers.addImageryProvider(provider);
-    qkdTerrainWmsLayer.alpha = 0.85;
+    qkdTerrainWmsLayer.alpha = getTerrainOpacity(qkdTerrainOpacityInput);
   }
 
   isQkdTerrainWmsVisible = enabled;
@@ -1756,7 +1779,7 @@ function setKufiNsTerrainWmsVisible(enabled) {
       credit: "ASIG AKPT Kufi Njesie Strukturore",
     });
     kufiNsTerrainWmsLayer = viewer.imageryLayers.addImageryProvider(provider);
-    kufiNsTerrainWmsLayer.alpha = 0.85;
+    kufiNsTerrainWmsLayer.alpha = getTerrainOpacity(kufiNsTerrainOpacityInput);
   }
 
   isKufiNsTerrainWmsVisible = enabled;
@@ -1794,7 +1817,9 @@ function setKategoriTokeTerrainWmsVisible(enabled) {
     });
     kategoriTokeTerrainWmsLayer =
       viewer.imageryLayers.addImageryProvider(provider);
-    kategoriTokeTerrainWmsLayer.alpha = 0.85;
+    kategoriTokeTerrainWmsLayer.alpha = getTerrainOpacity(
+      kategoriTokeTerrainOpacityInput,
+    );
   }
 
   isKategoriTokeTerrainWmsVisible = enabled;
@@ -2135,6 +2160,17 @@ toggleKufiNsTerrainWmsButton?.addEventListener("click", () => {
 toggleKategoriTokeTerrainWmsButton?.addEventListener("click", () => {
   setKategoriTokeTerrainWmsVisible(!isKategoriTokeTerrainWmsVisible);
 });
+
+bindTerrainOpacitySlider(himareTerrainOpacityInput, () => himareTerrainWmsLayer);
+bindTerrainOpacitySlider(dhermiTerrainOpacityInput, () => dhermiTerrainWmsLayer);
+bindTerrainOpacitySlider(palaseTerrainOpacityInput, () => palaseTerrainWmsLayer);
+bindTerrainOpacitySlider(ashkTerrainOpacityInput, () => ashkTerrainWmsLayer);
+bindTerrainOpacitySlider(qkdTerrainOpacityInput, () => qkdTerrainWmsLayer);
+bindTerrainOpacitySlider(kufiNsTerrainOpacityInput, () => kufiNsTerrainWmsLayer);
+bindTerrainOpacitySlider(
+  kategoriTokeTerrainOpacityInput,
+  () => kategoriTokeTerrainWmsLayer,
+);
 
 function saveCurrentMapViewForSession() {
   const view = map.getView();

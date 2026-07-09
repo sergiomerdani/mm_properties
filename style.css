@@ -1455,6 +1455,44 @@ button {
   top: 452px;
 }
 
+.map-terrain-opacity {
+  position: absolute;
+  right: 104px;
+  z-index: 1300;
+  width: 92px;
+  height: 34px;
+  margin: 0;
+  accent-color: #0d6efd;
+}
+
+.map-himare-opacity {
+  top: 212px;
+}
+
+.map-dhermi-opacity {
+  top: 252px;
+}
+
+.map-palase-opacity {
+  top: 292px;
+}
+
+.map-ashk-opacity {
+  top: 332px;
+}
+
+.map-qkd-opacity {
+  top: 372px;
+}
+
+.map-kufi-ns-opacity {
+  top: 412px;
+}
+
+.map-kategori-toke-opacity {
+  top: 452px;
+}
+
 .map-draw3d-type {
   position: absolute;
   top: 172px;
