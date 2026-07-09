@@ -1178,6 +1178,24 @@ const cesiumDrawTypeSelect = document.getElementById("cesiumDrawType");
 const toggleHimareTerrainWmsButton = document.getElementById(
   "toggleHimareTerrainWms",
 );
+const toggleDhermiTerrainWmsButton = document.getElementById(
+  "toggleDhermiTerrainWms",
+);
+const togglePalaseTerrainWmsButton = document.getElementById(
+  "togglePalaseTerrainWms",
+);
+const toggleAshkTerrainWmsButton = document.getElementById(
+  "toggleAshkTerrainWms",
+);
+const toggleQkdTerrainWmsButton = document.getElementById(
+  "toggleQkdTerrainWms",
+);
+const toggleKufiNsTerrainWmsButton = document.getElementById(
+  "toggleKufiNsTerrainWms",
+);
+const toggleKategoriTokeTerrainWmsButton = document.getElementById(
+  "toggleKategoriTokeTerrainWms",
+);
 const cesiumIonAccessToken =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyZjlhZTVlOS1hZDg2LTQxNTgtYmFjYS1iYTRjNDcxOWFhNjQiLCJpZCI6MTE1MTg4LCJpYXQiOjE2Nzg0NjMyNTJ9.FntmGyy-qhgprvx60qrCryPonYG7hKjdxTi11M3j9yA";
 let cesiumViewer = null;
@@ -1201,6 +1219,18 @@ const cesiumDrawPointEntities = [];
 const cesiumDrawnFeatures = [];
 let himareTerrainWmsLayer = null;
 let isHimareTerrainWmsVisible = false;
+let dhermiTerrainWmsLayer = null;
+let isDhermiTerrainWmsVisible = false;
+let palaseTerrainWmsLayer = null;
+let isPalaseTerrainWmsVisible = false;
+let ashkTerrainWmsLayer = null;
+let isAshkTerrainWmsVisible = false;
+let qkdTerrainWmsLayer = null;
+let isQkdTerrainWmsVisible = false;
+let kufiNsTerrainWmsLayer = null;
+let isKufiNsTerrainWmsVisible = false;
+let kategoriTokeTerrainWmsLayer = null;
+let isKategoriTokeTerrainWmsVisible = false;
 
 function getCesiumCameraHeightFromZoom(zoom) {
   if (!Number.isFinite(zoom)) return 2500000;
@@ -1558,6 +1588,229 @@ function setHimareTerrainWmsVisible(enabled) {
   }
 }
 
+function setDhermiTerrainWmsVisible(enabled) {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !toggleDhermiTerrainWmsButton) return;
+
+  if (enabled && !dhermiTerrainWmsLayer) {
+    const provider = new Cesium.WebMapServiceImageryProvider({
+      url: "https://apps.kadaster.al/dhermiwms",
+      layers: "ndertesa,pasuri",
+      parameters: {
+        service: "WMS",
+        version: "1.1.1",
+        transparent: true,
+        format: "image/png",
+        tiled: true,
+        styles: "",
+      },
+      credit: "Kadaster Dhermi WMS",
+    });
+    dhermiTerrainWmsLayer = viewer.imageryLayers.addImageryProvider(provider);
+    dhermiTerrainWmsLayer.alpha = 0.85;
+  }
+
+  isDhermiTerrainWmsVisible = enabled;
+  if (dhermiTerrainWmsLayer) {
+    dhermiTerrainWmsLayer.show = enabled;
+  }
+  toggleDhermiTerrainWmsButton.classList.toggle("is-active", enabled);
+  toggleDhermiTerrainWmsButton.title = enabled
+    ? "Hide Dhermi properties on 3D terrain"
+    : "Show Dhermi properties on 3D terrain";
+
+  if (enabled) {
+    setMapMode3d(true);
+  }
+}
+
+function setPalaseTerrainWmsVisible(enabled) {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !togglePalaseTerrainWmsButton) return;
+
+  if (enabled && !palaseTerrainWmsLayer) {
+    const provider = new Cesium.WebMapServiceImageryProvider({
+      url: "https://apps.kadaster.al/palasewms",
+      layers: "ndertesa,pasuri",
+      parameters: {
+        service: "WMS",
+        version: "1.1.1",
+        transparent: true,
+        format: "image/png",
+        tiled: true,
+        styles: "",
+      },
+      credit: "Kadaster Palase WMS",
+    });
+    palaseTerrainWmsLayer = viewer.imageryLayers.addImageryProvider(provider);
+    palaseTerrainWmsLayer.alpha = 0.85;
+  }
+
+  isPalaseTerrainWmsVisible = enabled;
+  if (palaseTerrainWmsLayer) {
+    palaseTerrainWmsLayer.show = enabled;
+  }
+  togglePalaseTerrainWmsButton.classList.toggle("is-active", enabled);
+  togglePalaseTerrainWmsButton.title = enabled
+    ? "Hide Palase properties on 3D terrain"
+    : "Show Palase properties on 3D terrain";
+
+  if (enabled) {
+    setMapMode3d(true);
+  }
+}
+
+function setAshkTerrainWmsVisible(enabled) {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !toggleAshkTerrainWmsButton) return;
+
+  if (enabled && !ashkTerrainWmsLayer) {
+    const provider = new Cesium.WebMapServiceImageryProvider({
+      url: "https://geoportal.asig.gov.al/service/zrpp/wms",
+      layers: "p_kadastrale_ashk_042025",
+      parameters: {
+        service: "WMS",
+        version: "1.1.1",
+        transparent: true,
+        format: "image/png",
+        tiled: true,
+        styles: "",
+      },
+      credit: "ASIG P Kadastrale ASHK 04/2025",
+    });
+    ashkTerrainWmsLayer = viewer.imageryLayers.addImageryProvider(provider);
+    ashkTerrainWmsLayer.alpha = 0.85;
+  }
+
+  isAshkTerrainWmsVisible = enabled;
+  if (ashkTerrainWmsLayer) {
+    ashkTerrainWmsLayer.show = enabled;
+  }
+  toggleAshkTerrainWmsButton.classList.toggle("is-active", enabled);
+  toggleAshkTerrainWmsButton.title = enabled
+    ? "Hide P Kadastrale ASHK from 3D terrain"
+    : "Show P Kadastrale ASHK on 3D terrain";
+
+  if (enabled) {
+    setMapMode3d(true);
+  }
+}
+
+function setQkdTerrainWmsVisible(enabled) {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !toggleQkdTerrainWmsButton) return;
+
+  if (enabled && !qkdTerrainWmsLayer) {
+    const provider = new Cesium.WebMapServiceImageryProvider({
+      url: "https://geoportal.asig.gov.al/service/zrpp/wms",
+      layers: "parcela_kadastrale_qkd_042025",
+      parameters: {
+        service: "WMS",
+        version: "1.1.1",
+        transparent: true,
+        format: "image/png",
+        tiled: true,
+        styles: "",
+      },
+      credit: "ASIG Parcela Kadastrale QKD 04/2025",
+    });
+    qkdTerrainWmsLayer = viewer.imageryLayers.addImageryProvider(provider);
+    qkdTerrainWmsLayer.alpha = 0.85;
+  }
+
+  isQkdTerrainWmsVisible = enabled;
+  if (qkdTerrainWmsLayer) {
+    qkdTerrainWmsLayer.show = enabled;
+  }
+  toggleQkdTerrainWmsButton.classList.toggle("is-active", enabled);
+  toggleQkdTerrainWmsButton.title = enabled
+    ? "Hide Parcela Kadastrale QKD from 3D terrain"
+    : "Show Parcela Kadastrale QKD on 3D terrain";
+
+  if (enabled) {
+    setMapMode3d(true);
+  }
+}
+
+function setKufiNsTerrainWmsVisible(enabled) {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !toggleKufiNsTerrainWmsButton) return;
+
+  if (enabled && !kufiNsTerrainWmsLayer) {
+    const provider = new Cesium.WebMapServiceImageryProvider({
+      url: "https://geoportal.asig.gov.al/service/akpt/wms",
+      layers: "kufi_njesie_strukturore_dhe_perdorimi_i_tokes_inspire",
+      parameters: {
+        service: "WMS",
+        version: "1.1.1",
+        transparent: true,
+        format: "image/png",
+        tiled: true,
+        styles: "",
+      },
+      credit: "ASIG AKPT Kufi Njesie Strukturore",
+    });
+    kufiNsTerrainWmsLayer = viewer.imageryLayers.addImageryProvider(provider);
+    kufiNsTerrainWmsLayer.alpha = 0.85;
+  }
+
+  isKufiNsTerrainWmsVisible = enabled;
+  if (kufiNsTerrainWmsLayer) {
+    kufiNsTerrainWmsLayer.show = enabled;
+  }
+  toggleKufiNsTerrainWmsButton.classList.toggle("is-active", enabled);
+  toggleKufiNsTerrainWmsButton.title = enabled
+    ? "Hide Kufi Njesie Strukturore from 3D terrain"
+    : "Show Kufi Njesie Strukturore on 3D terrain";
+
+  if (enabled) {
+    setMapMode3d(true);
+  }
+}
+
+function setKategoriTokeTerrainWmsVisible(enabled) {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !toggleKategoriTokeTerrainWmsButton) return;
+
+  if (enabled && !kategoriTokeTerrainWmsLayer) {
+    const provider = new Cesium.WebMapServiceImageryProvider({
+      url: "https://geoportal.asig.gov.al/service/akpt/wms",
+      layers: "kategorite_propozuara_perdorimit_te_tokes",
+      parameters: {
+        service: "WMS",
+        version: "1.1.1",
+        transparent: true,
+        format: "image/png",
+        tiled: true,
+        styles: "",
+      },
+      credit: "ASIG AKPT Kategorite Propozuara Perdorimit Te Tokes",
+    });
+    kategoriTokeTerrainWmsLayer =
+      viewer.imageryLayers.addImageryProvider(provider);
+    kategoriTokeTerrainWmsLayer.alpha = 0.85;
+  }
+
+  isKategoriTokeTerrainWmsVisible = enabled;
+  if (kategoriTokeTerrainWmsLayer) {
+    kategoriTokeTerrainWmsLayer.show = enabled;
+  }
+  toggleKategoriTokeTerrainWmsButton.classList.toggle("is-active", enabled);
+  toggleKategoriTokeTerrainWmsButton.title = enabled
+    ? "Hide Kategorite Propozuara from 3D terrain"
+    : "Show Kategorite Propozuara on 3D terrain";
+
+  if (enabled) {
+    setMapMode3d(true);
+  }
+}
+
 function getCesiumGroundPosition(screenPosition) {
   const viewer = cesiumViewer;
   const Cesium = window.Cesium;
@@ -1857,6 +2110,30 @@ cesiumDrawTypeSelect?.addEventListener("change", () => {
 
 toggleHimareTerrainWmsButton?.addEventListener("click", () => {
   setHimareTerrainWmsVisible(!isHimareTerrainWmsVisible);
+});
+
+toggleDhermiTerrainWmsButton?.addEventListener("click", () => {
+  setDhermiTerrainWmsVisible(!isDhermiTerrainWmsVisible);
+});
+
+togglePalaseTerrainWmsButton?.addEventListener("click", () => {
+  setPalaseTerrainWmsVisible(!isPalaseTerrainWmsVisible);
+});
+
+toggleAshkTerrainWmsButton?.addEventListener("click", () => {
+  setAshkTerrainWmsVisible(!isAshkTerrainWmsVisible);
+});
+
+toggleQkdTerrainWmsButton?.addEventListener("click", () => {
+  setQkdTerrainWmsVisible(!isQkdTerrainWmsVisible);
+});
+
+toggleKufiNsTerrainWmsButton?.addEventListener("click", () => {
+  setKufiNsTerrainWmsVisible(!isKufiNsTerrainWmsVisible);
+});
+
+toggleKategoriTokeTerrainWmsButton?.addEventListener("click", () => {
+  setKategoriTokeTerrainWmsVisible(!isKategoriTokeTerrainWmsVisible);
 });
 
 function saveCurrentMapViewForSession() {

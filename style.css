@@ -1382,7 +1382,13 @@ button {
 .map-buildings-toggle,
 .map-google-tiles-toggle,
 .map-draw3d-toggle,
-.map-himare-wms-toggle {
+.map-himare-wms-toggle,
+.map-dhermi-wms-toggle,
+.map-palase-wms-toggle,
+.map-ashk-wms-toggle,
+.map-qkd-wms-toggle,
+.map-kufi-ns-wms-toggle,
+.map-kategori-toke-wms-toggle {
   position: absolute;
   right: 12px;
   z-index: 1300;
@@ -1425,6 +1431,30 @@ button {
   top: 212px;
 }
 
+.map-dhermi-wms-toggle {
+  top: 252px;
+}
+
+.map-palase-wms-toggle {
+  top: 292px;
+}
+
+.map-ashk-wms-toggle {
+  top: 332px;
+}
+
+.map-qkd-wms-toggle {
+  top: 372px;
+}
+
+.map-kufi-ns-wms-toggle {
+  top: 412px;
+}
+
+.map-kategori-toke-wms-toggle {
+  top: 452px;
+}
+
 .map-draw3d-type {
   position: absolute;
   top: 172px;
@@ -1446,7 +1476,13 @@ button {
 .map-buildings-toggle:hover,
 .map-google-tiles-toggle:hover,
 .map-draw3d-toggle:hover,
-.map-himare-wms-toggle:hover {
+.map-himare-wms-toggle:hover,
+.map-dhermi-wms-toggle:hover,
+.map-palase-wms-toggle:hover,
+.map-ashk-wms-toggle:hover,
+.map-qkd-wms-toggle:hover,
+.map-kufi-ns-wms-toggle:hover,
+.map-kategori-toke-wms-toggle:hover {
   background: #ffffff;
   color: #0d6efd;
 }
@@ -1456,7 +1492,13 @@ button {
 .map-buildings-toggle.is-active,
 .map-google-tiles-toggle.is-active,
 .map-draw3d-toggle.is-active,
-.map-himare-wms-toggle.is-active {
+.map-himare-wms-toggle.is-active,
+.map-dhermi-wms-toggle.is-active,
+.map-palase-wms-toggle.is-active,
+.map-ashk-wms-toggle.is-active,
+.map-qkd-wms-toggle.is-active,
+.map-kufi-ns-wms-toggle.is-active,
+.map-kategori-toke-wms-toggle.is-active {
   border-color: #0d6efd;
   background: #0d6efd;
   color: #ffffff;
@@ -1466,7 +1508,13 @@ button {
 .map-buildings-toggle.is-loading,
 .map-google-tiles-toggle.is-loading,
 .map-draw3d-toggle.is-loading,
-.map-himare-wms-toggle.is-loading {
+.map-himare-wms-toggle.is-loading,
+.map-dhermi-wms-toggle.is-loading,
+.map-palase-wms-toggle.is-loading,
+.map-ashk-wms-toggle.is-loading,
+.map-qkd-wms-toggle.is-loading,
+.map-kufi-ns-wms-toggle.is-loading,
+.map-kategori-toke-wms-toggle.is-loading {
   opacity: 0.72;
   pointer-events: none;
 }
