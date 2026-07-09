@@ -1171,6 +1171,10 @@ const toggleCesiumBuildingsButton = document.getElementById("toggleCesiumBuildin
 const toggleGooglePhotorealisticButton = document.getElementById(
   "toggleGooglePhotorealistic",
 );
+const toggleCesiumDrawFootprintButton = document.getElementById(
+  "toggleCesiumDrawFootprint",
+);
+const cesiumDrawTypeSelect = document.getElementById("cesiumDrawType");
 const cesiumIonAccessToken =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyZjlhZTVlOS1hZDg2LTQxNTgtYmFjYS1iYTRjNDcxOWFhNjQiLCJpZCI6MTE1MTg4LCJpYXQiOjE2Nzg0NjMyNTJ9.FntmGyy-qhgprvx60qrCryPonYG7hKjdxTi11M3j9yA";
 let cesiumViewer = null;
@@ -1184,6 +1188,14 @@ let cesiumOsmBuildingsTileset = null;
 let googlePhotorealisticTilesetPromise = null;
 let googlePhotorealisticTileset = null;
 const cesiumBaseLayerByOlLayer = new WeakMap();
+let isCesiumDrawFootprintMode = false;
+let cesiumDrawHandler = null;
+let cesiumDrawPositions = [];
+let cesiumDrawPreviewPosition = null;
+let cesiumDrawPolylineEntity = null;
+let cesiumDrawPolygonEntity = null;
+const cesiumDrawPointEntities = [];
+const cesiumDrawnFeatures = [];
 
 function getCesiumCameraHeightFromZoom(zoom) {
   if (!Number.isFinite(zoom)) return 2500000;
@@ -1504,6 +1516,227 @@ async function setGooglePhotorealisticEnabled(enabled) {
   }
 }
 
+function getCesiumGroundPosition(screenPosition) {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !screenPosition) return null;
+
+  if (viewer.scene.pickPositionSupported) {
+    const pickedPosition = viewer.scene.pickPosition(screenPosition);
+    if (Cesium.defined(pickedPosition)) return pickedPosition;
+  }
+
+  const ray = viewer.camera.getPickRay(screenPosition);
+  if (!ray) return null;
+
+  const globePosition = viewer.scene.globe.pick(ray, viewer.scene);
+  if (Cesium.defined(globePosition)) return globePosition;
+
+  return viewer.camera.pickEllipsoid(screenPosition, viewer.scene.globe.ellipsoid);
+}
+
+function getCesiumDrawPreviewPositions() {
+  if (cesiumDrawPositions.length === 0) return [];
+  return cesiumDrawPreviewPosition
+    ? [...cesiumDrawPositions, cesiumDrawPreviewPosition]
+    : cesiumDrawPositions;
+}
+
+function getCesiumDrawType() {
+  return cesiumDrawTypeSelect?.value || "Polygon";
+}
+
+function clearCesiumDrawSketch() {
+  if (!cesiumViewer) return;
+
+  cesiumDrawPointEntities.splice(0).forEach((entity) => {
+    cesiumViewer.entities.remove(entity);
+  });
+
+  if (cesiumDrawPolylineEntity) {
+    cesiumViewer.entities.remove(cesiumDrawPolylineEntity);
+    cesiumDrawPolylineEntity = null;
+  }
+
+  if (cesiumDrawPolygonEntity) {
+    cesiumViewer.entities.remove(cesiumDrawPolygonEntity);
+    cesiumDrawPolygonEntity = null;
+  }
+
+  cesiumDrawPositions = [];
+  cesiumDrawPreviewPosition = null;
+}
+
+function updateCesiumDrawSketch() {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium) return;
+
+  const drawType = getCesiumDrawType();
+
+  if (drawType !== "Point" && !cesiumDrawPolylineEntity) {
+    cesiumDrawPolylineEntity = viewer.entities.add({
+      polyline: {
+        positions: new Cesium.CallbackProperty(
+          () => getCesiumDrawPreviewPositions(),
+          false,
+        ),
+        width: 3,
+        clampToGround: true,
+        material: Cesium.Color.YELLOW,
+      },
+    });
+  }
+
+  if (
+    drawType === "Polygon" &&
+    cesiumDrawPositions.length >= 3 &&
+    !cesiumDrawPolygonEntity
+  ) {
+    cesiumDrawPolygonEntity = viewer.entities.add({
+      polygon: {
+        hierarchy: new Cesium.CallbackProperty(
+          () => new Cesium.PolygonHierarchy(getCesiumDrawPreviewPositions()),
+          false,
+        ),
+        material: Cesium.Color.YELLOW.withAlpha(0.22),
+        outline: true,
+        outlineColor: Cesium.Color.YELLOW,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      },
+    });
+  }
+}
+
+function finishCesiumDrawing() {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium) return;
+
+  const drawType = getCesiumDrawType();
+  const minimumPoints =
+    drawType === "Point" ? 1 : drawType === "LineString" ? 2 : 3;
+  if (cesiumDrawPositions.length < minimumPoints) return;
+
+  const sourcePositions = [...cesiumDrawPositions];
+  const featureIndex = cesiumDrawnFeatures.length + 1;
+  const baseEntity = {
+    name: `3D ${drawType} ${featureIndex}`,
+    properties: {
+      geometryType: drawType,
+      exportStatus: "geometry-ready",
+    },
+  };
+  let entity;
+
+  if (drawType === "Point") {
+    entity = viewer.entities.add({
+      ...baseEntity,
+      position: sourcePositions[0],
+      point: {
+        pixelSize: 11,
+        color: Cesium.Color.CORNFLOWERBLUE,
+        outlineColor: Cesium.Color.WHITE,
+        outlineWidth: 2,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      },
+    });
+  } else if (drawType === "LineString") {
+    entity = viewer.entities.add({
+      ...baseEntity,
+      polyline: {
+        positions: sourcePositions,
+        width: 4,
+        clampToGround: true,
+        material: Cesium.Color.CORNFLOWERBLUE,
+      },
+    });
+  } else {
+    entity = viewer.entities.add({
+      ...baseEntity,
+      polygon: {
+        hierarchy: new Cesium.PolygonHierarchy(sourcePositions),
+        material: Cesium.Color.CORNFLOWERBLUE.withAlpha(0.45),
+        outline: true,
+        outlineColor: Cesium.Color.WHITE,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      },
+    });
+  }
+
+  cesiumDrawnFeatures.push({
+    entity,
+    positions: sourcePositions,
+    geometryType: drawType,
+  });
+
+  clearCesiumDrawSketch();
+  setCesiumDrawFootprintMode(false);
+}
+
+function addCesiumDrawVertex(screenPosition) {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  const position = getCesiumGroundPosition(screenPosition);
+  if (!viewer || !Cesium || !position) return;
+
+  cesiumDrawPositions.push(position);
+  cesiumDrawPointEntities.push(
+    viewer.entities.add({
+      position,
+      point: {
+        pixelSize: 9,
+        color: Cesium.Color.YELLOW,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      },
+    }),
+  );
+  updateCesiumDrawSketch();
+
+  if (getCesiumDrawType() === "Point") {
+    finishCesiumDrawing();
+  }
+}
+
+function setCesiumDrawFootprintMode(enabled) {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !toggleCesiumDrawFootprintButton) return;
+
+  isCesiumDrawFootprintMode = enabled;
+  toggleCesiumDrawFootprintButton.classList.toggle("is-active", enabled);
+  toggleCesiumDrawFootprintButton.title = enabled
+    ? "Click to digitize. Double-click or right-click to finish lines and polygons."
+    : "Draw 3D geometry";
+
+  if (!enabled) {
+    if (cesiumDrawHandler) {
+      cesiumDrawHandler.destroy();
+      cesiumDrawHandler = null;
+    }
+    clearCesiumDrawSketch();
+    return;
+  }
+
+  setMapMode3d(true);
+  clearCesiumDrawSketch();
+  cesiumDrawHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  cesiumDrawHandler.setInputAction((event) => {
+    addCesiumDrawVertex(event.position);
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+  cesiumDrawHandler.setInputAction((event) => {
+    cesiumDrawPreviewPosition = getCesiumGroundPosition(event.endPosition);
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+  cesiumDrawHandler.setInputAction(() => {
+    finishCesiumDrawing();
+  }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+  cesiumDrawHandler.setInputAction(() => {
+    finishCesiumDrawing();
+  }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+}
+
 function flyCesiumToOpenLayersView() {
   const viewer = initCesiumViewer();
   if (!viewer) return;
@@ -1568,6 +1801,16 @@ toggleCesiumBuildingsButton?.addEventListener("click", () => {
 
 toggleGooglePhotorealisticButton?.addEventListener("click", () => {
   setGooglePhotorealisticEnabled(!isGooglePhotorealisticEnabled);
+});
+
+toggleCesiumDrawFootprintButton?.addEventListener("click", () => {
+  setCesiumDrawFootprintMode(!isCesiumDrawFootprintMode);
+});
+
+cesiumDrawTypeSelect?.addEventListener("change", () => {
+  if (isCesiumDrawFootprintMode) {
+    clearCesiumDrawSketch();
+  }
 });
 
 function saveCurrentMapViewForSession() {

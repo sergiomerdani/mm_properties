@@ -1435,6 +1435,15 @@
           <i class="fa-solid fa-cube"></i>
           <span>Google 3D</span>
         </button>
+        <button id="toggleCesiumDrawFootprint" class="map-draw3d-toggle" title="Draw 3D Building Footprint">
+          <i class="fa-solid fa-draw-polygon"></i>
+          <span>Draw 3D</span>
+        </button>
+        <select id="cesiumDrawType" class="map-draw3d-type" title="3D draw geometry type">
+          <option value="Point">Point</option>
+          <option value="LineString">Line</option>
+          <option value="Polygon" selected>Polygon</option>
+        </select>
         <div class="map-projection-control" title="Map Projection">
           <select id="mapProjectionSelect">
             <option value="EPSG:3857">EPSG:3857 Web Mercator</option>

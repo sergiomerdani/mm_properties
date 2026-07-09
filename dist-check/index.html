@@ -18,8 +18,8 @@
     />
     <script src="https://cdn.jsdelivr.net/npm/cesium@1.119.0/Build/Cesium/Cesium.js"></script>
     <title>INOVACIONI</title>
-    <script type="module" crossorigin src="/assets/index-BSkS9lrW.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-Dgq3pV6S.css">
+    <script type="module" crossorigin src="/assets/index-CY9sFRrA.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-dSCLc_X8.css">
   </head>
   <body>
     <div class="grid-container">
@@ -1433,6 +1433,15 @@
           <i class="fa-solid fa-cube"></i>
           <span>Google 3D</span>
         </button>
+        <button id="toggleCesiumDrawFootprint" class="map-draw3d-toggle" title="Draw 3D Building Footprint">
+          <i class="fa-solid fa-draw-polygon"></i>
+          <span>Draw 3D</span>
+        </button>
+        <select id="cesiumDrawType" class="map-draw3d-type" title="3D draw geometry type">
+          <option value="Point">Point</option>
+          <option value="LineString">Line</option>
+          <option value="Polygon" selected>Polygon</option>
+        </select>
         <div class="map-projection-control" title="Map Projection">
           <select id="mapProjectionSelect">
             <option value="EPSG:3857">EPSG:3857 Web Mercator</option>
