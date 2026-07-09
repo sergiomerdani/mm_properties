@@ -702,6 +702,18 @@ const cartoDBBaseLayer = new TileLayer({
   displayInLayerSwitcher: true,
 });
 
+const satelliteImageryBaseLayer = new TileLayer({
+  source: new XYZ({
+    url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attributions: "Tiles (c) Esri",
+    crossOrigin: "anonymous",
+  }),
+  visible: false,
+  title: "Satellite Imagery",
+  baseLayer: true,
+  displayInLayerSwitcher: true,
+});
+
 let baseLayerGroup;
 var wmts_parser = new WMTSCapabilities();
 
@@ -942,11 +954,19 @@ function getWfsGetFeatureUrl({
 
 //LAYER GROUPS
 baseLayerGroup = new LayerGroup({
-  layers: [cartoDBBaseLayer, osmMap],
+  layers: [cartoDBBaseLayer, osmMap, satelliteImageryBaseLayer],
   title: "Base Layers",
   information:
     "Këto shtresa shtresat bazë të hartës të cilat mund të aktivizohen veç e veç",
   displayInLayerSwitcher: true,
+});
+
+baseLayerGroup.getLayers().forEach(watchBaseLayerForCesium);
+baseLayerGroup.getLayers().on("add", (event) => {
+  watchBaseLayerForCesium(event.element);
+  if (event.element?.getVisible?.()) {
+    setCesiumBaseLayerFromOpenLayers(event.element);
+  }
 });
 
 const asigLayers = new LayerGroup({
@@ -1146,12 +1166,126 @@ const map = new Map({
 
 const cesiumContainer = document.getElementById("cesiumContainer");
 const toggle3dMapButton = document.getElementById("toggle3dMap");
+const toggleCesiumTerrainButton = document.getElementById("toggleCesiumTerrain");
+const toggleCesiumBuildingsButton = document.getElementById("toggleCesiumBuildings");
+const toggleGooglePhotorealisticButton = document.getElementById(
+  "toggleGooglePhotorealistic",
+);
+const cesiumIonAccessToken =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyZjlhZTVlOS1hZDg2LTQxNTgtYmFjYS1iYTRjNDcxOWFhNjQiLCJpZCI6MTE1MTg4LCJpYXQiOjE2Nzg0NjMyNTJ9.FntmGyy-qhgprvx60qrCryPonYG7hKjdxTi11M3j9yA";
 let cesiumViewer = null;
 let isCesiumMode = false;
+let isCesiumTerrainEnabled = false;
+let isCesiumBuildingsEnabled = false;
+let isGooglePhotorealisticEnabled = false;
+let cesiumWorldTerrainProviderPromise = null;
+let cesiumOsmBuildingsTilesetPromise = null;
+let cesiumOsmBuildingsTileset = null;
+let googlePhotorealisticTilesetPromise = null;
+let googlePhotorealisticTileset = null;
+const cesiumBaseLayerByOlLayer = new WeakMap();
 
 function getCesiumCameraHeightFromZoom(zoom) {
   if (!Number.isFinite(zoom)) return 2500000;
   return Math.max(350, 22000000 / Math.pow(2, zoom));
+}
+
+function getVisibleOpenLayersBaseLayer() {
+  return baseLayerGroup
+    ?.getLayers()
+    ?.getArray()
+    ?.find((layer) => layer.getVisible());
+}
+
+function normalizeCesiumTileUrl(url) {
+  if (!url) return null;
+  return url.replace("{a-c}", "{s}").replace("{1-4}", "{s}");
+}
+
+function getCesiumSubdomains(url) {
+  if (url?.includes("{1-4}")) return ["1", "2", "3", "4"];
+  if (url?.includes("{a-c}")) return ["a", "b", "c"];
+  return undefined;
+}
+
+function createCesiumProviderFromOpenLayersLayer(layer) {
+  const Cesium = window.Cesium;
+  if (!Cesium || !layer) return null;
+
+  const source = layer.getSource?.();
+  const title = layer.get("title") || layer.get("name") || "";
+
+  if (title === "OSM" || source instanceof OSM) {
+    return new Cesium.UrlTemplateImageryProvider({
+      url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      credit: "OpenStreetMap contributors",
+      maximumLevel: 19,
+    });
+  }
+
+  if (title === "CartoDarkAll") {
+    return new Cesium.UrlTemplateImageryProvider({
+      url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+      subdomains: ["1", "2", "3", "4"],
+      credit: "CARTO, OpenStreetMap contributors",
+      maximumLevel: 19,
+    });
+  }
+
+  const urls = source?.getUrls?.();
+  const url = normalizeCesiumTileUrl(urls?.[0] || source?.getUrl?.());
+  if (url?.includes("{z}") && url?.includes("{x}") && url?.includes("{y}")) {
+    return new Cesium.UrlTemplateImageryProvider({
+      url,
+      subdomains: getCesiumSubdomains(urls?.[0] || source?.getUrl?.()),
+      credit: title,
+      maximumLevel: 22,
+    });
+  }
+
+  if (
+    source?.getLayer &&
+    source?.getMatrixSet &&
+    source?.getUrls &&
+    Cesium.WebMapTileServiceImageryProvider
+  ) {
+    const wmtsUrls = source.getUrls();
+    return new Cesium.WebMapTileServiceImageryProvider({
+      url: wmtsUrls?.[0],
+      layer: source.getLayer(),
+      style: source.getStyle?.() || "",
+      format: source.getFormat?.() || "image/png",
+      tileMatrixSetID: source.getMatrixSet(),
+      maximumLevel: 22,
+      credit: title,
+    });
+  }
+
+  return null;
+}
+
+function setCesiumBaseLayerFromOpenLayers(layer = getVisibleOpenLayersBaseLayer()) {
+  if (!cesiumViewer || !layer) return;
+
+  let provider = cesiumBaseLayerByOlLayer.get(layer);
+  if (!provider) {
+    provider = createCesiumProviderFromOpenLayersLayer(layer);
+    if (provider) cesiumBaseLayerByOlLayer.set(layer, provider);
+  }
+
+  if (!provider) {
+    console.warn("Cesium cannot mirror this base layer:", layer.get("title"));
+    return;
+  }
+
+  cesiumViewer.imageryLayers.removeAll();
+  cesiumViewer.imageryLayers.addImageryProvider(provider);
+}
+
+function watchBaseLayerForCesium(layer) {
+  layer?.on?.("change:visible", () => {
+    if (layer.getVisible()) setCesiumBaseLayerFromOpenLayers(layer);
+  });
 }
 
 function initCesiumViewer() {
@@ -1163,6 +1297,7 @@ function initCesiumViewer() {
     return null;
   }
 
+  Cesium.Ion.defaultAccessToken = cesiumIonAccessToken;
   cesiumViewer = new Cesium.Viewer(cesiumContainer, {
     animation: false,
     timeline: false,
@@ -1178,20 +1313,195 @@ function initCesiumViewer() {
     baseLayer: false,
   });
 
-  const cartoImageryProvider = new Cesium.UrlTemplateImageryProvider({
-    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-    subdomains: ["1", "2", "3", "4"],
-    credit: "CARTO, OpenStreetMap contributors",
-    maximumLevel: 19,
-  });
-  cartoImageryProvider.errorEvent.addEventListener((error) => {
-    console.warn("Cesium basemap tile failed:", error);
-  });
-  cesiumViewer.imageryLayers.removeAll();
-  cesiumViewer.imageryLayers.addImageryProvider(cartoImageryProvider);
   cesiumViewer.scene.globe.baseColor = Cesium.Color.WHITE;
   cesiumViewer.scene.globe.depthTestAgainstTerrain = false;
+  setCesiumBaseLayerFromOpenLayers();
   return cesiumViewer;
+}
+
+function getCesiumFlatTerrainProvider() {
+  const Cesium = window.Cesium;
+  return new Cesium.EllipsoidTerrainProvider();
+}
+
+function getCesiumWorldTerrainProvider() {
+  const Cesium = window.Cesium;
+  if (!Cesium) return Promise.resolve(null);
+
+  if (!cesiumWorldTerrainProviderPromise) {
+    cesiumWorldTerrainProviderPromise = Cesium.createWorldTerrainAsync
+      ? Cesium.createWorldTerrainAsync({
+          requestVertexNormals: true,
+          requestWaterMask: true,
+        })
+      : Promise.resolve(
+          Cesium.createWorldTerrain({
+            requestVertexNormals: true,
+            requestWaterMask: true,
+          }),
+        );
+  }
+
+  return cesiumWorldTerrainProviderPromise;
+}
+
+async function setCesiumTerrainEnabled(enabled) {
+  const viewer = initCesiumViewer();
+  if (!viewer || !toggleCesiumTerrainButton) return;
+
+  toggleCesiumTerrainButton.classList.add("is-loading");
+  toggleCesiumTerrainButton.querySelector("span").textContent = enabled
+    ? "Loading"
+    : "Terrain";
+
+  try {
+    viewer.terrainProvider = enabled
+      ? await getCesiumWorldTerrainProvider()
+      : getCesiumFlatTerrainProvider();
+    isCesiumTerrainEnabled = enabled;
+    viewer.scene.globe.depthTestAgainstTerrain = enabled;
+    toggleCesiumTerrainButton.classList.toggle("is-active", enabled);
+    toggleCesiumTerrainButton.title = enabled
+      ? "Switch to flat globe"
+      : "Toggle 3D Terrain";
+  } catch (error) {
+    console.error("Could not load Cesium terrain:", error);
+    alert("Could not load Cesium World Terrain. Check the Cesium ion token and network connection.");
+  } finally {
+    toggleCesiumTerrainButton.classList.remove("is-loading");
+    toggleCesiumTerrainButton.querySelector("span").textContent = "Terrain";
+  }
+}
+
+async function getCesiumOsmBuildingsTileset() {
+  const Cesium = window.Cesium;
+  if (!Cesium) return null;
+
+  if (!cesiumOsmBuildingsTilesetPromise) {
+    if (Cesium.createOsmBuildingsAsync) {
+      cesiumOsmBuildingsTilesetPromise = Cesium.createOsmBuildingsAsync();
+    } else if (Cesium.createOsmBuildings) {
+      cesiumOsmBuildingsTilesetPromise = Promise.resolve(
+        Cesium.createOsmBuildings(),
+      );
+    } else if (Cesium.Cesium3DTileset?.fromIonAssetId) {
+      cesiumOsmBuildingsTilesetPromise =
+        Cesium.Cesium3DTileset.fromIonAssetId(96188);
+    } else {
+      cesiumOsmBuildingsTilesetPromise = Cesium.IonResource.fromAssetId(
+        96188,
+      ).then((resource) => new Cesium.Cesium3DTileset({ url: resource }));
+    }
+  }
+
+  cesiumOsmBuildingsTileset = await cesiumOsmBuildingsTilesetPromise;
+  return cesiumOsmBuildingsTileset;
+}
+
+async function setCesiumBuildingsEnabled(enabled) {
+  const viewer = initCesiumViewer();
+  if (!viewer || !toggleCesiumBuildingsButton) return;
+
+  toggleCesiumBuildingsButton.classList.add("is-loading");
+  toggleCesiumBuildingsButton.querySelector("span").textContent = enabled
+    ? "Loading"
+    : "Buildings";
+
+  try {
+    const tileset = await getCesiumOsmBuildingsTileset();
+    if (!tileset) return;
+
+    if (!viewer.scene.primitives.contains(tileset)) {
+      viewer.scene.primitives.add(tileset);
+    }
+
+    isCesiumBuildingsEnabled = enabled;
+    tileset.show = enabled;
+    toggleCesiumBuildingsButton.classList.toggle("is-active", enabled);
+    toggleCesiumBuildingsButton.title = enabled
+      ? "Hide OSM Buildings"
+      : "Show OSM Buildings";
+
+    if (enabled && googlePhotorealisticTileset) {
+      googlePhotorealisticTileset.show = false;
+      isGooglePhotorealisticEnabled = false;
+      toggleGooglePhotorealisticButton?.classList.remove("is-active");
+      if (toggleGooglePhotorealisticButton) {
+        toggleGooglePhotorealisticButton.title =
+          "Show Google Photorealistic 3D Tiles";
+      }
+    }
+  } catch (error) {
+    console.error("Could not load Cesium OSM Buildings:", error);
+    alert("Could not load Cesium OSM Buildings. Check the Cesium ion token and network connection.");
+  } finally {
+    toggleCesiumBuildingsButton.classList.remove("is-loading");
+    toggleCesiumBuildingsButton.querySelector("span").textContent = "Buildings";
+  }
+}
+
+async function getGooglePhotorealisticTileset() {
+  const Cesium = window.Cesium;
+  if (!Cesium) return null;
+
+  if (!googlePhotorealisticTilesetPromise) {
+    if (Cesium.createGooglePhotorealistic3DTileset) {
+      googlePhotorealisticTilesetPromise =
+        Cesium.createGooglePhotorealistic3DTileset();
+    } else if (Cesium.Cesium3DTileset?.fromIonAssetId) {
+      googlePhotorealisticTilesetPromise =
+        Cesium.Cesium3DTileset.fromIonAssetId(2275207);
+    } else {
+      googlePhotorealisticTilesetPromise = Cesium.IonResource.fromAssetId(
+        2275207,
+      ).then((resource) => new Cesium.Cesium3DTileset({ url: resource }));
+    }
+  }
+
+  googlePhotorealisticTileset = await googlePhotorealisticTilesetPromise;
+  return googlePhotorealisticTileset;
+}
+
+async function setGooglePhotorealisticEnabled(enabled) {
+  const viewer = initCesiumViewer();
+  if (!viewer || !toggleGooglePhotorealisticButton) return;
+
+  toggleGooglePhotorealisticButton.classList.add("is-loading");
+  toggleGooglePhotorealisticButton.querySelector("span").textContent = enabled
+    ? "Loading"
+    : "Google 3D";
+
+  try {
+    const tileset = await getGooglePhotorealisticTileset();
+    if (!tileset) return;
+
+    if (!viewer.scene.primitives.contains(tileset)) {
+      viewer.scene.primitives.add(tileset);
+    }
+
+    isGooglePhotorealisticEnabled = enabled;
+    tileset.show = enabled;
+    toggleGooglePhotorealisticButton.classList.toggle("is-active", enabled);
+    toggleGooglePhotorealisticButton.title = enabled
+      ? "Hide Google Photorealistic 3D Tiles"
+      : "Show Google Photorealistic 3D Tiles";
+
+    if (enabled && cesiumOsmBuildingsTileset) {
+      cesiumOsmBuildingsTileset.show = false;
+      isCesiumBuildingsEnabled = false;
+      toggleCesiumBuildingsButton?.classList.remove("is-active");
+      if (toggleCesiumBuildingsButton) {
+        toggleCesiumBuildingsButton.title = "Show OSM Buildings";
+      }
+    }
+  } catch (error) {
+    console.error("Could not load Google Photorealistic 3D Tiles:", error);
+    alert("Could not load Google Photorealistic 3D Tiles. Check your Cesium ion token, Google tiles access, and network connection.");
+  } finally {
+    toggleGooglePhotorealisticButton.classList.remove("is-loading");
+    toggleGooglePhotorealisticButton.querySelector("span").textContent =
+      "Google 3D";
+  }
 }
 
 function flyCesiumToOpenLayersView() {
@@ -1246,6 +1556,18 @@ function setMapMode3d(enabled) {
 
 toggle3dMapButton?.addEventListener("click", () => {
   setMapMode3d(!isCesiumMode);
+});
+
+toggleCesiumTerrainButton?.addEventListener("click", () => {
+  setCesiumTerrainEnabled(!isCesiumTerrainEnabled);
+});
+
+toggleCesiumBuildingsButton?.addEventListener("click", () => {
+  setCesiumBuildingsEnabled(!isCesiumBuildingsEnabled);
+});
+
+toggleGooglePhotorealisticButton?.addEventListener("click", () => {
+  setGooglePhotorealisticEnabled(!isGooglePhotorealisticEnabled);
 });
 
 function saveCurrentMapViewForSession() {

@@ -95,6 +95,17 @@ header {
   left: 0 !important;
   right: auto !important;
   width: 260px;
+  z-index: 1500 !important;
+}
+
+.ol-overlaycontainer-stopevent,
+.ol-overlaycontainer,
+.ol-control {
+  z-index: 1500 !important;
+}
+
+.ol-layerswitcher .panel {
+  z-index: 1501 !important;
 }
 
 .ol-layerswitcher-image > button,
@@ -1366,9 +1377,11 @@ button {
   display: none;
 }
 
-.map-mode-toggle {
+.map-mode-toggle,
+.map-terrain-toggle,
+.map-buildings-toggle,
+.map-google-tiles-toggle {
   position: absolute;
-  top: 12px;
   right: 12px;
   z-index: 1300;
   display: inline-flex;
@@ -1386,15 +1399,44 @@ button {
   cursor: pointer;
 }
 
-.map-mode-toggle:hover {
+.map-mode-toggle {
+  top: 12px;
+}
+
+.map-terrain-toggle {
+  top: 52px;
+}
+
+.map-buildings-toggle {
+  top: 92px;
+}
+
+.map-google-tiles-toggle {
+  top: 132px;
+}
+
+.map-mode-toggle:hover,
+.map-terrain-toggle:hover,
+.map-buildings-toggle:hover,
+.map-google-tiles-toggle:hover {
   background: #ffffff;
   color: #0d6efd;
 }
 
-.map-mode-toggle.is-active {
+.map-mode-toggle.is-active,
+.map-terrain-toggle.is-active,
+.map-buildings-toggle.is-active,
+.map-google-tiles-toggle.is-active {
   border-color: #0d6efd;
   background: #0d6efd;
   color: #ffffff;
+}
+
+.map-terrain-toggle.is-loading,
+.map-buildings-toggle.is-loading,
+.map-google-tiles-toggle.is-loading {
+  opacity: 0.72;
+  pointer-events: none;
 }
 
 .chat-sidebar {
