@@ -1205,6 +1205,36 @@ const kufiNsTerrainOpacityInput = document.getElementById("kufiNsTerrainOpacity"
 const kategoriTokeTerrainOpacityInput = document.getElementById(
   "kategoriTokeTerrainOpacity",
 );
+const cesiumProfileButton = document.getElementById("cesiumProfileButton");
+const cesiumProfilePanel = document.getElementById("cesiumProfilePanel");
+const cesiumProfileClose = document.getElementById("cesiumProfileClose");
+const cesiumProfileStats = document.getElementById("cesiumProfileStats");
+const cesiumProfileChartCanvas = document.getElementById("cesiumProfileChart");
+const cesiumSiteTerrainButton = document.getElementById("cesiumSiteTerrainButton");
+const cesiumSiteTerrainPanel = document.getElementById("cesiumSiteTerrainPanel");
+const cesiumSiteTerrainClose = document.getElementById("cesiumSiteTerrainClose");
+const cesiumSiteTerrainRun = document.getElementById("cesiumSiteTerrainRun");
+const cesiumSiteTerrainSpacingInput = document.getElementById(
+  "cesiumSiteTerrainSpacing",
+);
+const cesiumSiteTerrainTargetInput = document.getElementById(
+  "cesiumSiteTerrainTarget",
+);
+const cesiumSiteProfileSpacingInput = document.getElementById(
+  "cesiumSiteProfileSpacing",
+);
+const cesiumSiteProfileDirectionSelect = document.getElementById(
+  "cesiumSiteProfileDirection",
+);
+const cesiumSiteProfileAngleInput = document.getElementById(
+  "cesiumSiteProfileAngle",
+);
+const cesiumSiteProfilesRun = document.getElementById("cesiumSiteProfilesRun");
+const cesiumSiteProfilesAnalyze = document.getElementById(
+  "cesiumSiteProfilesAnalyze",
+);
+const cesiumSiteTerrainStatus = document.getElementById("cesiumSiteTerrainStatus");
+const cesiumSiteTerrainResults = document.getElementById("cesiumSiteTerrainResults");
 const cesiumIonAccessToken =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyZjlhZTVlOS1hZDg2LTQxNTgtYmFjYS1iYTRjNDcxOWFhNjQiLCJpZCI6MTE1MTg4LCJpYXQiOjE2Nzg0NjMyNTJ9.FntmGyy-qhgprvx60qrCryPonYG7hKjdxTi11M3j9yA";
 let cesiumViewer = null;
@@ -1240,6 +1270,10 @@ let kufiNsTerrainWmsLayer = null;
 let isKufiNsTerrainWmsVisible = false;
 let kategoriTokeTerrainWmsLayer = null;
 let isKategoriTokeTerrainWmsVisible = false;
+let cesiumProfileChart = null;
+const cesiumTerrainAnalysisEntities = [];
+const cesiumGeneratedProfileByEntityId = new globalThis.Map();
+let cesiumProfileLinePickHandler = null;
 
 function getTerrainOpacity(input) {
   const value = Number(input?.value);
@@ -1252,6 +1286,59 @@ function bindTerrainOpacitySlider(input, getLayer) {
     if (layer) {
       layer.alpha = getTerrainOpacity(input);
     }
+  });
+}
+
+function makePanelDraggable(panel, handle) {
+  if (!panel || !handle) return;
+
+  handle.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || event.target.closest("button, input, select, textarea")) {
+      return;
+    }
+
+    const rect = panel.getBoundingClientRect();
+    const parentRect = panel.offsetParent?.getBoundingClientRect() || {
+      left: 0,
+      top: 0,
+      width: window.innerWidth,
+      height: window.innerHeight,
+    };
+    const offsetX = event.clientX - rect.left;
+    const offsetY = event.clientY - rect.top;
+
+    panel.style.left = `${rect.left - parentRect.left}px`;
+    panel.style.top = `${rect.top - parentRect.top}px`;
+    panel.style.right = "auto";
+    panel.style.transform = "none";
+    panel.style.zIndex = "3700";
+    handle.setPointerCapture?.(event.pointerId);
+
+    const onPointerMove = (moveEvent) => {
+      const maxLeft = Math.max(0, parentRect.width - panel.offsetWidth);
+      const maxTop = Math.max(0, parentRect.height - panel.offsetHeight);
+      const nextLeft = Math.min(
+        Math.max(moveEvent.clientX - parentRect.left - offsetX, 0),
+        maxLeft,
+      );
+      const nextTop = Math.min(
+        Math.max(moveEvent.clientY - parentRect.top - offsetY, 0),
+        maxTop,
+      );
+      panel.style.left = `${nextLeft}px`;
+      panel.style.top = `${nextTop}px`;
+    };
+
+    const stopDragging = () => {
+      handle.releasePointerCapture?.(event.pointerId);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", stopDragging);
+      window.removeEventListener("pointercancel", stopDragging);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", stopDragging);
+    window.addEventListener("pointercancel", stopDragging);
   });
 }
 
@@ -1386,6 +1473,7 @@ function initCesiumViewer() {
   cesiumViewer.scene.globe.baseColor = Cesium.Color.WHITE;
   cesiumViewer.scene.globe.depthTestAgainstTerrain = false;
   setCesiumBaseLayerFromOpenLayers();
+  ensureCesiumProfileLinePickHandler();
   return cesiumViewer;
 }
 
@@ -1836,6 +1924,1020 @@ function setKategoriTokeTerrainWmsVisible(enabled) {
   }
 }
 
+function getLatestCesiumLineFeature() {
+  return [...cesiumDrawnFeatures]
+    .reverse()
+    .find(
+      (feature) =>
+        feature.geometryType === "LineString" &&
+        Array.isArray(feature.positions) &&
+        feature.positions.length >= 2,
+    );
+}
+
+function createCesiumLineProfileSamples(positions, intervalMeters = 25) {
+  const Cesium = window.Cesium;
+  if (!Cesium || positions.length < 2) return [];
+
+  const cartographics = positions.map((position) =>
+    Cesium.Cartographic.fromCartesian(position),
+  );
+  const samples = [];
+  let cumulativeDistance = 0;
+
+  for (let i = 0; i < cartographics.length - 1; i += 1) {
+    const start = cartographics[i];
+    const end = cartographics[i + 1];
+    const geodesic = new Cesium.EllipsoidGeodesic(start, end);
+    const segmentDistance = geodesic.surfaceDistance || 0;
+    const steps = Math.max(1, Math.ceil(segmentDistance / intervalMeters));
+
+    for (let step = 0; step < steps; step += 1) {
+      if (i > 0 && step === 0) continue;
+      const fraction = step / steps;
+      const point = geodesic.interpolateUsingFraction(fraction);
+      samples.push({
+        distance: cumulativeDistance + segmentDistance * fraction,
+        cartographic: point,
+      });
+    }
+
+    cumulativeDistance += segmentDistance;
+  }
+
+  samples.push({
+    distance: cumulativeDistance,
+    cartographic: cartographics[cartographics.length - 1],
+  });
+
+  return samples;
+}
+
+async function sampleCesiumProfileTerrain(samples) {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !samples.length) return [];
+
+  const cartographics = samples.map(
+    (sample) =>
+      new Cesium.Cartographic(
+        sample.cartographic.longitude,
+        sample.cartographic.latitude,
+        sample.cartographic.height,
+      ),
+  );
+
+  let sampledCartographics = cartographics;
+  if (Cesium.sampleTerrainMostDetailed) {
+    try {
+      sampledCartographics = await Cesium.sampleTerrainMostDetailed(
+        viewer.terrainProvider,
+        cartographics,
+      );
+    } catch (error) {
+      console.warn("Could not sample terrain profile:", error);
+    }
+  }
+
+  return samples.map((sample, index) => ({
+    distance: sample.distance,
+    elevation: sampledCartographics[index]?.height ?? 0,
+  }));
+}
+
+function getCesiumProfileStats(profile) {
+  const elevations = profile.map((point) => point.elevation).filter(Number.isFinite);
+  const totalDistance = profile.at(-1)?.distance || 0;
+  const minElevation = Math.min(...elevations);
+  const maxElevation = Math.max(...elevations);
+  const startElevation = profile[0]?.elevation ?? 0;
+  const endElevation = profile.at(-1)?.elevation ?? startElevation;
+  let gain = 0;
+  let loss = 0;
+  let maxUphillSlope = 0;
+  let maxDownhillSlope = 0;
+
+  for (let i = 1; i < profile.length; i += 1) {
+    const delta = profile[i].elevation - profile[i - 1].elevation;
+    const distanceDelta = profile[i].distance - profile[i - 1].distance;
+    const segmentSlope = distanceDelta > 0 ? (delta / distanceDelta) * 100 : 0;
+    if (delta > 0) gain += delta;
+    if (delta < 0) loss += Math.abs(delta);
+    if (segmentSlope > maxUphillSlope) maxUphillSlope = segmentSlope;
+    if (segmentSlope < maxDownhillSlope) maxDownhillSlope = segmentSlope;
+  }
+
+  return {
+    totalDistance,
+    minElevation,
+    maxElevation,
+    gain,
+    loss,
+    overallSlope: totalDistance > 0 ? ((endElevation - startElevation) / totalDistance) * 100 : 0,
+    maxUphillSlope,
+    maxDownhillSlope,
+  };
+}
+
+function getCesiumProfileSlopeSeries(profile) {
+  return profile.map((point, index) => {
+    if (index === 0) return 0;
+    const previousPoint = profile[index - 1];
+    const distanceDelta = point.distance - previousPoint.distance;
+    if (!Number.isFinite(distanceDelta) || distanceDelta <= 0) return 0;
+    return ((point.elevation - previousPoint.elevation) / distanceDelta) * 100;
+  });
+}
+
+function renderCesiumProfileChart(profile) {
+  if (!cesiumProfileChartCanvas || !cesiumProfileStats || !cesiumProfilePanel) {
+    return;
+  }
+
+  const stats = getCesiumProfileStats(profile);
+  const slopeSeries = getCesiumProfileSlopeSeries(profile);
+  cesiumProfileStats.innerHTML = `
+    <span>Distance: ${(stats.totalDistance / 1000).toFixed(2)} km</span>
+    <span>Min: ${stats.minElevation.toFixed(1)} m</span>
+    <span>Max: ${stats.maxElevation.toFixed(1)} m</span>
+    <span>Gain/Loss: ${stats.gain.toFixed(1)} / ${stats.loss.toFixed(1)} m</span>
+    <span>Overall slope: ${stats.overallSlope.toFixed(1)}%</span>
+    <span>Max up/down: ${stats.maxUphillSlope.toFixed(1)}% / ${stats.maxDownhillSlope.toFixed(1)}%</span>
+  `;
+
+  if (cesiumProfileChart) {
+    cesiumProfileChart.destroy();
+  }
+
+  cesiumProfilePanel.hidden = false;
+  cesiumProfileChart = new Chart(cesiumProfileChartCanvas, {
+    type: "line",
+    data: {
+      labels: profile.map((point) => (point.distance / 1000).toFixed(2)),
+      datasets: [
+        {
+          label: "Elevation (m)",
+          data: profile.map((point) => Number(point.elevation.toFixed(2))),
+          borderColor: "#0d6efd",
+          backgroundColor: "rgba(13, 110, 253, 0.14)",
+          fill: true,
+          pointRadius: 0,
+          tension: 0.25,
+          yAxisID: "elevation",
+        },
+        {
+          label: "Slope (%)",
+          data: slopeSeries.map((slope) => Number(slope.toFixed(2))),
+          borderColor: "#f97316",
+          backgroundColor: "rgba(249, 115, 22, 0.08)",
+          fill: false,
+          pointRadius: 0,
+          tension: 0.25,
+          yAxisID: "slope",
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: {
+        padding: {
+          left: 4,
+          right: 10,
+          top: 6,
+          bottom: 22,
+        },
+      },
+      scales: {
+        x: {
+          title: { display: true, text: "Distance (km)" },
+          ticks: {
+            maxTicksLimit: 8,
+            padding: 6,
+          },
+        },
+        elevation: {
+          type: "linear",
+          position: "left",
+          title: { display: true, text: "Elevation (m)" },
+          ticks: {
+            maxTicksLimit: 7,
+            padding: 4,
+          },
+        },
+        slope: {
+          type: "linear",
+          position: "right",
+          title: { display: true, text: "Slope (%)" },
+          grid: {
+            drawOnChartArea: false,
+          },
+          ticks: {
+            maxTicksLimit: 7,
+            padding: 4,
+            callback: (value) => `${value}%`,
+          },
+        },
+      },
+      plugins: {
+        legend: {
+          display: true,
+          position: "bottom",
+          labels: {
+            boxWidth: 12,
+            usePointStyle: true,
+          },
+        },
+      },
+    },
+  });
+  requestAnimationFrame(() => cesiumProfileChart?.resize());
+}
+
+async function createTerrainProfileFromLatestLine() {
+  const viewer = initCesiumViewer();
+  if (!viewer) return;
+
+  const lineFeature = getLatestCesiumLineFeature();
+  if (!lineFeature) {
+    alert("Draw a 3D Line first, then click Profile.");
+    return;
+  }
+
+  cesiumProfileButton?.classList.add("is-loading");
+  try {
+    const samples = createCesiumLineProfileSamples(lineFeature.positions);
+    const profile = await sampleCesiumProfileTerrain(samples);
+    if (!profile.length) {
+      alert("Could not create a terrain profile from this line.");
+      return;
+    }
+    renderCesiumProfileChart(profile);
+  } finally {
+    cesiumProfileButton?.classList.remove("is-loading");
+  }
+}
+
+function getLatestCesiumPolygonFeature() {
+  return [...cesiumDrawnFeatures]
+    .reverse()
+    .find(
+      (feature) =>
+        feature.geometryType === "Polygon" &&
+        Array.isArray(feature.positions) &&
+        feature.positions.length >= 3,
+    );
+}
+
+function clearCesiumTerrainAnalysisEntities() {
+  if (!cesiumViewer) return;
+  cesiumTerrainAnalysisEntities.splice(0).forEach((entity) => {
+    cesiumViewer.entities.remove(entity);
+  });
+  cesiumGeneratedProfileByEntityId.clear();
+}
+
+function getCesiumLocalProjector(cartographics) {
+  const Cesium = window.Cesium;
+  const centerLongitude =
+    cartographics.reduce((sum, point) => sum + point.longitude, 0) /
+    cartographics.length;
+  const centerLatitude =
+    cartographics.reduce((sum, point) => sum + point.latitude, 0) /
+    cartographics.length;
+  const earthRadius = Cesium.Ellipsoid.WGS84.maximumRadius;
+  const cosLatitude = Math.max(Math.cos(centerLatitude), 0.000001);
+
+  return {
+    centerLongitude,
+    centerLatitude,
+    earthRadius,
+    toLocal(cartographic) {
+      return {
+        x:
+          (cartographic.longitude - centerLongitude) *
+          cosLatitude *
+          earthRadius,
+        y: (cartographic.latitude - centerLatitude) * earthRadius,
+      };
+    },
+    fromLocal(point) {
+      return new Cesium.Cartographic(
+        centerLongitude + point.x / (cosLatitude * earthRadius),
+        centerLatitude + point.y / earthRadius,
+        0,
+      );
+    },
+  };
+}
+
+function isCesiumLocalPointInPolygon(point, polygonPoints) {
+  let inside = false;
+  for (
+    let currentIndex = 0, previousIndex = polygonPoints.length - 1;
+    currentIndex < polygonPoints.length;
+    previousIndex = currentIndex, currentIndex += 1
+  ) {
+    const current = polygonPoints[currentIndex];
+    const previous = polygonPoints[previousIndex];
+    const intersects =
+      current.y > point.y !== previous.y > point.y &&
+      point.x <
+        ((previous.x - current.x) * (point.y - current.y)) /
+          (previous.y - current.y || 1e-12) +
+          current.x;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function createCesiumPolygonTerrainSamples(positions, spacingMeters = 25) {
+  const Cesium = window.Cesium;
+  if (!Cesium || positions.length < 3) return [];
+
+  const safeSpacing = Math.max(5, Number(spacingMeters) || 25);
+  const cartographics = positions.map((position) =>
+    Cesium.Cartographic.fromCartesian(position),
+  );
+  const projector = getCesiumLocalProjector(cartographics);
+  const polygonPoints = cartographics.map((point) => projector.toLocal(point));
+  const xs = polygonPoints.map((point) => point.x);
+  const ys = polygonPoints.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const estimatedSamples =
+    ((maxX - minX) / safeSpacing) * ((maxY - minY) / safeSpacing);
+  const adjustedSpacing =
+    estimatedSamples > 1800
+      ? safeSpacing * Math.sqrt(estimatedSamples / 1800)
+      : safeSpacing;
+  const samples = [];
+
+  for (let y = minY; y <= maxY; y += adjustedSpacing) {
+    for (let x = minX; x <= maxX; x += adjustedSpacing) {
+      const localPoint = { x, y };
+      if (!isCesiumLocalPointInPolygon(localPoint, polygonPoints)) continue;
+      samples.push({
+        local: localPoint,
+        cartographic: projector.fromLocal(localPoint),
+      });
+    }
+  }
+
+  if (!samples.length) {
+    const centerLocal = {
+      x: (minX + maxX) / 2,
+      y: (minY + maxY) / 2,
+    };
+    samples.push({
+      local: centerLocal,
+      cartographic: projector.fromLocal(centerLocal),
+    });
+  }
+
+  return {
+    samples,
+    spacing: adjustedSpacing,
+    requestedSpacing: safeSpacing,
+    bounds: { minX, maxX, minY, maxY },
+    projector,
+  };
+}
+
+async function sampleCesiumTerrainPoints(samples) {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !samples.length) return [];
+
+  const cartographics = samples.map(
+    (sample) =>
+      new Cesium.Cartographic(
+        sample.cartographic.longitude,
+        sample.cartographic.latitude,
+        sample.cartographic.height,
+      ),
+  );
+
+  let sampledCartographics = cartographics;
+  if (Cesium.sampleTerrainMostDetailed) {
+    try {
+      sampledCartographics = await Cesium.sampleTerrainMostDetailed(
+        viewer.terrainProvider,
+        cartographics,
+      );
+    } catch (error) {
+      console.warn("Could not sample site terrain:", error);
+    }
+  }
+
+  return samples.map((sample, index) => ({
+    ...sample,
+    elevation: sampledCartographics[index]?.height ?? 0,
+    cartographic: sampledCartographics[index] || sample.cartographic,
+  }));
+}
+
+function getCesiumAspectLabel(degrees) {
+  if (!Number.isFinite(degrees)) return "Flat / mixed";
+  const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  const index = Math.round(degrees / 45) % directions.length;
+  return `${directions[index]} (${degrees.toFixed(0)} deg)`;
+}
+
+function getCesiumSiteTerrainMetrics(points, spacingMeters, targetElevation) {
+  const Cesium = window.Cesium;
+  const elevations = points
+    .map((point) => point.elevation)
+    .filter((value) => Number.isFinite(value));
+  const minElevation = Math.min(...elevations);
+  const maxElevation = Math.max(...elevations);
+  const averageElevation =
+    elevations.reduce((sum, elevation) => sum + elevation, 0) / elevations.length;
+  const target = Number.isFinite(targetElevation) ? targetElevation : averageElevation;
+  const cellArea = spacingMeters * spacingMeters;
+  let cutVolume = 0;
+  let fillVolume = 0;
+
+  points.forEach((point) => {
+    const delta = target - point.elevation;
+    if (delta > 0) fillVolume += delta * cellArea;
+    if (delta < 0) cutVolume += Math.abs(delta) * cellArea;
+  });
+
+  const slopePairs = [];
+  let slopeSum = 0;
+  let slopeCount = 0;
+  let maxSlope = 0;
+  let aspectX = 0;
+  let aspectY = 0;
+  const neighborLimit = spacingMeters * 1.55;
+
+  for (let i = 0; i < points.length; i += 1) {
+    for (let j = i + 1; j < points.length; j += 1) {
+      const dx = points[j].local.x - points[i].local.x;
+      const dy = points[j].local.y - points[i].local.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance <= 0 || distance > neighborLimit) continue;
+
+      const elevationDelta = points[j].elevation - points[i].elevation;
+      const slope = Math.abs(elevationDelta / distance) * 100;
+      slopeSum += slope;
+      slopeCount += 1;
+      if (slope > maxSlope) maxSlope = slope;
+
+      const downhillSign = elevationDelta > 0 ? -1 : 1;
+      const weight = Math.abs(elevationDelta) / distance;
+      aspectX += (dx / distance) * downhillSign * weight;
+      aspectY += (dy / distance) * downhillSign * weight;
+
+      slopePairs.push({
+        slope,
+        midpoint: {
+          x: (points[i].local.x + points[j].local.x) / 2,
+          y: (points[i].local.y + points[j].local.y) / 2,
+        },
+      });
+    }
+  }
+
+  const aspectDegrees =
+    Math.hypot(aspectX, aspectY) > 0
+      ? (Cesium.Math.toDegrees(Math.atan2(aspectX, aspectY)) + 360) % 360
+      : null;
+
+  slopePairs.sort((a, b) => b.slope - a.slope);
+
+  return {
+    minElevation,
+    maxElevation,
+    averageElevation,
+    elevationRange: maxElevation - minElevation,
+    averageSlope: slopeCount ? slopeSum / slopeCount : 0,
+    maxSlope,
+    aspectDegrees,
+    aspectLabel: getCesiumAspectLabel(aspectDegrees),
+    targetElevation: target,
+    cutVolume,
+    fillVolume,
+    netVolume: fillVolume - cutVolume,
+    steepestZones: slopePairs.slice(0, 5),
+  };
+}
+
+function addCesiumSiteTerrainGraphics(metrics, context) {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium) return;
+
+  clearCesiumTerrainAnalysisEntities();
+  metrics.steepestZones.forEach((zone, index) => {
+    const cartographic = context.projector.fromLocal(zone.midpoint);
+    const position = Cesium.Cartesian3.fromRadians(
+      cartographic.longitude,
+      cartographic.latitude,
+      0,
+    );
+    cesiumTerrainAnalysisEntities.push(
+      viewer.entities.add({
+        name: `Steep zone ${index + 1}`,
+        position,
+        ellipse: {
+          semiMajorAxis: context.spacing * 0.75,
+          semiMinorAxis: context.spacing * 0.75,
+          material: Cesium.Color.RED.withAlpha(0.32),
+          outline: true,
+          outlineColor: Cesium.Color.RED,
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        },
+        label: {
+          text: `${zone.slope.toFixed(1)}%`,
+          font: "12px sans-serif",
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 3,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          pixelOffset: new Cesium.Cartesian2(0, -18),
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        },
+      }),
+    );
+  });
+
+  const { minX, maxX, minY, maxY } = context.bounds;
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  const profileLines = [
+    {
+      name: "Profile guide E-W",
+      color: Cesium.Color.DEEPSKYBLUE,
+      points: [
+        context.projector.fromLocal({ x: minX, y: centerY }),
+        context.projector.fromLocal({ x: maxX, y: centerY }),
+      ],
+    },
+    {
+      name: "Profile guide N-S",
+      color: Cesium.Color.ORANGE,
+      points: [
+        context.projector.fromLocal({ x: centerX, y: minY }),
+        context.projector.fromLocal({ x: centerX, y: maxY }),
+      ],
+    },
+  ];
+
+  profileLines.forEach((line) => {
+    cesiumTerrainAnalysisEntities.push(
+      viewer.entities.add({
+        name: line.name,
+        polyline: {
+          positions: line.points.map((point) =>
+            Cesium.Cartesian3.fromRadians(point.longitude, point.latitude, 0),
+          ),
+          width: 3,
+          clampToGround: true,
+          material: new Cesium.PolylineDashMaterialProperty({
+            color: line.color,
+            dashLength: 16,
+          }),
+        },
+      }),
+    );
+  });
+}
+
+function setCesiumSiteTerrainStatus(message, isError = false) {
+  if (!cesiumSiteTerrainStatus) return;
+  cesiumSiteTerrainStatus.hidden = !message;
+  cesiumSiteTerrainStatus.textContent = message || "";
+  cesiumSiteTerrainStatus.classList.toggle("is-error", isError);
+}
+
+function renderCesiumSiteTerrainResults(metrics, context) {
+  if (!cesiumSiteTerrainResults) return;
+  cesiumSiteTerrainResults.innerHTML = [
+    ["Min elevation", `${metrics.minElevation.toFixed(1)} m`],
+    ["Max elevation", `${metrics.maxElevation.toFixed(1)} m`],
+    ["Average elevation", `${metrics.averageElevation.toFixed(1)} m`],
+    ["Elevation range", `${metrics.elevationRange.toFixed(1)} m`],
+    ["Average slope", `${metrics.averageSlope.toFixed(1)}%`],
+    ["Steepest slope", `${metrics.maxSlope.toFixed(1)}%`],
+    ["Aspect direction", metrics.aspectLabel],
+    ["Target elevation", `${metrics.targetElevation.toFixed(1)} m`],
+    ["Cut volume", `${metrics.cutVolume.toFixed(0)} m3`],
+    ["Fill volume", `${metrics.fillVolume.toFixed(0)} m3`],
+    ["Net fill-cut", `${metrics.netVolume.toFixed(0)} m3`],
+    [
+      "Samples",
+      `${context.samples.length} points / ${context.spacing.toFixed(1)} m`,
+    ],
+  ]
+    .map(
+      ([label, value]) => `
+        <div class="cesium-site-terrain-card">
+          <strong>${label}</strong>
+          <span title="${value}">${value}</span>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function getCesiumProfileDirectionAngle(context) {
+  const direction = cesiumSiteProfileDirectionSelect?.value || "longest";
+  const { minX, maxX, minY, maxY } = context.bounds;
+  if (direction === "north-south") return 0;
+  if (direction === "east-west") return 90;
+  if (direction === "custom") {
+    const angle = Number(cesiumSiteProfileAngleInput?.value);
+    return Number.isFinite(angle) ? angle : 90;
+  }
+  return maxX - minX >= maxY - minY ? 90 : 0;
+}
+
+function createCesiumPolygonProfileSegments(positions, spacingMeters = 3) {
+  const Cesium = window.Cesium;
+  if (!Cesium || positions.length < 3) return null;
+
+  const safeSpacing = Math.max(1, Number(spacingMeters) || 3);
+  const baseContext = createCesiumPolygonTerrainSamples(positions, 25);
+  const cartographics = positions.map((position) =>
+    Cesium.Cartographic.fromCartesian(position),
+  );
+  const projector = getCesiumLocalProjector(cartographics);
+  const polygonPoints = cartographics.map((point) => projector.toLocal(point));
+  const angleDegrees = getCesiumProfileDirectionAngle({
+    bounds: baseContext.bounds,
+  });
+  const angleRadians = Cesium.Math.toRadians(angleDegrees);
+  const direction = {
+    x: Math.sin(angleRadians),
+    y: Math.cos(angleRadians),
+  };
+  const normal = {
+    x: -direction.y,
+    y: direction.x,
+  };
+  const rotatedPoints = polygonPoints.map((point) => ({
+    u: point.x * direction.x + point.y * direction.y,
+    w: point.x * normal.x + point.y * normal.y,
+  }));
+  const us = rotatedPoints.map((point) => point.u);
+  const ws = rotatedPoints.map((point) => point.w);
+  const minU = Math.min(...us);
+  const maxU = Math.max(...us);
+  const minW = Math.min(...ws);
+  const maxW = Math.max(...ws);
+  const profileCountEstimate = (maxW - minW) / safeSpacing;
+  const adjustedSpacing =
+    profileCountEstimate > 350
+      ? safeSpacing * Math.ceil(profileCountEstimate / 350)
+      : safeSpacing;
+  const segments = [];
+  let profileIndex = 1;
+
+  for (let w = minW; w <= maxW; w += adjustedSpacing) {
+    const intersections = [];
+    for (let i = 0; i < rotatedPoints.length; i += 1) {
+      const start = rotatedPoints[i];
+      const end = rotatedPoints[(i + 1) % rotatedPoints.length];
+      const crosses =
+        (start.w <= w && end.w > w) || (end.w <= w && start.w > w);
+      if (!crosses) continue;
+      const fraction = (w - start.w) / (end.w - start.w);
+      intersections.push(start.u + fraction * (end.u - start.u));
+    }
+
+    intersections.sort((a, b) => a - b);
+    for (let i = 0; i < intersections.length - 1; i += 2) {
+      const startU = Math.max(intersections[i], minU);
+      const endU = Math.min(intersections[i + 1], maxU);
+      if (endU - startU < Math.max(0.5, adjustedSpacing * 0.25)) continue;
+      const startLocal = {
+        x: direction.x * startU + normal.x * w,
+        y: direction.y * startU + normal.y * w,
+      };
+      const endLocal = {
+        x: direction.x * endU + normal.x * w,
+        y: direction.y * endU + normal.y * w,
+      };
+      segments.push({
+        name: `Profile ${profileIndex}`,
+        startLocal,
+        endLocal,
+        positions: [
+          Cesium.Cartesian3.fromRadians(
+            projector.fromLocal(startLocal).longitude,
+            projector.fromLocal(startLocal).latitude,
+            0,
+          ),
+          Cesium.Cartesian3.fromRadians(
+            projector.fromLocal(endLocal).longitude,
+            projector.fromLocal(endLocal).latitude,
+            0,
+          ),
+        ],
+      });
+      profileIndex += 1;
+    }
+  }
+
+  return {
+    segments,
+    spacing: adjustedSpacing,
+    requestedSpacing: safeSpacing,
+    angleDegrees,
+  };
+}
+
+async function openCesiumGeneratedProfile(entityId) {
+  const profileLine = cesiumGeneratedProfileByEntityId.get(entityId);
+  if (!profileLine) return;
+  let profile = profileLine.profile;
+  if (!profile?.length) {
+    setCesiumSiteTerrainStatus(`Sampling ${profileLine.name}...`);
+    profile = await sampleCesiumProfileTerrain(
+      createCesiumLineProfileSamples(profileLine.positions, 2),
+    );
+    profileLine.profile = profile;
+  }
+  if (profile.length) {
+    renderCesiumProfileChart(profile);
+    setCesiumSiteTerrainStatus(`${profileLine.name} profile opened.`);
+  }
+}
+
+function ensureCesiumProfileLinePickHandler() {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || cesiumProfileLinePickHandler) return;
+
+  cesiumProfileLinePickHandler = new Cesium.ScreenSpaceEventHandler(
+    viewer.scene.canvas,
+  );
+  cesiumProfileLinePickHandler.setInputAction((event) => {
+    const picked = viewer.scene.pick(event.position);
+    const entity = picked?.id;
+    if (!entity?.id || !cesiumGeneratedProfileByEntityId.has(entity.id)) return;
+    openCesiumGeneratedProfile(entity.id);
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+}
+
+function addCesiumGeneratedProfileLines(profileContext) {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium) return;
+
+  profileContext.segments.forEach((segment, index) => {
+    const entity = viewer.entities.add({
+      name: segment.name,
+      polyline: {
+        positions: segment.positions,
+        width: 2,
+        clampToGround: true,
+        material:
+          index % 2 === 0 ? Cesium.Color.CYAN : Cesium.Color.LIGHTSEAGREEN,
+      },
+      label: {
+        text: String(index + 1),
+        font: "11px sans-serif",
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 3,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        pixelOffset: new Cesium.Cartesian2(0, -12),
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      },
+      position: segment.positions[0],
+    });
+    cesiumTerrainAnalysisEntities.push(entity);
+    cesiumGeneratedProfileByEntityId.set(entity.id, segment);
+  });
+}
+
+function getCesiumProfileSummary(profile) {
+  const stats = getCesiumProfileStats(profile);
+  const slopeSeries = getCesiumProfileSlopeSeries(profile);
+  const maxSlope = slopeSeries.reduce(
+    (max, slope) => Math.max(max, Math.abs(slope)),
+    0,
+  );
+  return {
+    distance: stats.totalDistance,
+    minElevation: stats.minElevation,
+    maxElevation: stats.maxElevation,
+    gain: stats.gain,
+    loss: stats.loss,
+    maxSlope,
+  };
+}
+
+function renderCesiumAnalyzedProfileList(profiles) {
+  if (!cesiumSiteTerrainResults) return;
+  const totalLength = profiles.reduce(
+    (sum, profile) => sum + profile.summary.distance,
+    0,
+  );
+  const highestSlope = Math.max(
+    ...profiles.map((profile) => profile.summary.maxSlope),
+  );
+
+  cesiumSiteTerrainResults.innerHTML = `
+    <div class="cesium-site-terrain-card">
+      <strong>Analyzed</strong>
+      <span>${profiles.length}</span>
+    </div>
+    <div class="cesium-site-terrain-card">
+      <strong>Total length</strong>
+      <span>${(totalLength / 1000).toFixed(2)} km</span>
+    </div>
+    <div class="cesium-site-terrain-card">
+      <strong>Max slope</strong>
+      <span>${highestSlope.toFixed(1)}%</span>
+    </div>
+    <div class="cesium-site-profile-list">
+      <div class="cesium-site-profile-list__header">
+        <span>Profile</span>
+        <span>Length</span>
+        <span>Min</span>
+        <span>Max</span>
+        <span>Gain/Loss</span>
+        <span>Max slope</span>
+      </div>
+      ${profiles
+        .map(
+          ({ entityId, segment, summary }) => `
+            <button class="cesium-site-profile-row" type="button" data-profile-id="${entityId}">
+              <strong>${segment.name}</strong>
+              <span>${summary.distance.toFixed(1)} m</span>
+              <span>${summary.minElevation.toFixed(1)} m</span>
+              <span>${summary.maxElevation.toFixed(1)} m</span>
+              <span>${summary.gain.toFixed(1)} / ${summary.loss.toFixed(1)} m</span>
+              <span>${summary.maxSlope.toFixed(1)}%</span>
+            </button>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+
+  cesiumSiteTerrainResults
+    .querySelectorAll(".cesium-site-profile-row")
+    .forEach((row) => {
+      row.addEventListener("click", () => {
+        openCesiumGeneratedProfile(row.dataset.profileId);
+      });
+    });
+}
+
+async function analyzeCesiumGeneratedProfiles() {
+  const profiles = [...cesiumGeneratedProfileByEntityId.entries()];
+  if (!profiles.length) {
+    setCesiumSiteTerrainStatus("Generate profile lines first.", true);
+    return;
+  }
+
+  cesiumSiteProfilesAnalyze?.setAttribute("disabled", "disabled");
+  cesiumSiteTerrainButton?.classList.add("is-loading");
+  const analyzedProfiles = [];
+
+  try {
+    for (let index = 0; index < profiles.length; index += 1) {
+      const [entityId, segment] = profiles[index];
+      setCesiumSiteTerrainStatus(
+        `Analyzing ${segment.name} (${index + 1}/${profiles.length})...`,
+      );
+      if (!segment.profile?.length) {
+        segment.profile = await sampleCesiumProfileTerrain(
+          createCesiumLineProfileSamples(segment.positions, 2),
+        );
+      }
+      if (!segment.profile.length) continue;
+      segment.summary = getCesiumProfileSummary(segment.profile);
+      analyzedProfiles.push({ entityId, segment, summary: segment.summary });
+    }
+
+    if (!analyzedProfiles.length) {
+      setCesiumSiteTerrainStatus("No terrain profiles could be analyzed.", true);
+      return;
+    }
+    renderCesiumAnalyzedProfileList(analyzedProfiles);
+    setCesiumSiteTerrainStatus(
+      `Finished. ${analyzedProfiles.length} profiles analyzed. Click a row to open the chart.`,
+    );
+  } catch (error) {
+    console.error("Profile analysis failed:", error);
+    setCesiumSiteTerrainStatus(error.message || "Profile analysis failed.", true);
+  } finally {
+    cesiumSiteProfilesAnalyze?.removeAttribute("disabled");
+    cesiumSiteTerrainButton?.classList.remove("is-loading");
+  }
+}
+
+function generateCesiumProfilesForLatestPolygon() {
+  const viewer = initCesiumViewer();
+  if (!viewer) return;
+
+  const polygonFeature = getLatestCesiumPolygonFeature();
+  if (!polygonFeature) {
+    setCesiumSiteTerrainStatus("Draw a 3D Polygon first, then generate profiles.", true);
+    return;
+  }
+
+  const spacing = Number(cesiumSiteProfileSpacingInput?.value) || 3;
+  setCesiumSiteTerrainStatus("Generating profile lines...");
+  try {
+    clearCesiumTerrainAnalysisEntities();
+    const profileContext = createCesiumPolygonProfileSegments(
+      polygonFeature.positions,
+      spacing,
+    );
+    if (!profileContext?.segments?.length) {
+      setCesiumSiteTerrainStatus("No profile lines could be generated inside this polygon.", true);
+      return;
+    }
+    addCesiumGeneratedProfileLines(profileContext);
+    setCesiumSiteTerrainStatus(
+      `Generated ${profileContext.segments.length} profiles at ${profileContext.spacing.toFixed(
+        1,
+      )} m spacing, angle ${profileContext.angleDegrees.toFixed(0)} deg. Click a line to open its profile.`,
+    );
+    if (cesiumSiteTerrainResults) {
+      cesiumSiteTerrainResults.innerHTML = `
+        <div class="cesium-site-terrain-card">
+          <strong>Profiles</strong>
+          <span>${profileContext.segments.length}</span>
+        </div>
+        <div class="cesium-site-terrain-card">
+          <strong>Spacing</strong>
+          <span>${profileContext.spacing.toFixed(1)} m</span>
+        </div>
+        <div class="cesium-site-terrain-card">
+          <strong>Direction</strong>
+          <span>${profileContext.angleDegrees.toFixed(0)} deg</span>
+        </div>
+      `;
+    }
+  } catch (error) {
+    console.error("Profile generation failed:", error);
+    setCesiumSiteTerrainStatus(error.message || "Profile generation failed.", true);
+  }
+}
+
+async function analyzeLatestCesiumPolygonTerrain() {
+  const viewer = initCesiumViewer();
+  if (!viewer) return;
+
+  const polygonFeature = getLatestCesiumPolygonFeature();
+  if (!polygonFeature) {
+    setCesiumSiteTerrainStatus("Draw a 3D Polygon first, then run Site Terrain.", true);
+    return;
+  }
+
+  const spacing = Number(cesiumSiteTerrainSpacingInput?.value) || 25;
+  const targetElevation = Number(cesiumSiteTerrainTargetInput?.value);
+  cesiumSiteTerrainButton?.classList.add("is-loading");
+  cesiumSiteTerrainRun?.setAttribute("disabled", "disabled");
+  setCesiumSiteTerrainStatus("Sampling terrain inside polygon...");
+
+  try {
+    const context = createCesiumPolygonTerrainSamples(
+      polygonFeature.positions,
+      spacing,
+    );
+    const sampledPoints = await sampleCesiumTerrainPoints(context.samples);
+    if (!sampledPoints.length) {
+      setCesiumSiteTerrainStatus("No terrain samples were created inside this polygon.", true);
+      return;
+    }
+    context.samples = sampledPoints;
+    const metrics = getCesiumSiteTerrainMetrics(
+      sampledPoints,
+      context.spacing,
+      targetElevation,
+    );
+    if (cesiumSiteTerrainTargetInput && !cesiumSiteTerrainTargetInput.value) {
+      cesiumSiteTerrainTargetInput.placeholder = metrics.averageElevation.toFixed(1);
+    }
+    renderCesiumSiteTerrainResults(metrics, context);
+    addCesiumSiteTerrainGraphics(metrics, context);
+    setCesiumSiteTerrainStatus(
+      `Finished. ${sampledPoints.length} terrain points sampled${
+        context.spacing !== context.requestedSpacing
+          ? `; spacing adjusted to ${context.spacing.toFixed(1)} m for performance`
+          : ""
+      }.`,
+    );
+  } catch (error) {
+    console.error("Site terrain analysis failed:", error);
+    setCesiumSiteTerrainStatus(error.message || "Site terrain analysis failed.", true);
+  } finally {
+    cesiumSiteTerrainButton?.classList.remove("is-loading");
+    cesiumSiteTerrainRun?.removeAttribute("disabled");
+  }
+}
+
 function getCesiumGroundPosition(screenPosition) {
   const viewer = cesiumViewer;
   const Cesium = window.Cesium;
@@ -2171,6 +3273,58 @@ bindTerrainOpacitySlider(
   kategoriTokeTerrainOpacityInput,
   () => kategoriTokeTerrainWmsLayer,
 );
+
+cesiumProfileButton?.addEventListener("click", () => {
+  createTerrainProfileFromLatestLine();
+});
+
+makePanelDraggable(
+  cesiumProfilePanel,
+  cesiumProfilePanel?.querySelector(".cesium-profile-panel__header"),
+);
+makePanelDraggable(
+  cesiumSiteTerrainPanel,
+  cesiumSiteTerrainPanel?.querySelector(".cesium-site-terrain-panel__header"),
+);
+
+cesiumProfileClose?.addEventListener("click", () => {
+  if (cesiumProfilePanel) {
+    cesiumProfilePanel.hidden = true;
+  }
+});
+
+cesiumSiteTerrainButton?.addEventListener("click", () => {
+  if (!cesiumSiteTerrainPanel) return;
+  cesiumSiteTerrainPanel.hidden = false;
+  setCesiumSiteTerrainStatus("");
+  if (!cesiumSiteTerrainResults?.children.length) {
+    cesiumSiteTerrainResults.innerHTML = `
+      <div class="cesium-site-terrain-card">
+        <strong>Ready</strong>
+        <span>Draw polygon</span>
+      </div>
+    `;
+  }
+});
+
+cesiumSiteTerrainRun?.addEventListener("click", () => {
+  analyzeLatestCesiumPolygonTerrain();
+});
+
+cesiumSiteProfilesRun?.addEventListener("click", () => {
+  generateCesiumProfilesForLatestPolygon();
+});
+
+cesiumSiteProfilesAnalyze?.addEventListener("click", () => {
+  analyzeCesiumGeneratedProfiles();
+});
+
+cesiumSiteTerrainClose?.addEventListener("click", () => {
+  if (cesiumSiteTerrainPanel) {
+    cesiumSiteTerrainPanel.hidden = true;
+  }
+  clearCesiumTerrainAnalysisEntities();
+});
 
 function saveCurrentMapViewForSession() {
   const view = map.getView();

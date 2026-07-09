@@ -1479,6 +1479,64 @@
           <span>Kategori</span>
         </button>
         <input id="kategoriTokeTerrainOpacity" class="map-terrain-opacity map-kategori-toke-opacity" type="range" min="0" max="1" step="0.05" value="0.85" title="Kategori opacity" />
+        <button id="cesiumProfileButton" class="map-profile-toggle" title="Create terrain profile from latest 3D line">
+          <i class="fa-solid fa-chart-line"></i>
+          <span>Profile</span>
+        </button>
+        <button id="cesiumSiteTerrainButton" class="map-site-terrain-toggle" title="Analyze terrain inside latest 3D polygon">
+          <i class="fa-solid fa-chart-area"></i>
+          <span>Site Terrain</span>
+        </button>
+        <div id="cesiumProfilePanel" class="cesium-profile-panel" hidden>
+          <div class="cesium-profile-panel__header">
+            <strong>Terrain Profile</strong>
+            <button id="cesiumProfileClose" type="button" title="Close profile">
+              &times;
+            </button>
+          </div>
+          <div id="cesiumProfileStats" class="cesium-profile-panel__stats"></div>
+          <canvas id="cesiumProfileChart"></canvas>
+        </div>
+        <div id="cesiumSiteTerrainPanel" class="cesium-site-terrain-panel" hidden>
+          <div class="cesium-site-terrain-panel__header">
+            <strong>Site Terrain Analysis</strong>
+            <button id="cesiumSiteTerrainClose" type="button" title="Close site terrain analysis">
+              &times;
+            </button>
+          </div>
+          <div class="cesium-site-terrain-panel__controls">
+            <label>
+              <span>Sample spacing</span>
+              <input id="cesiumSiteTerrainSpacing" type="number" min="5" step="5" value="25" />
+            </label>
+            <label>
+              <span>Target elevation</span>
+              <input id="cesiumSiteTerrainTarget" type="number" step="0.1" placeholder="Use average" />
+            </label>
+            <button id="cesiumSiteTerrainRun" type="button">Analyze</button>
+            <label>
+              <span>Profile spacing</span>
+              <input id="cesiumSiteProfileSpacing" type="number" min="1" step="1" value="3" />
+            </label>
+            <label>
+              <span>Profile direction</span>
+              <select id="cesiumSiteProfileDirection">
+                <option value="longest">Longest site axis</option>
+                <option value="east-west">East-West</option>
+                <option value="north-south">North-South</option>
+                <option value="custom">Custom angle</option>
+              </select>
+            </label>
+            <label>
+              <span>Angle</span>
+              <input id="cesiumSiteProfileAngle" type="number" step="1" value="90" />
+            </label>
+            <button id="cesiumSiteProfilesRun" type="button">Generate Profiles</button>
+            <button id="cesiumSiteProfilesAnalyze" type="button">Analyze Profiles</button>
+          </div>
+          <div id="cesiumSiteTerrainStatus" class="cesium-site-terrain-panel__status" hidden></div>
+          <div id="cesiumSiteTerrainResults" class="cesium-site-terrain-panel__results"></div>
+        </div>
         <div class="map-projection-control" title="Map Projection">
           <select id="mapProjectionSelect">
             <option value="EPSG:3857">EPSG:3857 Web Mercator</option>
