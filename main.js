@@ -1175,6 +1175,9 @@ const toggleCesiumDrawFootprintButton = document.getElementById(
   "toggleCesiumDrawFootprint",
 );
 const cesiumDrawTypeSelect = document.getElementById("cesiumDrawType");
+const toggleHimareTerrainWmsButton = document.getElementById(
+  "toggleHimareTerrainWms",
+);
 const cesiumIonAccessToken =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyZjlhZTVlOS1hZDg2LTQxNTgtYmFjYS1iYTRjNDcxOWFhNjQiLCJpZCI6MTE1MTg4LCJpYXQiOjE2Nzg0NjMyNTJ9.FntmGyy-qhgprvx60qrCryPonYG7hKjdxTi11M3j9yA";
 let cesiumViewer = null;
@@ -1196,6 +1199,8 @@ let cesiumDrawPolylineEntity = null;
 let cesiumDrawPolygonEntity = null;
 const cesiumDrawPointEntities = [];
 const cesiumDrawnFeatures = [];
+let himareTerrainWmsLayer = null;
+let isHimareTerrainWmsVisible = false;
 
 function getCesiumCameraHeightFromZoom(zoom) {
   if (!Number.isFinite(zoom)) return 2500000;
@@ -1516,6 +1521,43 @@ async function setGooglePhotorealisticEnabled(enabled) {
   }
 }
 
+function setHimareTerrainWmsVisible(enabled) {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !toggleHimareTerrainWmsButton) return;
+
+  if (enabled && !himareTerrainWmsLayer) {
+    const provider = new Cesium.WebMapServiceImageryProvider({
+      url: "https://apps.kadaster.al/himarewms",
+      layers: "ndertesa,pasuri",
+      parameters: {
+        service: "WMS",
+        version: "1.1.1",
+        transparent: true,
+        format: "image/png",
+        tiled: true,
+        styles: "",
+      },
+      credit: "Kadaster Himare WMS",
+    });
+    himareTerrainWmsLayer = viewer.imageryLayers.addImageryProvider(provider);
+    himareTerrainWmsLayer.alpha = 0.85;
+  }
+
+  isHimareTerrainWmsVisible = enabled;
+  if (himareTerrainWmsLayer) {
+    himareTerrainWmsLayer.show = enabled;
+  }
+  toggleHimareTerrainWmsButton.classList.toggle("is-active", enabled);
+  toggleHimareTerrainWmsButton.title = enabled
+    ? "Hide Himare properties on 3D terrain"
+    : "Show Himare properties on 3D terrain";
+
+  if (enabled) {
+    setMapMode3d(true);
+  }
+}
+
 function getCesiumGroundPosition(screenPosition) {
   const viewer = cesiumViewer;
   const Cesium = window.Cesium;
@@ -1811,6 +1853,10 @@ cesiumDrawTypeSelect?.addEventListener("change", () => {
   if (isCesiumDrawFootprintMode) {
     clearCesiumDrawSketch();
   }
+});
+
+toggleHimareTerrainWmsButton?.addEventListener("click", () => {
+  setHimareTerrainWmsVisible(!isHimareTerrainWmsVisible);
 });
 
 function saveCurrentMapViewForSession() {
