@@ -1165,7 +1165,10 @@ const map = new Map({
 });
 
 const cesiumContainer = document.getElementById("cesiumContainer");
+const cesiumElevationTooltip = document.getElementById("cesiumElevationTooltip");
 const toggle3dMapButton = document.getElementById("toggle3dMap");
+const centerCesiumMapButton = document.getElementById("centerCesiumMap");
+const toggleCesiumElevationButton = document.getElementById("toggleCesiumElevation");
 const toggleCesiumTerrainButton = document.getElementById("toggleCesiumTerrain");
 const toggleCesiumBuildingsButton = document.getElementById("toggleCesiumBuildings");
 const toggleGooglePhotorealisticButton = document.getElementById(
@@ -1248,6 +1251,7 @@ let cesiumOsmBuildingsTileset = null;
 let googlePhotorealisticTilesetPromise = null;
 let googlePhotorealisticTileset = null;
 const cesiumBaseLayerByOlLayer = new WeakMap();
+let cesiumBaseImageryLayer = null;
 let isCesiumDrawFootprintMode = false;
 let cesiumDrawHandler = null;
 let cesiumDrawPositions = [];
@@ -1274,6 +1278,8 @@ let cesiumProfileChart = null;
 const cesiumTerrainAnalysisEntities = [];
 const cesiumGeneratedProfileByEntityId = new globalThis.Map();
 let cesiumProfileLinePickHandler = null;
+let cesiumElevationTooltipHandler = null;
+let isCesiumElevationTooltipEnabled = false;
 
 function getTerrainOpacity(input) {
   const value = Number(input?.value);
@@ -1435,14 +1441,108 @@ function setCesiumBaseLayerFromOpenLayers(layer = getVisibleOpenLayersBaseLayer(
     return;
   }
 
-  cesiumViewer.imageryLayers.removeAll();
-  cesiumViewer.imageryLayers.addImageryProvider(provider);
+  if (cesiumBaseImageryLayer) {
+    cesiumViewer.imageryLayers.remove(cesiumBaseImageryLayer, false);
+    cesiumBaseImageryLayer = null;
+  }
+
+  cesiumBaseImageryLayer = cesiumViewer.imageryLayers.addImageryProvider(
+    provider,
+    0,
+  );
 }
 
 function watchBaseLayerForCesium(layer) {
   layer?.on?.("change:visible", () => {
     if (layer.getVisible()) setCesiumBaseLayerFromOpenLayers(layer);
   });
+}
+
+function hideCesiumElevationTooltip() {
+  if (cesiumElevationTooltip) {
+    cesiumElevationTooltip.hidden = true;
+  }
+}
+
+function getCesiumCursorCartographic(screenPosition) {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !screenPosition) return null;
+
+  const ray = viewer.camera.getPickRay(screenPosition);
+  if (!ray) return null;
+
+  const globePosition = viewer.scene.globe.pick(ray, viewer.scene);
+  const position =
+    Cesium.defined(globePosition)
+      ? globePosition
+      : viewer.camera.pickEllipsoid(screenPosition, viewer.scene.globe.ellipsoid);
+
+  if (!Cesium.defined(position)) return null;
+  return Cesium.Cartographic.fromCartesian(position);
+}
+
+function updateCesiumElevationTooltip(screenPosition) {
+  const Cesium = window.Cesium;
+  if (
+    !Cesium ||
+    !cesiumElevationTooltip ||
+    !isCesiumMode ||
+    !isCesiumElevationTooltipEnabled
+  ) {
+    hideCesiumElevationTooltip();
+    return;
+  }
+
+  const cartographic = getCesiumCursorCartographic(screenPosition);
+  if (!cartographic) {
+    hideCesiumElevationTooltip();
+    return;
+  }
+
+  const terrainHeight = cesiumViewer.scene.globe.getHeight(cartographic);
+  const elevation = Number.isFinite(terrainHeight)
+    ? terrainHeight
+    : cartographic.height;
+  const unitText =
+    Math.abs(elevation) >= 1000
+      ? `${(elevation / 1000).toFixed(2)} km`
+      : `${elevation.toFixed(1)} m`;
+
+  cesiumElevationTooltip.textContent = `Elev: ${unitText}`;
+  cesiumElevationTooltip.style.left = `${screenPosition.x}px`;
+  cesiumElevationTooltip.style.top = `${screenPosition.y}px`;
+  cesiumElevationTooltip.hidden = false;
+}
+
+function ensureCesiumElevationTooltipHandler() {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || cesiumElevationTooltipHandler) return;
+
+  cesiumElevationTooltipHandler = new Cesium.ScreenSpaceEventHandler(
+    viewer.scene.canvas,
+  );
+  cesiumElevationTooltipHandler.setInputAction((event) => {
+    updateCesiumElevationTooltip(event.endPosition);
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+  viewer.scene.canvas.addEventListener("mouseleave", hideCesiumElevationTooltip);
+}
+
+function setCesiumElevationTooltipEnabled(enabled) {
+  isCesiumElevationTooltipEnabled = enabled;
+  toggleCesiumElevationButton?.classList.toggle("is-active", enabled);
+  if (toggleCesiumElevationButton) {
+    toggleCesiumElevationButton.title = enabled
+      ? "Hide terrain elevation at cursor"
+      : "Show terrain elevation at cursor";
+  }
+  if (enabled) {
+    setMapMode3d(true);
+  } else {
+    hideCesiumElevationTooltip();
+  }
 }
 
 function initCesiumViewer() {
@@ -1474,6 +1574,7 @@ function initCesiumViewer() {
   cesiumViewer.scene.globe.depthTestAgainstTerrain = false;
   setCesiumBaseLayerFromOpenLayers();
   ensureCesiumProfileLinePickHandler();
+  ensureCesiumElevationTooltipHandler();
   return cesiumViewer;
 }
 
@@ -3190,7 +3291,7 @@ function syncOpenLayersToCesiumCamera() {
   view.setCenter(fromLonLat(lonLat, view.getProjection()));
 }
 
-function setMapMode3d(enabled) {
+function setMapMode3d(enabled, options = {}) {
   if (!cesiumContainer || !toggle3dMapButton) return;
   if (enabled && !initCesiumViewer()) return;
 
@@ -3201,9 +3302,14 @@ function setMapMode3d(enabled) {
   toggle3dMapButton.querySelector("span").textContent = enabled ? "2D" : "3D";
 
   if (enabled) {
-    flyCesiumToOpenLayersView();
+    if (options.centerOnMap) {
+      flyCesiumToOpenLayersView();
+    }
     cesiumViewer.resize();
   } else {
+    isCesiumElevationTooltipEnabled = false;
+    toggleCesiumElevationButton?.classList.remove("is-active");
+    hideCesiumElevationTooltip();
     syncOpenLayersToCesiumCamera();
     map.updateSize();
   }
@@ -3211,6 +3317,14 @@ function setMapMode3d(enabled) {
 
 toggle3dMapButton?.addEventListener("click", () => {
   setMapMode3d(!isCesiumMode);
+});
+
+centerCesiumMapButton?.addEventListener("click", () => {
+  setMapMode3d(true, { centerOnMap: true });
+});
+
+toggleCesiumElevationButton?.addEventListener("click", () => {
+  setCesiumElevationTooltipEnabled(!isCesiumElevationTooltipEnabled);
 });
 
 toggleCesiumTerrainButton?.addEventListener("click", () => {

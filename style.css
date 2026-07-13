@@ -1377,7 +1377,30 @@ button {
   display: none;
 }
 
+.cesium-elevation-tooltip {
+  position: absolute;
+  z-index: 3900;
+  min-width: 78px;
+  padding: 5px 8px;
+  border: 1px solid rgba(15, 23, 42, 0.28);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.84);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  pointer-events: none;
+  transform: translate(12px, 12px);
+  white-space: nowrap;
+}
+
+.cesium-elevation-tooltip[hidden] {
+  display: none;
+}
+
 .map-mode-toggle,
+.map-center3d-toggle,
+.map-elevation-toggle,
 .map-terrain-toggle,
 .map-buildings-toggle,
 .map-google-tiles-toggle,
@@ -1413,56 +1436,64 @@ button {
   top: 12px;
 }
 
-.map-terrain-toggle {
+.map-center3d-toggle {
   top: 52px;
 }
 
-.map-buildings-toggle {
+.map-elevation-toggle {
   top: 92px;
 }
 
-.map-google-tiles-toggle {
+.map-terrain-toggle {
   top: 132px;
 }
 
-.map-draw3d-toggle {
+.map-buildings-toggle {
   top: 172px;
 }
 
-.map-himare-wms-toggle {
+.map-google-tiles-toggle {
   top: 212px;
 }
 
-.map-dhermi-wms-toggle {
+.map-draw3d-toggle {
   top: 252px;
 }
 
-.map-palase-wms-toggle {
+.map-himare-wms-toggle {
   top: 292px;
 }
 
-.map-ashk-wms-toggle {
+.map-dhermi-wms-toggle {
   top: 332px;
 }
 
-.map-qkd-wms-toggle {
+.map-palase-wms-toggle {
   top: 372px;
 }
 
-.map-kufi-ns-wms-toggle {
+.map-ashk-wms-toggle {
   top: 412px;
 }
 
-.map-kategori-toke-wms-toggle {
+.map-qkd-wms-toggle {
   top: 452px;
 }
 
-.map-profile-toggle {
+.map-kufi-ns-wms-toggle {
   top: 492px;
 }
 
-.map-site-terrain-toggle {
+.map-kategori-toke-wms-toggle {
   top: 532px;
+}
+
+.map-profile-toggle {
+  top: 572px;
+}
+
+.map-site-terrain-toggle {
+  top: 612px;
 }
 
 .map-terrain-opacity {
@@ -1476,36 +1507,36 @@ button {
 }
 
 .map-himare-opacity {
-  top: 212px;
-}
-
-.map-dhermi-opacity {
-  top: 252px;
-}
-
-.map-palase-opacity {
   top: 292px;
 }
 
-.map-ashk-opacity {
+.map-dhermi-opacity {
   top: 332px;
 }
 
-.map-qkd-opacity {
+.map-palase-opacity {
   top: 372px;
 }
 
-.map-kufi-ns-opacity {
+.map-ashk-opacity {
   top: 412px;
 }
 
-.map-kategori-toke-opacity {
+.map-qkd-opacity {
   top: 452px;
+}
+
+.map-kufi-ns-opacity {
+  top: 492px;
+}
+
+.map-kategori-toke-opacity {
+  top: 532px;
 }
 
 .map-draw3d-type {
   position: absolute;
-  top: 172px;
+  top: 252px;
   right: 114px;
   z-index: 1300;
   height: 34px;
@@ -1520,6 +1551,8 @@ button {
 }
 
 .map-mode-toggle:hover,
+.map-center3d-toggle:hover,
+.map-elevation-toggle:hover,
 .map-terrain-toggle:hover,
 .map-buildings-toggle:hover,
 .map-google-tiles-toggle:hover,
@@ -1538,6 +1571,8 @@ button {
 }
 
 .map-mode-toggle.is-active,
+.map-center3d-toggle.is-active,
+.map-elevation-toggle.is-active,
 .map-terrain-toggle.is-active,
 .map-buildings-toggle.is-active,
 .map-google-tiles-toggle.is-active,

@@ -18,8 +18,8 @@
     />
     <script src="https://cdn.jsdelivr.net/npm/cesium@1.119.0/Build/Cesium/Cesium.js"></script>
     <title>INOVACIONI</title>
-    <script type="module" crossorigin src="/assets/index-S7vGpUwO.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-Cq2VEmsJ.css">
+    <script type="module" crossorigin src="/assets/index-DcwwY9_D.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CHM4QFfL.css">
   </head>
   <body>
     <div class="grid-container">
@@ -1417,9 +1417,20 @@
 
       <div id="map">
         <div id="cesiumContainer" hidden></div>
+        <div id="cesiumElevationTooltip" class="cesium-elevation-tooltip" hidden>
+          Elev: -
+        </div>
         <button id="toggle3dMap" class="map-mode-toggle" title="Switch to 3D Globe">
           <i class="fa-solid fa-globe"></i>
           <span>3D</span>
+        </button>
+        <button id="centerCesiumMap" class="map-center3d-toggle" title="Center 3D view on current 2D map center">
+          <i class="fa-solid fa-crosshairs"></i>
+          <span>Center</span>
+        </button>
+        <button id="toggleCesiumElevation" class="map-elevation-toggle" title="Show terrain elevation at cursor">
+          <i class="fa-solid fa-ruler-vertical"></i>
+          <span>Elevation</span>
         </button>
         <button id="toggleCesiumTerrain" class="map-terrain-toggle" title="Toggle 3D Terrain">
           <i class="fa-solid fa-mountain"></i>
