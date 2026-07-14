@@ -1238,6 +1238,29 @@ const cesiumSiteProfilesAnalyze = document.getElementById(
 );
 const cesiumSiteTerrainStatus = document.getElementById("cesiumSiteTerrainStatus");
 const cesiumSiteTerrainResults = document.getElementById("cesiumSiteTerrainResults");
+const cesiumSolarButton = document.getElementById("cesiumSolarButton");
+const cesiumSolarPanel = document.getElementById("cesiumSolarPanel");
+const cesiumSolarClose = document.getElementById("cesiumSolarClose");
+const cesiumSolarDraw = document.getElementById("cesiumSolarDraw");
+const cesiumSolarOptimize = document.getElementById("cesiumSolarOptimize");
+const cesiumSolarClear = document.getElementById("cesiumSolarClear");
+const cesiumSolarStatus = document.getElementById("cesiumSolarStatus");
+const cesiumSolarResults = document.getElementById("cesiumSolarResults");
+const cesiumSolarPanelWidthInput = document.getElementById("cesiumSolarPanelWidth");
+const cesiumSolarPanelHeightInput = document.getElementById("cesiumSolarPanelHeight");
+const cesiumSolarColumnGapInput = document.getElementById("cesiumSolarColumnGap");
+const cesiumSolarRowGapInput = document.getElementById("cesiumSolarRowGap");
+const cesiumSolarMarginInput = document.getElementById("cesiumSolarMargin");
+const cesiumSolarMountHeightInput = document.getElementById("cesiumSolarMountHeight");
+const cesiumSolarPanelTiltInput = document.getElementById("cesiumSolarPanelTilt");
+const cesiumSolarPanelTiltValue = document.getElementById("cesiumSolarPanelTiltValue");
+const cesiumSolarSideTiltInput = document.getElementById("cesiumSolarSideTilt");
+const cesiumSolarSideTiltValue = document.getElementById("cesiumSolarSideTiltValue");
+const cesiumSolarWattageInput = document.getElementById("cesiumSolarWattage");
+const cesiumSolarDailyYieldInput = document.getElementById("cesiumSolarDailyYield");
+const cesiumSolarPerformanceRatioInput = document.getElementById(
+  "cesiumSolarPerformanceRatio",
+);
 const cesiumIonAccessToken =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyZjlhZTVlOS1hZDg2LTQxNTgtYmFjYS1iYTRjNDcxOWFhNjQiLCJpZCI6MTE1MTg4LCJpYXQiOjE2Nzg0NjMyNTJ9.FntmGyy-qhgprvx60qrCryPonYG7hKjdxTi11M3j9yA";
 let cesiumViewer = null;
@@ -1280,6 +1303,22 @@ const cesiumGeneratedProfileByEntityId = new globalThis.Map();
 let cesiumProfileLinePickHandler = null;
 let cesiumElevationTooltipHandler = null;
 let isCesiumElevationTooltipEnabled = false;
+let isCesiumSolarMode = false;
+let isCesiumSolarRotating = false;
+let isCesiumSolarDrawingFinished = false;
+let cesiumSolarRotationStartAngleDegrees = 0;
+let cesiumSolarRotationStartPointerAngleDegrees = 0;
+let cesiumSolarHandler = null;
+let cesiumSolarPositions = [];
+let cesiumSolarPreviewPosition = null;
+let cesiumSolarPolygonEntity = null;
+let cesiumSolarOutlineEntity = null;
+let cesiumSolarRotationHandleEntity = null;
+const cesiumSolarPanelEntities = [];
+let cesiumSolarPanelPrimitive = null;
+let cesiumSolarSupportLegs = null;
+let cesiumSolarLastLayout = null;
+let cesiumSolarAngleDegrees = 0;
 
 function getTerrainOpacity(input) {
   const value = Number(input?.value);
@@ -1572,6 +1611,9 @@ function initCesiumViewer() {
 
   cesiumViewer.scene.globe.baseColor = Cesium.Color.WHITE;
   cesiumViewer.scene.globe.depthTestAgainstTerrain = false;
+  cesiumViewer.cesiumWidget.screenSpaceEventHandler.removeInputAction(
+    Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK,
+  );
   setCesiumBaseLayerFromOpenLayers();
   ensureCesiumProfileLinePickHandler();
   ensureCesiumElevationTooltipHandler();
@@ -1623,6 +1665,16 @@ async function setCesiumTerrainEnabled(enabled) {
     toggleCesiumTerrainButton.title = enabled
       ? "Switch to flat globe"
       : "Toggle 3D Terrain";
+
+    if (enabled && googlePhotorealisticTileset) {
+      googlePhotorealisticTileset.show = false;
+      isGooglePhotorealisticEnabled = false;
+      toggleGooglePhotorealisticButton?.classList.remove("is-active");
+      if (toggleGooglePhotorealisticButton) {
+        toggleGooglePhotorealisticButton.title =
+          "Show Google Photorealistic 3D Tiles";
+      }
+    }
   } catch (error) {
     console.error("Could not load Cesium terrain:", error);
     alert("Could not load Cesium World Terrain. Check the Cesium ion token and network connection.");
@@ -1744,6 +1796,16 @@ async function setGooglePhotorealisticEnabled(enabled) {
     toggleGooglePhotorealisticButton.title = enabled
       ? "Hide Google Photorealistic 3D Tiles"
       : "Show Google Photorealistic 3D Tiles";
+
+    if (enabled && isCesiumTerrainEnabled) {
+      viewer.terrainProvider = getCesiumFlatTerrainProvider();
+      viewer.scene.globe.depthTestAgainstTerrain = false;
+      isCesiumTerrainEnabled = false;
+      toggleCesiumTerrainButton?.classList.remove("is-active");
+      if (toggleCesiumTerrainButton) {
+        toggleCesiumTerrainButton.title = "Toggle 3D Terrain";
+      }
+    }
 
     if (enabled && cesiumOsmBuildingsTileset) {
       cesiumOsmBuildingsTileset.show = false;
@@ -3090,6 +3152,668 @@ function clearCesiumDrawSketch() {
   cesiumDrawPreviewPosition = null;
 }
 
+function getCesiumSolarSettings() {
+  return {
+    panelWidth: Math.max(0.1, Number(cesiumSolarPanelWidthInput?.value) || 1.1),
+    panelHeight: Math.max(0.1, Number(cesiumSolarPanelHeightInput?.value) || 1.8),
+    columnGap: Math.max(0, Number(cesiumSolarColumnGapInput?.value) || 0),
+    rowGap: Math.max(0, Number(cesiumSolarRowGapInput?.value) || 0),
+    margin: Math.max(0, Number(cesiumSolarMarginInput?.value) || 0),
+    mountHeight: Math.max(0, Number(cesiumSolarMountHeightInput?.value) || 2),
+    panelTilt: Math.max(-75, Math.min(75, Number(cesiumSolarPanelTiltInput?.value) || 0)),
+    sideTilt: Math.max(-75, Math.min(75, Number(cesiumSolarSideTiltInput?.value) || 0)),
+    wattage: Math.max(1, Number(cesiumSolarWattageInput?.value) || 450),
+    dailyYield: Math.max(0, Number(cesiumSolarDailyYieldInput?.value) || 0),
+    performanceRatio: Math.max(
+      0,
+      Math.min(1, Number(cesiumSolarPerformanceRatioInput?.value) || 0),
+    ),
+  };
+}
+
+function syncCesiumSolarTiltValue() {
+  const tilt = Math.max(-75, Math.min(75, Number(cesiumSolarPanelTiltInput?.value) || 0));
+  const sideTilt = Math.max(-75, Math.min(75, Number(cesiumSolarSideTiltInput?.value) || 0));
+  if (cesiumSolarPanelTiltValue) cesiumSolarPanelTiltValue.textContent = `${tilt.toFixed(0)}°`;
+  if (cesiumSolarSideTiltValue) cesiumSolarSideTiltValue.textContent = `${sideTilt.toFixed(0)}°`;
+}
+
+function hasCesiumSolarMesh() {
+  return Boolean(cesiumSolarPanelPrimitive || cesiumSolarSupportLegs);
+}
+
+function getCesiumSolarPreviewPositions() {
+  if (cesiumSolarPositions.length === 0) return [];
+  return cesiumSolarPreviewPosition
+    ? [...cesiumSolarPositions, cesiumSolarPreviewPosition]
+    : cesiumSolarPositions;
+}
+
+function getClosedCesiumSolarPreviewPositions() {
+  const positions = getCesiumSolarPreviewPositions();
+  if (positions.length < 3) return positions;
+  return [...positions, positions[0]];
+}
+
+function clearCesiumSolarPanels() {
+  if (!cesiumViewer) return;
+  cesiumSolarPanelEntities.splice(0).forEach((entity) => {
+    cesiumViewer.entities.remove(entity);
+  });
+  if (cesiumSolarPanelPrimitive) {
+    cesiumViewer.scene.primitives.remove(cesiumSolarPanelPrimitive);
+    cesiumSolarPanelPrimitive = null;
+  }
+  if (cesiumSolarSupportLegs) {
+    cesiumViewer.scene.primitives.remove(cesiumSolarSupportLegs);
+    cesiumSolarSupportLegs = null;
+  }
+  if (cesiumSolarRotationHandleEntity) {
+    cesiumViewer.entities.remove(cesiumSolarRotationHandleEntity);
+    cesiumSolarRotationHandleEntity = null;
+  }
+}
+
+function clearCesiumSolarSketch({ keepResults = false } = {}) {
+  if (!cesiumViewer) return;
+  if (cesiumSolarPolygonEntity) {
+    cesiumViewer.entities.remove(cesiumSolarPolygonEntity);
+    cesiumSolarPolygonEntity = null;
+  }
+  if (cesiumSolarOutlineEntity) {
+    cesiumViewer.entities.remove(cesiumSolarOutlineEntity);
+    cesiumSolarOutlineEntity = null;
+  }
+  if (!keepResults) {
+    clearCesiumSolarPanels();
+    cesiumSolarPositions = [];
+    cesiumSolarPreviewPosition = null;
+  }
+}
+
+function setCesiumSolarStatus(message) {
+  if (cesiumSolarStatus) cesiumSolarStatus.textContent = message || "";
+}
+
+function updateCesiumSolarDrawButtonLabel() {
+  if (!cesiumSolarDraw) return;
+  if (!isCesiumSolarMode) {
+    cesiumSolarDraw.textContent = "Draw Site";
+  } else if (isCesiumSolarDrawingFinished) {
+    cesiumSolarDraw.textContent = "Stop Edit";
+  } else {
+    cesiumSolarDraw.textContent = "Finish Site";
+  }
+}
+
+function renderCesiumSolarResults(result) {
+  if (!cesiumSolarResults) return;
+  if (!result) {
+    cesiumSolarResults.innerHTML = "";
+    return;
+  }
+  const yearlyYield = result.settings.dailyYield * 365;
+  cesiumSolarResults.innerHTML = `
+    <div class="cesium-solar-result-card">
+      <strong>Panels</strong>
+      <span>${result.panelCount}</span>
+    </div>
+    <div class="cesium-solar-result-card">
+      <strong>Capacity</strong>
+      <span>${result.capacityKw.toFixed(2)} kW</span>
+    </div>
+    <div class="cesium-solar-result-card">
+      <strong>Daily energy</strong>
+      <span>${result.dailyEnergyKwh.toLocaleString(undefined, {
+        maximumFractionDigits: 0,
+      })} kWh</span>
+    </div>
+    <div class="cesium-solar-result-card">
+      <strong>Yearly energy</strong>
+      <span>${result.yearlyEnergyKwh.toLocaleString(undefined, {
+        maximumFractionDigits: 0,
+      })} kWh</span>
+    </div>
+    <div class="cesium-solar-result-card">
+      <strong>Panel area</strong>
+      <span>${result.panelArea.toFixed(1)} m2</span>
+    </div>
+    <div class="cesium-solar-result-card">
+      <strong>Coverage</strong>
+      <span>${result.coverage.toFixed(1)}%</span>
+    </div>
+    <div class="cesium-solar-result-card">
+      <strong>Daily indicator</strong>
+      <span>${result.settings.dailyYield.toFixed(2)} kWh/kWp</span>
+    </div>
+    <div class="cesium-solar-result-card">
+      <strong>Yearly indicator</strong>
+      <span>${yearlyYield.toLocaleString(undefined, {
+        maximumFractionDigits: 0,
+      })} kWh/kWp</span>
+    </div>
+  `;
+}
+
+function getCesiumSolarLocalContext(positions) {
+  const Cesium = window.Cesium;
+  const cartographics = positions.map((position) =>
+    Cesium.Cartographic.fromCartesian(position),
+  );
+  const projector = getCesiumLocalProjector(cartographics);
+  const polygonPoints = cartographics.map((point) => projector.toLocal(point));
+  return { projector, polygonPoints };
+}
+
+function getCesiumLocalPolygonArea(points) {
+  if (points.length < 3) return 0;
+  let area = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    area += current.x * next.y - next.x * current.y;
+  }
+  return Math.abs(area) / 2;
+}
+
+function getCesiumSolarRotatedPoint(center, axisX, axisY, offsetX, offsetY) {
+  return {
+    x: center.x + axisX.x * offsetX + axisY.x * offsetY,
+    y: center.y + axisX.y * offsetX + axisY.y * offsetY,
+  };
+}
+
+function getCesiumSolarPointToSegmentDistance(point, start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const segmentLengthSquared = dx * dx + dy * dy;
+  if (segmentLengthSquared <= 0) return Math.hypot(point.x - start.x, point.y - start.y);
+
+  const t = Math.max(
+    0,
+    Math.min(
+      1,
+      ((point.x - start.x) * dx + (point.y - start.y) * dy) /
+        segmentLengthSquared,
+    ),
+  );
+  const projection = {
+    x: start.x + t * dx,
+    y: start.y + t * dy,
+  };
+  return Math.hypot(point.x - projection.x, point.y - projection.y);
+}
+
+function isCesiumSolarPanelInsidePolygon(corners, polygonPoints, margin) {
+  return corners.every((corner) => {
+    if (!isCesiumLocalPointInPolygon(corner, polygonPoints)) return false;
+    if (margin <= 0) return true;
+    return polygonPoints.every((point, index) => {
+      const next = polygonPoints[(index + 1) % polygonPoints.length];
+      return getCesiumSolarPointToSegmentDistance(corner, point, next) >= margin;
+    });
+  });
+}
+
+function createCesiumSolarLayout(positions) {
+  const Cesium = window.Cesium;
+  if (!Cesium || positions.length < 3) return null;
+
+  const settings = getCesiumSolarSettings();
+  const { projector, polygonPoints } = getCesiumSolarLocalContext(positions);
+  const xs = polygonPoints.map((point) => point.x);
+  const ys = polygonPoints.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const angleRadians = Cesium.Math.toRadians(cesiumSolarAngleDegrees);
+  const axisX = { x: Math.cos(angleRadians), y: Math.sin(angleRadians) };
+  const axisY = { x: -Math.sin(angleRadians), y: Math.cos(angleRadians) };
+  const stepX = settings.panelWidth + settings.columnGap;
+  const stepY = settings.panelHeight + settings.rowGap;
+  const center = {
+    x: (minX + maxX) / 2,
+    y: (minY + maxY) / 2,
+  };
+  const diagonal = Math.hypot(maxX - minX, maxY - minY);
+  const panels = [];
+  const maxPanels = 10000;
+  const rotatedPolygonPoints = polygonPoints.map((point) => ({
+    u: (point.x - center.x) * axisX.x + (point.y - center.y) * axisX.y,
+    v: (point.x - center.x) * axisY.x + (point.y - center.y) * axisY.y,
+  }));
+  const us = rotatedPolygonPoints.map((point) => point.u);
+  const vs = rotatedPolygonPoints.map((point) => point.v);
+
+  for (let y = -diagonal; y <= diagonal; y += stepY) {
+    for (let x = -diagonal; x <= diagonal; x += stepX) {
+      const panelCenter = getCesiumSolarRotatedPoint(center, axisX, axisY, x, y);
+      const corners = [
+        getCesiumSolarRotatedPoint(
+          panelCenter,
+          axisX,
+          axisY,
+          -settings.panelWidth / 2,
+          -settings.panelHeight / 2,
+        ),
+        getCesiumSolarRotatedPoint(
+          panelCenter,
+          axisX,
+          axisY,
+          settings.panelWidth / 2,
+          -settings.panelHeight / 2,
+        ),
+        getCesiumSolarRotatedPoint(
+          panelCenter,
+          axisX,
+          axisY,
+          settings.panelWidth / 2,
+          settings.panelHeight / 2,
+        ),
+        getCesiumSolarRotatedPoint(
+          panelCenter,
+          axisX,
+          axisY,
+          -settings.panelWidth / 2,
+          settings.panelHeight / 2,
+        ),
+      ];
+      if (!isCesiumSolarPanelInsidePolygon(corners, polygonPoints, settings.margin)) {
+        continue;
+      }
+      panels.push(corners);
+      if (panels.length >= maxPanels) break;
+    }
+    if (panels.length >= maxPanels) break;
+  }
+
+  const siteArea = getCesiumLocalPolygonArea(polygonPoints);
+  const panelArea = panels.length * settings.panelWidth * settings.panelHeight;
+  const capacityKw = (panels.length * settings.wattage) / 1000;
+  const dailyEnergyKwh = capacityKw * settings.dailyYield * settings.performanceRatio;
+  return {
+    panels,
+    projector,
+    center,
+    axisX,
+    axisY,
+    settings,
+    rotationBounds: {
+      minU: Math.min(...us),
+      maxU: Math.max(...us),
+      maxV: Math.max(...vs),
+    },
+    siteArea,
+    panelArea,
+    panelCount: panels.length,
+    capacityKw,
+    dailyEnergyKwh,
+    yearlyEnergyKwh: dailyEnergyKwh * 365,
+    coverage: siteArea > 0 ? (panelArea / siteArea) * 100 : 0,
+    limited: panels.length >= maxPanels,
+    maxPanels,
+  };
+}
+
+function getCesiumCartographicTerrainHeight(cartographic) {
+  const height = cesiumViewer?.scene?.globe?.getHeight(cartographic);
+  return Number.isFinite(height) ? height : 0;
+}
+
+function getCesiumSolarPanelCartesianCorners(panelCorners, projector, heightOffset = 0) {
+  const Cesium = window.Cesium;
+  return panelCorners.map((corner) => {
+    const cartographic = projector.fromLocal(corner);
+    const terrainHeight = heightOffset > 0 ? getCesiumCartographicTerrainHeight(cartographic) : 0;
+    return Cesium.Cartesian3.fromRadians(
+      cartographic.longitude,
+      cartographic.latitude,
+      terrainHeight + heightOffset,
+    );
+  });
+}
+
+function getCesiumSolarPanelCenter(panelCorners) {
+  const sum = panelCorners.reduce(
+    (total, corner) => ({
+      x: total.x + corner.x,
+      y: total.y + corner.y,
+    }),
+    { x: 0, y: 0 },
+  );
+  return {
+    x: sum.x / panelCorners.length,
+    y: sum.y / panelCorners.length,
+  };
+}
+
+function getCesiumSolarTiltedPanelCartesianCorners(panelCorners, layout) {
+  const Cesium = window.Cesium;
+  const center = getCesiumSolarPanelCenter(panelCorners);
+  const tiltRadians = Cesium.Math.toRadians(layout.settings.panelTilt);
+  const sideTiltRadians = Cesium.Math.toRadians(layout.settings.sideTilt);
+  return panelCorners.map((corner) => {
+    const cartographic = layout.projector.fromLocal(corner);
+    const terrainHeight = getCesiumCartographicTerrainHeight(cartographic);
+    const tiltOffset =
+      ((corner.x - center.x) * layout.axisY.x + (corner.y - center.y) * layout.axisY.y) *
+        Math.sin(tiltRadians) +
+      ((corner.x - center.x) * layout.axisX.x + (corner.y - center.y) * layout.axisX.y) *
+        Math.sin(sideTiltRadians);
+    return Cesium.Cartesian3.fromRadians(
+      cartographic.longitude,
+      cartographic.latitude,
+      terrainHeight + layout.settings.mountHeight + tiltOffset,
+    );
+  });
+}
+
+function drawCesiumSolarLayout(positions) {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || positions.length < 3) return;
+
+  clearCesiumSolarPanels();
+  const layout = createCesiumSolarLayout(positions);
+  if (!layout) return;
+  cesiumSolarLastLayout = layout;
+
+  layout.panels.forEach((panelCorners) => {
+    const cartesianCorners = getCesiumSolarPanelCartesianCorners(
+      panelCorners,
+      layout.projector,
+    );
+    cesiumSolarPanelEntities.push(
+      viewer.entities.add({
+        polygon: {
+          hierarchy: new Cesium.PolygonHierarchy(cartesianCorners),
+          material: Cesium.Color.DARKSLATEGRAY.withAlpha(0.82),
+          outline: true,
+          outlineColor: Cesium.Color.CYAN.withAlpha(0.9),
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        },
+      }),
+    );
+  });
+
+  const handleOffset = Math.max(3, layout.settings.rowGap + layout.settings.panelHeight);
+  const handleV = layout.rotationBounds.maxV + handleOffset;
+  const handleStart = {
+    x:
+      layout.center.x +
+      layout.axisX.x * layout.rotationBounds.minU +
+      layout.axisY.x * handleV,
+    y:
+      layout.center.y +
+      layout.axisX.y * layout.rotationBounds.minU +
+      layout.axisY.y * handleV,
+  };
+  const handleEnd = {
+    x:
+      layout.center.x +
+      layout.axisX.x * layout.rotationBounds.maxU +
+      layout.axisY.x * handleV,
+    y:
+      layout.center.y +
+      layout.axisX.y * layout.rotationBounds.maxU +
+      layout.axisY.y * handleV,
+  };
+  const handleMid = {
+    x: (handleStart.x + handleEnd.x) / 2,
+    y: (handleStart.y + handleEnd.y) / 2,
+  };
+  const handlePositions = [handleStart, handleEnd].map((point) => {
+    const cartographic = layout.projector.fromLocal(point);
+    return Cesium.Cartesian3.fromRadians(
+      cartographic.longitude,
+      cartographic.latitude,
+      0,
+    );
+  });
+  cesiumSolarRotationHandleEntity = viewer.entities.add({
+    polyline: {
+      positions: handlePositions,
+      width: 5,
+      clampToGround: true,
+      material: Cesium.Color.ORANGE,
+    },
+    position: (() => {
+      const cartographic = layout.projector.fromLocal(handleMid);
+      return Cesium.Cartesian3.fromRadians(
+        cartographic.longitude,
+        cartographic.latitude,
+        0,
+      );
+    })(),
+    point: {
+      pixelSize: 12,
+      color: Cesium.Color.ORANGE,
+      outlineColor: Cesium.Color.WHITE,
+      outlineWidth: 2,
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+    },
+  });
+
+  renderCesiumSolarResults(layout);
+  setCesiumSolarStatus(
+    `${layout.panelCount} panels. Drag the orange edge/handle to rotate.${
+      layout.limited
+        ? ` Layout capped at ${layout.maxPanels} panels for performance.`
+        : ""
+    }`,
+  );
+}
+
+function createCesiumSolarPanelMesh() {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  const layout = cesiumSolarLastLayout;
+  if (!viewer || !Cesium || !layout?.panels?.length) {
+    setCesiumSolarStatus("Create or finish a solar layout before creating a mesh.");
+    return;
+  }
+
+  layout.settings = {
+    ...layout.settings,
+    ...getCesiumSolarSettings(),
+  };
+
+  cesiumSolarPanelEntities.splice(0).forEach((entity) => {
+    viewer.entities.remove(entity);
+  });
+  if (cesiumSolarPanelPrimitive) {
+    viewer.scene.primitives.remove(cesiumSolarPanelPrimitive);
+    cesiumSolarPanelPrimitive = null;
+  }
+  if (cesiumSolarSupportLegs) {
+    viewer.scene.primitives.remove(cesiumSolarSupportLegs);
+    cesiumSolarSupportLegs = null;
+  }
+
+  const instances = layout.panels.map((panelCorners, index) => {
+    const positions = getCesiumSolarTiltedPanelCartesianCorners(panelCorners, layout);
+    return new Cesium.GeometryInstance({
+      id: `solar-panel-${index + 1}`,
+      geometry: new Cesium.PolygonGeometry({
+        polygonHierarchy: new Cesium.PolygonHierarchy(positions),
+        perPositionHeight: true,
+        vertexFormat: Cesium.PerInstanceColorAppearance.VERTEX_FORMAT,
+      }),
+      attributes: {
+        color: Cesium.ColorGeometryInstanceAttribute.fromColor(
+          Cesium.Color.DARKSLATEGRAY.withAlpha(1),
+        ),
+      },
+    });
+  });
+
+  const primitiveOptions = {
+    geometryInstances: instances,
+    appearance: new Cesium.PerInstanceColorAppearance({
+      flat: true,
+      translucent: true,
+    }),
+    asynchronous: true,
+  };
+
+  cesiumSolarPanelPrimitive = new Cesium.Primitive(primitiveOptions);
+  viewer.scene.primitives.add(cesiumSolarPanelPrimitive);
+
+  cesiumSolarSupportLegs = new Cesium.PolylineCollection();
+  const legMaterial = Cesium.Material.fromType("Color", {
+    color: Cesium.Color.DARKGRAY.withAlpha(0.98),
+  });
+  layout.panels.forEach((panelCorners) => {
+    const center = getCesiumSolarPanelCenter(panelCorners);
+    const cartographic = layout.projector.fromLocal(center);
+    const terrainHeight = getCesiumCartographicTerrainHeight(cartographic);
+    const legTopHeight = Math.max(
+      terrainHeight,
+      terrainHeight + layout.settings.mountHeight - 0.12,
+    );
+    cesiumSolarSupportLegs.add({
+      positions: [
+        Cesium.Cartesian3.fromRadians(
+          cartographic.longitude,
+          cartographic.latitude,
+          terrainHeight,
+        ),
+        Cesium.Cartesian3.fromRadians(
+          cartographic.longitude,
+          cartographic.latitude,
+          legTopHeight,
+        ),
+      ],
+      width: 6,
+      material: legMaterial,
+    });
+  });
+  viewer.scene.primitives.add(cesiumSolarSupportLegs);
+
+  setCesiumSolarStatus(
+    `Created raised panels ${layout.settings.mountHeight.toFixed(
+      1,
+    )} m above terrain, tilted ${layout.settings.panelTilt.toFixed(
+      0,
+    )}° up/down and ${layout.settings.sideTilt.toFixed(
+      0,
+    )}° left/right, with one center support leg per panel.`,
+  );
+}
+
+function updateCesiumSolarSketch() {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium) return;
+
+  if (!cesiumSolarOutlineEntity) {
+    cesiumSolarOutlineEntity = viewer.entities.add({
+      polyline: {
+        positions: new Cesium.CallbackProperty(
+          () => getClosedCesiumSolarPreviewPositions(),
+          false,
+        ),
+        width: 3,
+        clampToGround: true,
+        material: Cesium.Color.ORANGE,
+      },
+    });
+  }
+
+  if (getCesiumSolarPreviewPositions().length >= 3 && !cesiumSolarPolygonEntity) {
+    cesiumSolarPolygonEntity = viewer.entities.add({
+      polygon: {
+        hierarchy: new Cesium.CallbackProperty(
+          () => new Cesium.PolygonHierarchy(getCesiumSolarPreviewPositions()),
+          false,
+        ),
+        material: Cesium.Color.ORANGE.withAlpha(0.18),
+        outline: true,
+        outlineColor: Cesium.Color.ORANGE,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      },
+    });
+  }
+
+  const previewPositions = getCesiumSolarPreviewPositions();
+  if (previewPositions.length >= 3) {
+    drawCesiumSolarLayout(previewPositions);
+  }
+}
+
+function finishCesiumSolarDrawing() {
+  if (cesiumSolarPositions.length < 3) return;
+  cesiumSolarPreviewPosition = null;
+  isCesiumSolarDrawingFinished = true;
+  updateCesiumSolarSketch();
+  updateCesiumSolarDrawButtonLabel();
+  setCesiumSolarStatus("Solar layout finished. Drag the orange edge/handle to rotate.");
+}
+
+function getCesiumSolarPointerAngle(screenPosition) {
+  const Cesium = window.Cesium;
+  const position = getCesiumGroundPosition(screenPosition);
+  const positions = getCesiumSolarPreviewPositions();
+  if (!Cesium || !position || positions.length < 3) return null;
+  const { polygonPoints, projector } = getCesiumSolarLocalContext(positions);
+  const localPoint = projector.toLocal(Cesium.Cartographic.fromCartesian(position));
+  const xs = polygonPoints.map((point) => point.x);
+  const ys = polygonPoints.map((point) => point.y);
+  const center = {
+    x: (Math.min(...xs) + Math.max(...xs)) / 2,
+    y: (Math.min(...ys) + Math.max(...ys)) / 2,
+  };
+  return Cesium.Math.toDegrees(
+    Math.atan2(localPoint.y - center.y, localPoint.x - center.x),
+  );
+}
+
+function getCesiumShortestAngleDelta(currentAngle, startAngle) {
+  return ((((currentAngle - startAngle) % 360) + 540) % 360) - 180;
+}
+
+function beginCesiumSolarRotation(screenPosition) {
+  const pointerAngle = getCesiumSolarPointerAngle(screenPosition);
+  if (!Number.isFinite(pointerAngle)) return false;
+  cesiumSolarRotationStartAngleDegrees = cesiumSolarAngleDegrees;
+  cesiumSolarRotationStartPointerAngleDegrees = pointerAngle;
+  isCesiumSolarRotating = true;
+  if (cesiumViewer?.scene?.screenSpaceCameraController) {
+    cesiumViewer.scene.screenSpaceCameraController.enableRotate = false;
+  }
+  setCesiumSolarStatus("Rotating solar layout...");
+  return true;
+}
+
+function endCesiumSolarRotation() {
+  isCesiumSolarRotating = false;
+  if (cesiumViewer?.scene?.screenSpaceCameraController) {
+    cesiumViewer.scene.screenSpaceCameraController.enableRotate = true;
+  }
+  setCesiumSolarStatus("Solar layout rotated. Drag the orange edge/handle again if needed.");
+}
+
+function updateCesiumSolarRotation(screenPosition) {
+  const positions = getCesiumSolarPreviewPositions();
+  const pointerAngle = getCesiumSolarPointerAngle(screenPosition);
+  if (!Number.isFinite(pointerAngle)) return;
+  const angleDelta = getCesiumShortestAngleDelta(
+    pointerAngle,
+    cesiumSolarRotationStartPointerAngleDegrees,
+  );
+  cesiumSolarAngleDegrees = cesiumSolarRotationStartAngleDegrees + angleDelta;
+  drawCesiumSolarLayout(positions);
+}
+
+function addCesiumSolarVertex(screenPosition) {
+  if (isCesiumSolarDrawingFinished) return;
+  const position = getCesiumGroundPosition(screenPosition);
+  if (!position) return;
+  cesiumSolarPositions.push(position);
+  updateCesiumSolarSketch();
+}
+
 function updateCesiumDrawSketch() {
   const viewer = cesiumViewer;
   const Cesium = window.Cesium;
@@ -3260,6 +3984,66 @@ function setCesiumDrawFootprintMode(enabled) {
   }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
 }
 
+function setCesiumSolarMode(enabled) {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !cesiumSolarButton) return;
+
+  if (enabled) {
+    setCesiumDrawFootprintMode(false);
+  }
+
+  isCesiumSolarMode = enabled;
+  cesiumSolarButton.classList.toggle("is-active", enabled);
+  cesiumSolarDraw?.classList.toggle("btn-primary", enabled);
+  if (enabled) {
+    isCesiumSolarDrawingFinished = false;
+  }
+  updateCesiumSolarDrawButtonLabel();
+
+  if (!enabled) {
+    if (cesiumSolarHandler) {
+      cesiumSolarHandler.destroy();
+      cesiumSolarHandler = null;
+    }
+    if (isCesiumSolarRotating) {
+      endCesiumSolarRotation();
+    }
+    updateCesiumSolarDrawButtonLabel();
+    setCesiumSolarStatus("Solar drawing paused.");
+    return;
+  }
+
+  setMapMode3d(true);
+  setCesiumSolarStatus("Click to draw the site polygon. Right-click or double-click to finish.");
+  cesiumSolarHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  cesiumSolarHandler.setInputAction((event) => {
+    const picked = viewer.scene.pick(event.position);
+    if (picked?.id === cesiumSolarRotationHandleEntity) {
+      beginCesiumSolarRotation(event.position);
+      return;
+    }
+    addCesiumSolarVertex(event.position);
+  }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+  cesiumSolarHandler.setInputAction((event) => {
+    if (isCesiumSolarRotating) {
+      updateCesiumSolarRotation(event.endPosition);
+      return;
+    }
+    if (isCesiumSolarDrawingFinished) return;
+    cesiumSolarPreviewPosition = getCesiumGroundPosition(event.endPosition);
+    updateCesiumSolarSketch();
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+  cesiumSolarHandler.setInputAction(() => {
+    if (isCesiumSolarRotating) {
+      endCesiumSolarRotation();
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_UP);
+  cesiumSolarHandler.setInputAction(() => {
+    finishCesiumSolarDrawing();
+  }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+}
+
 function flyCesiumToOpenLayersView() {
   const viewer = initCesiumViewer();
   if (!viewer) return;
@@ -3400,6 +4184,10 @@ makePanelDraggable(
   cesiumSiteTerrainPanel,
   cesiumSiteTerrainPanel?.querySelector(".cesium-site-terrain-panel__header"),
 );
+makePanelDraggable(
+  cesiumSolarPanel,
+  cesiumSolarPanel?.querySelector(".cesium-solar-panel__header"),
+);
 
 cesiumProfileClose?.addEventListener("click", () => {
   if (cesiumProfilePanel) {
@@ -3439,6 +4227,86 @@ cesiumSiteTerrainClose?.addEventListener("click", () => {
   }
   clearCesiumTerrainAnalysisEntities();
 });
+
+cesiumSolarButton?.addEventListener("click", () => {
+  if (!cesiumSolarPanel) return;
+  cesiumSolarPanel.hidden = !cesiumSolarPanel.hidden;
+  if (!cesiumSolarPanel.hidden) {
+    setMapMode3d(true);
+    setCesiumSolarStatus("Set parameters, then click Draw Site.");
+  } else {
+    setCesiumSolarMode(false);
+  }
+});
+
+cesiumSolarClose?.addEventListener("click", () => {
+  if (cesiumSolarPanel) cesiumSolarPanel.hidden = true;
+  setCesiumSolarMode(false);
+});
+
+cesiumSolarDraw?.addEventListener("click", () => {
+  if (isCesiumSolarMode && !isCesiumSolarDrawingFinished) {
+    if (cesiumSolarPositions.length >= 3) {
+      finishCesiumSolarDrawing();
+    } else {
+      setCesiumSolarStatus("Add at least 3 points before finishing the site.");
+    }
+    return;
+  }
+
+  if (isCesiumSolarMode && isCesiumSolarDrawingFinished) {
+    setCesiumSolarMode(false);
+    return;
+  }
+
+  clearCesiumSolarSketch();
+  renderCesiumSolarResults(null);
+  setCesiumSolarMode(true);
+});
+
+cesiumSolarOptimize?.addEventListener("click", () => {
+  createCesiumSolarPanelMesh();
+});
+
+cesiumSolarClear?.addEventListener("click", () => {
+  setCesiumSolarMode(false);
+  isCesiumSolarDrawingFinished = false;
+  clearCesiumSolarSketch();
+  renderCesiumSolarResults(null);
+  updateCesiumSolarDrawButtonLabel();
+  setCesiumSolarStatus("Set parameters, then draw a 3D site polygon.");
+});
+
+[
+  cesiumSolarPanelWidthInput,
+  cesiumSolarPanelHeightInput,
+  cesiumSolarColumnGapInput,
+  cesiumSolarRowGapInput,
+  cesiumSolarMarginInput,
+  cesiumSolarMountHeightInput,
+  cesiumSolarPanelTiltInput,
+  cesiumSolarSideTiltInput,
+  cesiumSolarWattageInput,
+  cesiumSolarDailyYieldInput,
+  cesiumSolarPerformanceRatioInput,
+].forEach((input) => {
+  input?.addEventListener("input", () => {
+    syncCesiumSolarTiltValue();
+    if (
+      hasCesiumSolarMesh() &&
+      (input === cesiumSolarPanelTiltInput ||
+        input === cesiumSolarSideTiltInput ||
+        input === cesiumSolarMountHeightInput)
+    ) {
+      createCesiumSolarPanelMesh();
+      return;
+    }
+    const positions = getCesiumSolarPreviewPositions();
+    if (positions.length >= 3) drawCesiumSolarLayout(positions);
+  });
+});
+
+syncCesiumSolarTiltValue();
 
 function saveCurrentMapViewForSession() {
   const view = map.getView();
@@ -11124,12 +11992,16 @@ const externalServiceLayerNameInput = document.getElementById(
 const externalWmsLayerNameInput = document.getElementById(
   "externalWmsLayerName",
 );
+const externalServiceTerrainInput = document.getElementById(
+  "externalServiceTerrain",
+);
 const externalServiceForm = document.getElementById("externalServiceForm");
 const externalServiceStatus = document.getElementById("externalServiceStatus");
 const externalServiceLayers = document.getElementById("externalServiceLayers");
 const addExternalServiceLayerButton = document.getElementById(
   "addExternalServiceLayer",
 );
+const externalCesiumImageryLayerByOlLayer = new WeakMap();
 
 const externalArcgisVectorStyle = new Style({
   image: new CircleStyle({
@@ -11225,6 +12097,127 @@ function getExternalServicesGroup() {
 function addExternalLayerToMap(layer) {
   layer.set("displayInLayerSwitcher", true);
   getExternalServicesGroup().getLayers().push(layer);
+}
+
+function canExternalServiceDrapeOnTerrain(type) {
+  return ["wms", "wmts", "arcgis-map", "arcgis-image"].includes(type);
+}
+
+function getExternalTerrainDrapeEnabled(type) {
+  return Boolean(
+    externalServiceTerrainInput?.checked &&
+      canExternalServiceDrapeOnTerrain(type),
+  );
+}
+
+function setExternalTerrainCheckboxState() {
+  if (!externalServiceTerrainInput || !externalServiceTypeInput) return;
+  const canDrape = canExternalServiceDrapeOnTerrain(externalServiceTypeInput.value);
+  externalServiceTerrainInput.disabled = !canDrape;
+  externalServiceTerrainInput.closest("label")?.classList.toggle(
+    "text-muted",
+    !canDrape,
+  );
+  if (!canDrape) externalServiceTerrainInput.checked = false;
+}
+
+async function createCesiumProviderForExternalLayer(layer) {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !layer) return null;
+
+  const serviceType = layer.get("externalServiceType");
+  if (serviceType === "wms") {
+    return new Cesium.WebMapServiceImageryProvider({
+      url: layer.get("externalServiceUrl"),
+      layers: layer.get("externalWmsLayerName"),
+      parameters: {
+        service: "WMS",
+        transparent: true,
+        format: "image/png",
+        tiled: true,
+        styles: "",
+      },
+      credit: layer.get("title") || "External WMS",
+    });
+  }
+
+  if (serviceType === "wmts" && Cesium.WebMapTileServiceImageryProvider) {
+    return new Cesium.WebMapTileServiceImageryProvider({
+      url: layer.get("externalServiceUrl"),
+      layer: layer.get("wmtsLayerIdentifier"),
+      style: layer.get("wmtsStyle") || "",
+      format: layer.get("wmtsFormat") || "image/png",
+      tileMatrixSetID: layer.get("wmtsMatrixSet"),
+      maximumLevel: 22,
+      credit: layer.get("title") || "External WMTS",
+    });
+  }
+
+  if (serviceType === "arcgis-image" && Cesium.UrlTemplateImageryProvider) {
+    const imageUrl =
+      layer.get("arcgisRootUrl") ||
+      layer.get("arcgisServiceUrl") ||
+      layer.get("externalServiceUrl");
+    const separator = imageUrl.includes("?") ? "&" : "?";
+    return new Cesium.UrlTemplateImageryProvider({
+      url:
+        `${imageUrl}/exportImage${separator}` +
+        "f=image&format=png32&transparent=true" +
+        "&bbox={westProjected},{southProjected},{eastProjected},{northProjected}" +
+        "&bboxSR=3857&imageSR=3857&size=256,256",
+      tilingScheme: new Cesium.WebMercatorTilingScheme(),
+      tileWidth: 256,
+      tileHeight: 256,
+      credit: layer.get("title") || "External ArcGIS Image Service",
+    });
+  }
+
+  if (serviceType === "arcgis-map" && Cesium.ArcGisMapServerImageryProvider) {
+    const arcgisUrl =
+      layer.get("arcgisRootUrl") ||
+      layer.get("arcgisServiceUrl") ||
+      layer.get("externalServiceUrl");
+    const providerOptions = {
+      layers: layer.get("arcgisLayerId") || undefined,
+      enablePickFeatures: false,
+      credit: layer.get("title") || "External ArcGIS",
+    };
+    if (Cesium.ArcGisMapServerImageryProvider.fromUrl) {
+      return Cesium.ArcGisMapServerImageryProvider.fromUrl(
+        arcgisUrl,
+        providerOptions,
+      );
+    }
+    return new Cesium.ArcGisMapServerImageryProvider({
+      url: arcgisUrl,
+      ...providerOptions,
+    });
+  }
+
+  return null;
+}
+
+async function addExternalLayerToCesiumTerrain(layer) {
+  if (!layer || externalCesiumImageryLayerByOlLayer.has(layer)) return;
+
+  const provider = await createCesiumProviderForExternalLayer(layer);
+  if (!provider || !cesiumViewer) return;
+
+  const imageryLayer = cesiumViewer.imageryLayers.addImageryProvider(provider);
+  imageryLayer.show = layer.getVisible?.() !== false;
+  imageryLayer.alpha = 0.9;
+  externalCesiumImageryLayerByOlLayer.set(layer, imageryLayer);
+  layer.on?.("change:visible", () => {
+    const cesiumLayer = externalCesiumImageryLayerByOlLayer.get(layer);
+    if (cesiumLayer) cesiumLayer.show = layer.getVisible();
+  });
+  setMapMode3d(true);
+}
+
+async function addExternalLayerToTerrainIfRequested(layer, type) {
+  if (!getExternalTerrainDrapeEnabled(type)) return;
+  await addExternalLayerToCesiumTerrain(layer);
 }
 
 function getServiceLayerTitle(metadata, fallbackUrl, customName = "") {
@@ -11328,6 +12321,8 @@ async function addArcgisMapLayer(serviceUrl, titleOverride = "") {
   });
   layer.set("externalServiceType", "arcgis-map");
   layer.set("arcgisServiceUrl", metadataUrl);
+  layer.set("arcgisRootUrl", rootUrl);
+  layer.set("arcgisLayerId", parts?.layerId || "");
   layer.set("arcgisMetadata", metadata);
   addExternalLayerToMap(layer);
   return layer;
@@ -11352,6 +12347,7 @@ async function addArcgisImageLayer(serviceUrl, titleOverride = "") {
   });
   layer.set("externalServiceType", "arcgis-image");
   layer.set("arcgisServiceUrl", imageUrl);
+  layer.set("arcgisRootUrl", imageUrl);
   layer.set("arcgisMetadata", metadata);
   addExternalLayerToMap(layer);
   return layer;
@@ -11376,6 +12372,7 @@ function addExternalWmsLayer(serviceUrl, layerName, titleOverride = "") {
   });
   layer.set("externalServiceType", "wms");
   layer.set("externalServiceUrl", serviceUrl.trim());
+  layer.set("externalWmsLayerName", layerName.trim());
   addExternalLayerToMap(layer);
   return layer;
 }
@@ -11446,6 +12443,8 @@ function addExternalWmtsLayer(serviceUrl, wmtsLayer, metadata) {
   layer.set("externalServiceUrl", serviceUrl);
   layer.set("wmtsLayerIdentifier", wmtsLayer.Identifier);
   layer.set("wmtsMatrixSet", matrixSet);
+  layer.set("wmtsStyle", options.style || options.styleName || "");
+  layer.set("wmtsFormat", options.format || "image/png");
   addExternalLayerToMap(layer);
   return layer;
 }
@@ -11550,15 +12549,17 @@ function renderExternalServiceLayers(serviceUrl, serviceType, metadata) {
             ? getWmtsLayerTitle(serviceLayer)
             : serviceLayer.name;
         setExternalServiceStatus(`Adding ${serviceLayerTitle}...`);
+        let addedLayer = null;
         if (serviceType === "wmts") {
-          await addExternalWmtsLayer(serviceUrl, serviceLayer, metadata);
+          addedLayer = await addExternalWmtsLayer(serviceUrl, serviceLayer, metadata);
         } else if (serviceType === "arcgis-feature") {
           const childUrl = `${parts.rootUrl}/${serviceLayer.id}`;
-          await addArcgisFeatureLayer(childUrl, serviceLayer.name);
+          addedLayer = await addArcgisFeatureLayer(childUrl, serviceLayer.name);
         } else {
           const childUrl = `${parts.rootUrl}/${serviceLayer.id}`;
-          await addArcgisMapLayer(childUrl, serviceLayer.name);
+          addedLayer = await addArcgisMapLayer(childUrl, serviceLayer.name);
         }
+        await addExternalLayerToTerrainIfRequested(addedLayer, serviceType);
         setExternalServiceStatus(`${serviceLayerTitle} added to the map.`);
       } catch (error) {
         console.error(error);
@@ -11576,6 +12577,7 @@ function updateExternalServiceInputs() {
   document.querySelectorAll(".external-wms-only").forEach((element) => {
     element.style.display = isWms ? "" : "none";
   });
+  setExternalTerrainCheckboxState();
   externalServiceUrlInput.placeholder =
     externalServiceTypeInput.value === "wmts"
       ? "https://.../wmts?request=GetCapabilities"
@@ -11669,11 +12671,12 @@ addExternalServiceLayerButton.addEventListener("click", async () => {
 
   try {
     setExternalServiceStatus("Adding service to map...");
-    await addLoadedExternalServiceLayer(
+    const addedLayer = await addLoadedExternalServiceLayer(
       serviceUrl,
       serviceType,
       externalServiceLayerNameInput.value,
     );
+    await addExternalLayerToTerrainIfRequested(addedLayer, serviceType);
     setExternalServiceStatus("Layer added to the map.");
   } catch (error) {
     console.error(error);

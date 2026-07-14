@@ -18,8 +18,8 @@
     />
     <script src="https://cdn.jsdelivr.net/npm/cesium@1.119.0/Build/Cesium/Cesium.js"></script>
     <title>INOVACIONI</title>
-    <script type="module" crossorigin src="/assets/index-DcwwY9_D.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CHM4QFfL.css">
+    <script type="module" crossorigin src="/assets/index-Bggvoiir.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Bkrsa7be.css">
   </head>
   <body>
     <div class="grid-container">
@@ -1017,6 +1017,10 @@
                       id="externalWmsLayerName"
                       placeholder="workspace:layer_name"
                     />
+                    <label class="external-terrain-option mt-3" for="externalServiceTerrain">
+                      <input type="checkbox" id="externalServiceTerrain" />
+                      <span>Drape on 3D terrain</span>
+                    </label>
                     <button type="button" id="addExternalServiceLayer" class="btn btn-primary add-data-primary" disabled>
                       Add Layer
                     </button>
@@ -1496,6 +1500,10 @@
           <i class="fa-solid fa-chart-area"></i>
           <span>Site Terrain</span>
         </button>
+        <button id="cesiumSolarButton" class="map-solar-toggle" title="Calculate solar panel layout in 3D">
+          <i class="fa-solid fa-solar-panel"></i>
+          <span>Solar</span>
+        </button>
         <div id="cesiumProfilePanel" class="cesium-profile-panel" hidden>
           <div class="cesium-profile-panel__header">
             <strong>Terrain Profile</strong>
@@ -1545,6 +1553,75 @@
           </div>
           <div id="cesiumSiteTerrainStatus" class="cesium-site-terrain-panel__status" hidden></div>
           <div id="cesiumSiteTerrainResults" class="cesium-site-terrain-panel__results"></div>
+        </div>
+        <div id="cesiumSolarPanel" class="cesium-solar-panel" hidden>
+          <div class="cesium-solar-panel__header">
+            <strong>Solar Panel Calculation</strong>
+            <button id="cesiumSolarClose" type="button" title="Close solar panel calculation">
+              &times;
+            </button>
+          </div>
+          <div class="cesium-solar-panel__controls">
+            <label>
+              <span>Panel width</span>
+              <input id="cesiumSolarPanelWidth" type="number" min="0.1" step="0.1" value="1.1" />
+            </label>
+            <label>
+              <span>Panel height</span>
+              <input id="cesiumSolarPanelHeight" type="number" min="0.1" step="0.1" value="1.8" />
+            </label>
+            <label>
+              <span>Column gap</span>
+              <input id="cesiumSolarColumnGap" type="number" min="0" step="0.1" value="0.2" />
+            </label>
+            <label>
+              <span>Row gap</span>
+              <input id="cesiumSolarRowGap" type="number" min="0" step="0.1" value="0.5" />
+            </label>
+            <label>
+              <span>Margin</span>
+              <input id="cesiumSolarMargin" type="number" min="0" step="0.1" value="0.5" />
+            </label>
+            <label>
+              <span>Mount height</span>
+              <input id="cesiumSolarMountHeight" type="number" min="0" step="0.1" value="2" />
+            </label>
+            <label class="cesium-solar-panel__range-control">
+              <span>
+                Up/down tilt
+                <output id="cesiumSolarPanelTiltValue">30&deg;</output>
+              </span>
+              <input id="cesiumSolarPanelTilt" type="range" min="-75" max="75" step="1" value="30" />
+            </label>
+            <label class="cesium-solar-panel__range-control">
+              <span>
+                Left/right tilt
+                <output id="cesiumSolarSideTiltValue">0&deg;</output>
+              </span>
+              <input id="cesiumSolarSideTilt" type="range" min="-75" max="75" step="1" value="0" />
+            </label>
+            <label>
+              <span>Watt / panel</span>
+              <input id="cesiumSolarWattage" type="number" min="1" step="10" value="450" />
+            </label>
+            <label>
+              <span>Daily yield</span>
+              <input id="cesiumSolarDailyYield" type="number" min="0" step="0.1" value="4.4" />
+            </label>
+            <label>
+              <span>Performance ratio</span>
+              <input id="cesiumSolarPerformanceRatio" type="number" min="0" max="1" step="0.01" value="0.8" />
+            </label>
+          </div>
+          <div class="cesium-solar-panel__actions">
+            <button id="cesiumSolarDraw" type="button">Draw Site</button>
+            <button id="cesiumSolarOptimize" type="button">Create Mesh</button>
+            <button id="cesiumSolarClear" type="button">Clear</button>
+          </div>
+          <div id="cesiumSolarStatus" class="cesium-solar-panel__status">
+            Set parameters, then draw a 3D site polygon.
+          </div>
+          <div id="cesiumSolarResults" class="cesium-solar-panel__results"></div>
         </div>
         <div class="map-projection-control" title="Map Projection">
           <select id="mapProjectionSelect">
