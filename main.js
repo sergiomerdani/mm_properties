@@ -1168,6 +1168,8 @@ const cesiumContainer = document.getElementById("cesiumContainer");
 const cesiumElevationTooltip = document.getElementById("cesiumElevationTooltip");
 const toggle3dMapButton = document.getElementById("toggle3dMap");
 const centerCesiumMapButton = document.getElementById("centerCesiumMap");
+const resetCesiumGlobeButton = document.getElementById("resetCesiumGlobe");
+const orientCesiumNorthButton = document.getElementById("orientCesiumNorth");
 const toggleCesiumElevationButton = document.getElementById("toggleCesiumElevation");
 const toggleCesiumTerrainButton = document.getElementById("toggleCesiumTerrain");
 const toggleCesiumBuildingsButton = document.getElementById("toggleCesiumBuildings");
@@ -1261,6 +1263,18 @@ const cesiumSolarDailyYieldInput = document.getElementById("cesiumSolarDailyYiel
 const cesiumSolarPerformanceRatioInput = document.getElementById(
   "cesiumSolarPerformanceRatio",
 );
+const cesiumSunButton = document.getElementById("cesiumSunButton");
+const cesiumSunPanel = document.getElementById("cesiumSunPanel");
+const cesiumSunClose = document.getElementById("cesiumSunClose");
+const cesiumSunDateInput = document.getElementById("cesiumSunDate");
+const cesiumSunTimeZoneInput = document.getElementById("cesiumSunTimeZone");
+const cesiumSunHourInput = document.getElementById("cesiumSunHour");
+const cesiumSunHourValue = document.getElementById("cesiumSunHourValue");
+const cesiumSunLightingInput = document.getElementById("cesiumSunLighting");
+const cesiumSunShadowsInput = document.getElementById("cesiumSunShadows");
+const cesiumSunPlay = document.getElementById("cesiumSunPlay");
+const cesiumSunReset = document.getElementById("cesiumSunReset");
+const cesiumSunStatus = document.getElementById("cesiumSunStatus");
 const cesiumIonAccessToken =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyZjlhZTVlOS1hZDg2LTQxNTgtYmFjYS1iYTRjNDcxOWFhNjQiLCJpZCI6MTE1MTg4LCJpYXQiOjE2Nzg0NjMyNTJ9.FntmGyy-qhgprvx60qrCryPonYG7hKjdxTi11M3j9yA";
 let cesiumViewer = null;
@@ -1319,6 +1333,7 @@ let cesiumSolarPanelPrimitive = null;
 let cesiumSolarSupportLegs = null;
 let cesiumSolarLastLayout = null;
 let cesiumSolarAngleDegrees = 0;
+let cesiumSunPlayTimer = null;
 
 function getTerrainOpacity(input) {
   const value = Number(input?.value);
@@ -1581,6 +1596,97 @@ function setCesiumElevationTooltipEnabled(enabled) {
     setMapMode3d(true);
   } else {
     hideCesiumElevationTooltip();
+  }
+}
+
+function formatDateInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatCesiumSunHour(hourValue) {
+  const totalMinutes = Math.round(Number(hourValue || 0) * 60);
+  const hours = Math.floor(totalMinutes / 60) % 24;
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function getCesiumSunDateTime() {
+  const dateValue = cesiumSunDateInput?.value || formatDateInputValue();
+  const hourLabel = formatCesiumSunHour(cesiumSunHourInput?.value || 12);
+  const timeZone = cesiumSunTimeZoneInput?.value || "local";
+  return new Date(
+    timeZone === "local"
+      ? `${dateValue}T${hourLabel}:00`
+      : `${dateValue}T${hourLabel}:00${timeZone}`,
+  );
+}
+
+function getCesiumSunTimeZoneLabel() {
+  const selected = cesiumSunTimeZoneInput?.selectedOptions?.[0];
+  return selected?.textContent?.trim() || "Browser local";
+}
+
+function setCesiumSunStatus(message) {
+  if (cesiumSunStatus) cesiumSunStatus.textContent = message || "";
+}
+
+function updateCesiumSunSimulation() {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium) return;
+
+  if (cesiumSunHourValue) {
+    cesiumSunHourValue.textContent = formatCesiumSunHour(cesiumSunHourInput?.value || 12);
+  }
+
+  const dateTime = getCesiumSunDateTime();
+  const lightingEnabled = cesiumSunLightingInput?.checked !== false;
+  const shadowsEnabled = Boolean(cesiumSunShadowsInput?.checked);
+  viewer.clock.currentTime = Cesium.JulianDate.fromDate(dateTime);
+  viewer.clock.shouldAnimate = false;
+  viewer.scene.globe.enableLighting = lightingEnabled;
+  if (viewer.scene.sun) viewer.scene.sun.show = lightingEnabled;
+  if (viewer.scene.moon) viewer.scene.moon.show = lightingEnabled;
+  viewer.shadows = lightingEnabled && shadowsEnabled;
+  if (viewer.scene.shadowMap) {
+    viewer.scene.shadowMap.enabled = lightingEnabled && shadowsEnabled;
+    viewer.scene.shadowMap.softShadows = true;
+  }
+  viewer.scene.requestRender?.();
+  setCesiumSunStatus(
+    `${dateTime.toLocaleDateString()} ${formatCesiumSunHour(
+      cesiumSunHourInput?.value || 12,
+    )} (${getCesiumSunTimeZoneLabel()}) - lighting ${lightingEnabled ? "on" : "off"}, shadows ${
+      lightingEnabled && shadowsEnabled ? "on" : "off"
+    }.`,
+  );
+}
+
+function setCesiumSunPlaying(enabled) {
+  if (cesiumSunPlayTimer) {
+    clearInterval(cesiumSunPlayTimer);
+    cesiumSunPlayTimer = null;
+  }
+  if (cesiumSunPlay) cesiumSunPlay.textContent = enabled ? "Pause" : "Play";
+  if (!enabled) return;
+
+  cesiumSunPlayTimer = window.setInterval(() => {
+    const currentHour = Number(cesiumSunHourInput?.value || 0);
+    const nextHour = currentHour >= 23.75 ? 0 : currentHour + 0.25;
+    if (cesiumSunHourInput) cesiumSunHourInput.value = String(nextHour);
+    updateCesiumSunSimulation();
+  }, 450);
+}
+
+function initializeCesiumSunControls() {
+  if (cesiumSunDateInput && !cesiumSunDateInput.value) {
+    cesiumSunDateInput.value = formatDateInputValue();
+  }
+  if (cesiumSunHourValue) {
+    cesiumSunHourValue.textContent = formatCesiumSunHour(cesiumSunHourInput?.value || 12);
   }
 }
 
@@ -4060,6 +4166,40 @@ function flyCesiumToOpenLayersView() {
   });
 }
 
+function resetCesiumGlobeView() {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium) return;
+
+  setMapMode3d(true);
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(20, 35, 18000000),
+    orientation: {
+      heading: 0,
+      pitch: Cesium.Math.toRadians(-90),
+      roll: 0,
+    },
+    duration: 0.65,
+  });
+}
+
+function orientCesiumCameraNorth() {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium) return;
+
+  setMapMode3d(true);
+  viewer.camera.flyTo({
+    destination: viewer.camera.positionWC.clone(),
+    orientation: {
+      heading: 0,
+      pitch: viewer.camera.pitch,
+      roll: 0,
+    },
+    duration: 0.35,
+  });
+}
+
 function syncOpenLayersToCesiumCamera() {
   if (!cesiumViewer) return;
 
@@ -4105,6 +4245,14 @@ toggle3dMapButton?.addEventListener("click", () => {
 
 centerCesiumMapButton?.addEventListener("click", () => {
   setMapMode3d(true, { centerOnMap: true });
+});
+
+resetCesiumGlobeButton?.addEventListener("click", () => {
+  resetCesiumGlobeView();
+});
+
+orientCesiumNorthButton?.addEventListener("click", () => {
+  orientCesiumCameraNorth();
 });
 
 toggleCesiumElevationButton?.addEventListener("click", () => {
@@ -4187,6 +4335,10 @@ makePanelDraggable(
 makePanelDraggable(
   cesiumSolarPanel,
   cesiumSolarPanel?.querySelector(".cesium-solar-panel__header"),
+);
+makePanelDraggable(
+  cesiumSunPanel,
+  cesiumSunPanel?.querySelector(".cesium-sun-panel__header"),
 );
 
 cesiumProfileClose?.addEventListener("click", () => {
@@ -4307,6 +4459,46 @@ cesiumSolarClear?.addEventListener("click", () => {
 });
 
 syncCesiumSolarTiltValue();
+initializeCesiumSunControls();
+
+cesiumSunButton?.addEventListener("click", () => {
+  if (!cesiumSunPanel) return;
+  cesiumSunPanel.hidden = !cesiumSunPanel.hidden;
+  cesiumSunButton.classList.toggle("is-active", !cesiumSunPanel.hidden);
+  if (!cesiumSunPanel.hidden) {
+    setMapMode3d(true);
+    initializeCesiumSunControls();
+    updateCesiumSunSimulation();
+  } else {
+    setCesiumSunPlaying(false);
+  }
+});
+
+cesiumSunClose?.addEventListener("click", () => {
+  if (cesiumSunPanel) cesiumSunPanel.hidden = true;
+  cesiumSunButton?.classList.remove("is-active");
+  setCesiumSunPlaying(false);
+});
+
+[
+  cesiumSunDateInput,
+  cesiumSunTimeZoneInput,
+  cesiumSunHourInput,
+  cesiumSunLightingInput,
+  cesiumSunShadowsInput,
+].forEach((input) => {
+  input?.addEventListener("input", updateCesiumSunSimulation);
+  input?.addEventListener("change", updateCesiumSunSimulation);
+});
+
+cesiumSunPlay?.addEventListener("click", () => {
+  setCesiumSunPlaying(!cesiumSunPlayTimer);
+});
+
+cesiumSunReset?.addEventListener("click", () => {
+  if (cesiumSunHourInput) cesiumSunHourInput.value = "12";
+  updateCesiumSunSimulation();
+});
 
 function saveCurrentMapViewForSession() {
   const view = map.getView();

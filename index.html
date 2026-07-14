@@ -1434,6 +1434,14 @@
           <i class="fa-solid fa-crosshairs"></i>
           <span>Center</span>
         </button>
+        <button id="resetCesiumGlobe" class="map-globe-center-toggle" title="Reset 3D globe view">
+          <i class="fa-solid fa-earth-europe"></i>
+          <span>Globe</span>
+        </button>
+        <button id="orientCesiumNorth" class="map-north-toggle" title="Orient 3D view to north">
+          <i class="fa-solid fa-location-arrow"></i>
+          <span>North</span>
+        </button>
         <button id="toggleCesiumElevation" class="map-elevation-toggle" title="Show terrain elevation at cursor">
           <i class="fa-solid fa-ruler-vertical"></i>
           <span>Elevation</span>
@@ -1505,6 +1513,10 @@
         <button id="cesiumSolarButton" class="map-solar-toggle" title="Calculate solar panel layout in 3D">
           <i class="fa-solid fa-solar-panel"></i>
           <span>Solar</span>
+        </button>
+        <button id="cesiumSunButton" class="map-sun-toggle" title="Simulate sun movement during the day">
+          <i class="fa-solid fa-sun"></i>
+          <span>Sun</span>
         </button>
         <div id="cesiumProfilePanel" class="cesium-profile-panel" hidden>
           <div class="cesium-profile-panel__header">
@@ -1624,6 +1636,53 @@
             Set parameters, then draw a 3D site polygon.
           </div>
           <div id="cesiumSolarResults" class="cesium-solar-panel__results"></div>
+        </div>
+        <div id="cesiumSunPanel" class="cesium-sun-panel" hidden>
+          <div class="cesium-sun-panel__header">
+            <strong>Sun Simulation</strong>
+            <button id="cesiumSunClose" type="button" title="Close sun simulation">
+              &times;
+            </button>
+          </div>
+          <div class="cesium-sun-panel__controls">
+            <label>
+              <span>Date</span>
+              <input id="cesiumSunDate" type="date" />
+            </label>
+            <label>
+              <span>Time zone</span>
+              <select id="cesiumSunTimeZone">
+                <option value="+00:00">UTC</option>
+                <option value="+01:00">UTC+1 / CET</option>
+                <option value="+02:00" selected>UTC+2 / Albania summer</option>
+                <option value="+03:00">UTC+3 / East Europe / Turkey</option>
+                <option value="-05:00">UTC-5 / US Eastern</option>
+                <option value="-08:00">UTC-8 / US Pacific</option>
+              </select>
+            </label>
+            <label class="cesium-sun-panel__range-control">
+              <span>
+                Hour
+                <output id="cesiumSunHourValue">12:00</output>
+              </span>
+              <input id="cesiumSunHour" type="range" min="0" max="23.75" step="0.25" value="12" />
+            </label>
+            <label class="cesium-sun-panel__check">
+              <input id="cesiumSunLighting" type="checkbox" checked />
+              <span>Lighting</span>
+            </label>
+            <label class="cesium-sun-panel__check">
+              <input id="cesiumSunShadows" type="checkbox" checked />
+              <span>Shadows</span>
+            </label>
+          </div>
+          <div class="cesium-sun-panel__actions">
+            <button id="cesiumSunPlay" type="button">Play</button>
+            <button id="cesiumSunReset" type="button">Noon</button>
+          </div>
+          <div id="cesiumSunStatus" class="cesium-sun-panel__status">
+            Move the hour slider to preview sun position.
+          </div>
         </div>
         <div class="map-projection-control" title="Map Projection">
           <select id="mapProjectionSelect">
