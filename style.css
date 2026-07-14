@@ -2225,6 +2225,39 @@ button {
   font-size: 12px;
 }
 
+.cesium-sun-panel__results {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+
+.cesium-sun-result-card {
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 8px 9px;
+  background: #fffbeb;
+}
+
+.cesium-sun-result-card--wide {
+  grid-column: 1 / -1;
+}
+
+.cesium-sun-result-card strong {
+  display: block;
+  color: #92400e;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.cesium-sun-result-card span {
+  display: block;
+  margin-top: 3px;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 @media (max-width: 720px) {
   .cesium-profile-panel {
     width: calc(100% - 24px);

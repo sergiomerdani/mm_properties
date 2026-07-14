@@ -1275,6 +1275,7 @@ const cesiumSunShadowsInput = document.getElementById("cesiumSunShadows");
 const cesiumSunPlay = document.getElementById("cesiumSunPlay");
 const cesiumSunReset = document.getElementById("cesiumSunReset");
 const cesiumSunStatus = document.getElementById("cesiumSunStatus");
+const cesiumSunResults = document.getElementById("cesiumSunResults");
 const cesiumIonAccessToken =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyZjlhZTVlOS1hZDg2LTQxNTgtYmFjYS1iYTRjNDcxOWFhNjQiLCJpZCI6MTE1MTg4LCJpYXQiOjE2Nzg0NjMyNTJ9.FntmGyy-qhgprvx60qrCryPonYG7hKjdxTi11M3j9yA";
 let cesiumViewer = null;
@@ -1629,6 +1630,304 @@ function getCesiumSunTimeZoneLabel() {
   return selected?.textContent?.trim() || "Browser local";
 }
 
+function getCesiumSunTimeZoneOffsetHours() {
+  const value = cesiumSunTimeZoneInput?.value || "+02:00";
+  const match = value.match(/^([+-])(\d{2}):(\d{2})$/);
+  if (!match) return -new Date().getTimezoneOffset() / 60;
+  const sign = match[1] === "-" ? -1 : 1;
+  return sign * (Number(match[2]) + Number(match[3]) / 60);
+}
+
+function getCesiumSunAnalysisLocation() {
+  const Cesium = window.Cesium;
+  if (Cesium && cesiumSolarLastLayout?.projector && cesiumSolarLastLayout?.center) {
+    const cartographic = cesiumSolarLastLayout.projector.fromLocal(
+      cesiumSolarLastLayout.center,
+    );
+    return {
+      lon: Cesium.Math.toDegrees(cartographic.longitude),
+      lat: Cesium.Math.toDegrees(cartographic.latitude),
+      source: "solar site",
+    };
+  }
+
+  if (Cesium && cesiumViewer?.camera?.positionWC) {
+    const cartographic = Cesium.Cartographic.fromCartesian(
+      cesiumViewer.camera.positionWC,
+    );
+    return {
+      lon: Cesium.Math.toDegrees(cartographic.longitude),
+      lat: Cesium.Math.toDegrees(cartographic.latitude),
+      source: "camera",
+    };
+  }
+
+  const view = map.getView();
+  const lonLat = toLonLat(view.getCenter() || [0, 0], view.getProjection());
+  return { lon: lonLat[0], lat: lonLat[1], source: "map center" };
+}
+
+function getDayOfYear(dateValue) {
+  const [year, month, day] = dateValue.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const start = new Date(Date.UTC(year, 0, 0));
+  return Math.floor((date - start) / 86400000);
+}
+
+function getSolarDeclinationAndEquation(dateValue) {
+  const dayOfYear = getDayOfYear(dateValue);
+  const gamma = (2 * Math.PI * (dayOfYear - 1)) / 365;
+  const equationOfTime =
+    229.18 *
+    (0.000075 +
+      0.001868 * Math.cos(gamma) -
+      0.032077 * Math.sin(gamma) -
+      0.014615 * Math.cos(2 * gamma) -
+      0.040849 * Math.sin(2 * gamma));
+  const declination =
+    0.006918 -
+    0.399912 * Math.cos(gamma) +
+    0.070257 * Math.sin(gamma) -
+    0.006758 * Math.cos(2 * gamma) +
+    0.000907 * Math.sin(2 * gamma) -
+    0.002697 * Math.cos(3 * gamma) +
+    0.00148 * Math.sin(3 * gamma);
+  return { equationOfTime, declination };
+}
+
+function normalizeMinutes(minutes) {
+  return ((minutes % 1440) + 1440) % 1440;
+}
+
+function formatMinutesAsClock(minutes) {
+  if (!Number.isFinite(minutes)) return "-";
+  const normalized = normalizeMinutes(minutes);
+  const hours = Math.floor(normalized / 60);
+  const mins = Math.round(normalized % 60);
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+}
+
+function getSolarPositionAtMinutes({ lat, lon, dateValue, timeZoneOffset, minutes }) {
+  const { equationOfTime, declination } = getSolarDeclinationAndEquation(dateValue);
+  const latRad = (lat * Math.PI) / 180;
+  const trueSolarMinutes = normalizeMinutes(
+    minutes + equationOfTime + 4 * lon - 60 * timeZoneOffset,
+  );
+  const hourAngleDeg = trueSolarMinutes / 4 - 180;
+  const hourAngle = (hourAngleDeg * Math.PI) / 180;
+  const cosZenith =
+    Math.sin(latRad) * Math.sin(declination) +
+    Math.cos(latRad) * Math.cos(declination) * Math.cos(hourAngle);
+  const zenith = Math.acos(Math.max(-1, Math.min(1, cosZenith)));
+  const altitude = 90 - (zenith * 180) / Math.PI;
+  const azimuthBase =
+    (Math.acos(
+      Math.max(
+        -1,
+        Math.min(
+          1,
+          (Math.sin(latRad) * Math.cos(zenith) - Math.sin(declination)) /
+            (Math.cos(latRad) * Math.sin(zenith) || 1),
+        ),
+      ),
+    ) *
+      180) /
+    Math.PI;
+  const azimuth = hourAngleDeg > 0 ? 360 - azimuthBase : azimuthBase;
+  return { altitude, azimuth };
+}
+
+function getCesiumSunDirectionFromPanel(centerCartesian, sunPosition) {
+  const Cesium = window.Cesium;
+  if (!Cesium || !centerCartesian) return null;
+  const altitudeRadians = Cesium.Math.toRadians(sunPosition.altitude);
+  const azimuthRadians = Cesium.Math.toRadians(sunPosition.azimuth);
+  const localDirection = new Cesium.Cartesian3(
+    Math.cos(altitudeRadians) * Math.sin(azimuthRadians),
+    Math.cos(altitudeRadians) * Math.cos(azimuthRadians),
+    Math.sin(altitudeRadians),
+  );
+  const eastNorthUp = Cesium.Transforms.eastNorthUpToFixedFrame(centerCartesian);
+  return Cesium.Cartesian3.normalize(
+    Cesium.Matrix4.multiplyByPointAsVector(
+      eastNorthUp,
+      localDirection,
+      new Cesium.Cartesian3(),
+    ),
+    new Cesium.Cartesian3(),
+  );
+}
+
+function getCesiumSolarSamplePanel() {
+  const Cesium = window.Cesium;
+  const layout = cesiumSolarLastLayout;
+  if (!Cesium || !layout?.panels?.length) return null;
+  layout.settings = {
+    ...layout.settings,
+    ...getCesiumSolarSettings(),
+  };
+  const panelCorners = layout.panels[Math.floor(layout.panels.length / 2)];
+  const positions = getCesiumSolarTiltedPanelCartesianCorners(panelCorners, layout);
+  const center = positions.reduce(
+    (sum, position) => Cesium.Cartesian3.add(sum, position, sum),
+    new Cesium.Cartesian3(),
+  );
+  Cesium.Cartesian3.divideByScalar(center, positions.length, center);
+
+  const edgeA = Cesium.Cartesian3.subtract(
+    positions[1],
+    positions[0],
+    new Cesium.Cartesian3(),
+  );
+  const edgeB = Cesium.Cartesian3.subtract(
+    positions[2],
+    positions[0],
+    new Cesium.Cartesian3(),
+  );
+  const normal = Cesium.Cartesian3.normalize(
+    Cesium.Cartesian3.cross(edgeA, edgeB, new Cesium.Cartesian3()),
+    new Cesium.Cartesian3(),
+  );
+  const up = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(
+    center,
+    new Cesium.Cartesian3(),
+  );
+  if (Cesium.Cartesian3.dot(normal, up) < 0) {
+    Cesium.Cartesian3.negate(normal, normal);
+  }
+  return { center, normal };
+}
+
+function isCesiumSunRayBlockedByTerrain(center, sunDirection) {
+  const Cesium = window.Cesium;
+  const viewer = cesiumViewer;
+  if (!Cesium || !viewer?.scene?.globe || !center || !sunDirection) return false;
+  const start = Cesium.Cartesian3.add(
+    center,
+    Cesium.Cartesian3.multiplyByScalar(sunDirection, 2, new Cesium.Cartesian3()),
+    new Cesium.Cartesian3(),
+  );
+  const intersection = viewer.scene.globe.pick(
+    new Cesium.Ray(start, sunDirection),
+    viewer.scene,
+  );
+  if (!intersection) return false;
+  const distance = Cesium.Cartesian3.distance(start, intersection);
+  return distance > 5 && distance < 150000;
+}
+
+function isCesiumPanelInDirectSun(sunPosition, samplePanel) {
+  const Cesium = window.Cesium;
+  if (!Cesium || !samplePanel || sunPosition.altitude <= 0) return false;
+  const sunDirection = getCesiumSunDirectionFromPanel(samplePanel.center, sunPosition);
+  if (!sunDirection) return false;
+  const faceDot = Cesium.Cartesian3.dot(samplePanel.normal, sunDirection);
+  if (faceDot <= 0.02) return false;
+  return !isCesiumSunRayBlockedByTerrain(samplePanel.center, sunDirection);
+}
+
+function getCesiumSunAnalysis() {
+  const dateValue = cesiumSunDateInput?.value || formatDateInputValue();
+  const location = getCesiumSunAnalysisLocation();
+  const timeZoneOffset = getCesiumSunTimeZoneOffsetHours();
+  const { equationOfTime, declination } = getSolarDeclinationAndEquation(dateValue);
+  const latRad = (location.lat * Math.PI) / 180;
+  const sunriseZenith = (90.833 * Math.PI) / 180;
+  const cosHourAngle =
+    (Math.cos(sunriseZenith) /
+      (Math.cos(latRad) * Math.cos(declination)) -
+      Math.tan(latRad) * Math.tan(declination));
+  if (cosHourAngle < -1 || cosHourAngle > 1) {
+    return { location, dateValue, polarDay: cosHourAngle < -1 };
+  }
+
+  const hourAngleDeg = (Math.acos(cosHourAngle) * 180) / Math.PI;
+  const solarNoon = 720 - 4 * location.lon - equationOfTime + timeZoneOffset * 60;
+  const sunrise = solarNoon - hourAngleDeg * 4;
+  const sunset = solarNoon + hourAngleDeg * 4;
+  const samplePanel = getCesiumSolarSamplePanel();
+  let panelStart = null;
+  let panelEnd = null;
+  if (samplePanel) {
+    for (let minute = Math.floor(sunrise); minute <= Math.ceil(sunset); minute += 5) {
+      const sunPosition = getSolarPositionAtMinutes({
+        lat: location.lat,
+        lon: location.lon,
+        dateValue,
+        timeZoneOffset,
+        minutes: minute,
+      });
+      const directSun = isCesiumPanelInDirectSun(sunPosition, samplePanel);
+      if (directSun && panelStart === null) panelStart = minute;
+      if (directSun) panelEnd = minute;
+    }
+  }
+  return {
+    location,
+    dateValue,
+    sunrise,
+    solarNoon,
+    sunset,
+    daylightMinutes: sunset - sunrise,
+    hasSamplePanel: Boolean(samplePanel),
+    panelStart,
+    panelEnd,
+  };
+}
+
+function renderCesiumSunResults() {
+  if (!cesiumSunResults) return;
+  const analysis = getCesiumSunAnalysis();
+  if (!analysis || analysis.polarDay !== undefined) {
+    cesiumSunResults.innerHTML = `
+      <div class="cesium-sun-result-card">
+        <strong>Sun window</strong>
+        <span>${analysis?.polarDay ? "Sun above horizon all day" : "No sunrise/sunset"}</span>
+      </div>
+    `;
+    return;
+  }
+
+  const panelWindow =
+    analysis.panelStart !== null && analysis.panelEnd !== null
+      ? `${formatMinutesAsClock(analysis.panelStart)} - ${formatMinutesAsClock(
+          analysis.panelEnd,
+        )}`
+      : analysis.hasSamplePanel
+        ? "No direct sun detected"
+        : "Create/rotate solar layout";
+  cesiumSunResults.innerHTML = `
+    <div class="cesium-sun-result-card">
+      <strong>Sunrise</strong>
+      <span>${formatMinutesAsClock(analysis.sunrise)}</span>
+    </div>
+    <div class="cesium-sun-result-card">
+      <strong>Solar noon</strong>
+      <span>${formatMinutesAsClock(analysis.solarNoon)}</span>
+    </div>
+    <div class="cesium-sun-result-card">
+      <strong>Sunset</strong>
+      <span>${formatMinutesAsClock(analysis.sunset)}</span>
+    </div>
+    <div class="cesium-sun-result-card">
+      <strong>Daylight</strong>
+      <span>${Math.floor(analysis.daylightMinutes / 60)}h ${Math.round(
+        analysis.daylightMinutes % 60,
+      )}m</span>
+    </div>
+    <div class="cesium-sun-result-card cesium-sun-result-card--wide">
+      <strong>Direct sun on panels</strong>
+      <span>${panelWindow}</span>
+    </div>
+    <div class="cesium-sun-result-card cesium-sun-result-card--wide">
+      <strong>Location</strong>
+      <span>${analysis.location.lat.toFixed(4)}, ${analysis.location.lon.toFixed(
+        4,
+      )} (${analysis.location.source})</span>
+    </div>
+  `;
+}
+
 function setCesiumSunStatus(message) {
   if (cesiumSunStatus) cesiumSunStatus.textContent = message || "";
 }
@@ -1656,6 +1955,7 @@ function updateCesiumSunSimulation() {
     viewer.scene.shadowMap.softShadows = true;
   }
   viewer.scene.requestRender?.();
+  renderCesiumSunResults();
   setCesiumSunStatus(
     `${dateTime.toLocaleDateString()} ${formatCesiumSunHour(
       cesiumSunHourInput?.value || 12,
@@ -3702,6 +4002,7 @@ function drawCesiumSolarLayout(positions) {
   });
 
   renderCesiumSolarResults(layout);
+  if (cesiumSunPanel && !cesiumSunPanel.hidden) renderCesiumSunResults();
   setCesiumSolarStatus(
     `${layout.panelCount} panels. Drag the orange edge/handle to rotate.${
       layout.limited
@@ -3806,6 +4107,7 @@ function createCesiumSolarPanelMesh() {
       0,
     )}° left/right, with one center support leg per panel.`,
   );
+  if (cesiumSunPanel && !cesiumSunPanel.hidden) renderCesiumSunResults();
 }
 
 function updateCesiumSolarSketch() {
