@@ -1422,6 +1422,10 @@ button {
 .map-buildings-toggle,
 .map-google-tiles-toggle,
 .map-draw3d-toggle,
+.map-transmission-pole-toggle,
+.map-transmission-cable-toggle,
+.map-manhole-toggle,
+.map-pipeline-toggle,
 .map-himare-wms-toggle,
 .map-dhermi-wms-toggle,
 .map-palase-wms-toggle,
@@ -1487,6 +1491,26 @@ button {
 
 .map-draw3d-toggle {
   top: 252px;
+}
+
+.map-transmission-pole-toggle {
+  top: 252px;
+  right: 232px;
+}
+
+.map-transmission-cable-toggle {
+  top: 292px;
+  right: 232px;
+}
+
+.map-manhole-toggle {
+  top: 252px;
+  right: 336px;
+}
+
+.map-pipeline-toggle {
+  top: 292px;
+  right: 336px;
 }
 
 .map-himare-wms-toggle {
@@ -1596,6 +1620,10 @@ button {
 .map-buildings-toggle:hover,
 .map-google-tiles-toggle:hover,
 .map-draw3d-toggle:hover,
+.map-transmission-pole-toggle:hover,
+.map-transmission-cable-toggle:hover,
+.map-manhole-toggle:hover,
+.map-pipeline-toggle:hover,
 .map-himare-wms-toggle:hover,
 .map-dhermi-wms-toggle:hover,
 .map-palase-wms-toggle:hover,
@@ -1620,6 +1648,10 @@ button {
 .map-buildings-toggle.is-active,
 .map-google-tiles-toggle.is-active,
 .map-draw3d-toggle.is-active,
+.map-transmission-pole-toggle.is-active,
+.map-transmission-cable-toggle.is-active,
+.map-manhole-toggle.is-active,
+.map-pipeline-toggle.is-active,
 .map-himare-wms-toggle.is-active,
 .map-dhermi-wms-toggle.is-active,
 .map-palase-wms-toggle.is-active,
@@ -1640,6 +1672,10 @@ button {
 .map-buildings-toggle.is-loading,
 .map-google-tiles-toggle.is-loading,
 .map-draw3d-toggle.is-loading,
+.map-transmission-pole-toggle.is-loading,
+.map-transmission-cable-toggle.is-loading,
+.map-manhole-toggle.is-loading,
+.map-pipeline-toggle.is-loading,
 .map-himare-wms-toggle.is-loading,
 .map-dhermi-wms-toggle.is-loading,
 .map-palase-wms-toggle.is-loading,

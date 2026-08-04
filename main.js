@@ -1180,6 +1180,14 @@ const toggleCesiumDrawFootprintButton = document.getElementById(
   "toggleCesiumDrawFootprint",
 );
 const cesiumDrawTypeSelect = document.getElementById("cesiumDrawType");
+const toggleCesiumTransmissionPoleButton = document.getElementById(
+  "toggleCesiumTransmissionPole",
+);
+const toggleCesiumTransmissionCableButton = document.getElementById(
+  "toggleCesiumTransmissionCable",
+);
+const toggleCesiumManholeButton = document.getElementById("toggleCesiumManhole");
+const toggleCesiumPipelineButton = document.getElementById("toggleCesiumPipeline");
 const toggleHimareTerrainWmsButton = document.getElementById(
   "toggleHimareTerrainWms",
 );
@@ -1298,6 +1306,20 @@ let cesiumDrawPolylineEntity = null;
 let cesiumDrawPolygonEntity = null;
 const cesiumDrawPointEntities = [];
 const cesiumDrawnFeatures = [];
+let isCesiumTransmissionPoleMode = false;
+let isCesiumTransmissionCableMode = false;
+let cesiumTransmissionPoleHandler = null;
+let cesiumTransmissionCableHandler = null;
+const cesiumTransmissionPoles = [];
+const cesiumTransmissionCables = [];
+const cesiumTransmissionSelectedPoles = [];
+let isCesiumManholeMode = false;
+let isCesiumPipelineMode = false;
+let cesiumManholeHandler = null;
+let cesiumPipelineHandler = null;
+const cesiumManholes = [];
+const cesiumPipelines = [];
+const cesiumSelectedManholes = [];
 let himareTerrainWmsLayer = null;
 let isHimareTerrainWmsVisible = false;
 let dhermiTerrainWmsLayer = null;
@@ -1432,6 +1454,22 @@ function createCesiumProviderFromOpenLayersLayer(layer) {
 
   const source = layer.getSource?.();
   const title = layer.get("title") || layer.get("name") || "";
+
+  if (title === "Ortofoto 2015 20cm" || title === "2015 20cm") {
+    return new Cesium.WebMapServiceImageryProvider({
+      url: "https://geoportal.asig.gov.al/service/wms",
+      layers: "orthophoto_2015:OrthoImagery_20cm",
+      parameters: {
+        service: "WMS",
+        version: "1.1.1",
+        format: "image/jpeg",
+        transparent: false,
+        srs: "EPSG:4326",
+      },
+      enablePickFeatures: false,
+      credit: "ASIG Ortofoto 2015 20cm",
+    });
+  }
 
   if (title === "OSM" || source instanceof OSM) {
     return new Cesium.UrlTemplateImageryProvider({
@@ -3526,6 +3564,483 @@ function getCesiumGroundPosition(screenPosition) {
   return viewer.camera.pickEllipsoid(screenPosition, viewer.scene.globe.ellipsoid);
 }
 
+function getCesiumPositionWithHeightOffset(position, offsetMeters) {
+  const Cesium = window.Cesium;
+  if (!Cesium || !position) return null;
+
+  const cartographic = Cesium.Cartographic.fromCartesian(position);
+  return Cesium.Cartesian3.fromRadians(
+    cartographic.longitude,
+    cartographic.latitude,
+    cartographic.height + offsetMeters,
+  );
+}
+
+function getCesiumTransmissionPoleFromEntity(entity) {
+  if (!entity) return null;
+  return cesiumTransmissionPoles.find(
+    (pole) =>
+      pole.entity === entity ||
+      pole.topEntity === entity ||
+      pole.baseEntity === entity,
+  );
+}
+
+function createCesiumCablePositions(startTop, endTop, sagMeters = 3) {
+  const Cesium = window.Cesium;
+  if (!Cesium || !startTop || !endTop) return [];
+
+  const start = Cesium.Cartographic.fromCartesian(startTop);
+  const end = Cesium.Cartographic.fromCartesian(endTop);
+  const geodesic = new Cesium.EllipsoidGeodesic(start, end);
+  const positions = [];
+  const steps = 32;
+
+  for (let index = 0; index <= steps; index += 1) {
+    const fraction = index / steps;
+    const point = geodesic.interpolateUsingFraction(fraction);
+    const height =
+      start.height + (end.height - start.height) * fraction -
+      Math.sin(Math.PI * fraction) * sagMeters;
+
+    positions.push(
+      Cesium.Cartesian3.fromRadians(point.longitude, point.latitude, height),
+    );
+  }
+
+  return positions;
+}
+
+function setCesiumTransmissionPoleMode(enabled) {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !toggleCesiumTransmissionPoleButton) return;
+
+  if (enabled) {
+    setCesiumDrawFootprintMode(false);
+    setCesiumTransmissionCableMode(false);
+    setCesiumManholeMode(false);
+    setCesiumPipelineMode(false);
+    if (isCesiumSolarMode) setCesiumSolarMode(false);
+  }
+
+  isCesiumTransmissionPoleMode = enabled;
+  toggleCesiumTransmissionPoleButton.classList.toggle("is-active", enabled);
+  toggleCesiumTransmissionPoleButton.title = enabled
+    ? "Click terrain to place transmission poles"
+    : "Draw 3D transmission poles";
+
+  if (!enabled) {
+    if (cesiumTransmissionPoleHandler) {
+      cesiumTransmissionPoleHandler.destroy();
+      cesiumTransmissionPoleHandler = null;
+    }
+    return;
+  }
+
+  setMapMode3d(true);
+  cesiumTransmissionPoleHandler = new Cesium.ScreenSpaceEventHandler(
+    viewer.scene.canvas,
+  );
+  cesiumTransmissionPoleHandler.setInputAction((event) => {
+    addCesiumTransmissionPole(event.position);
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+}
+
+function addCesiumTransmissionPole(screenPosition) {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  const basePosition = getCesiumGroundPosition(screenPosition);
+  if (!viewer || !Cesium || !basePosition) return;
+
+  const poleHeight = 18;
+  const poleId = cesiumTransmissionPoles.length + 1;
+  const centerPosition = getCesiumPositionWithHeightOffset(
+    basePosition,
+    poleHeight / 2,
+  );
+  const topPosition = getCesiumPositionWithHeightOffset(basePosition, poleHeight);
+  if (!centerPosition || !topPosition) return;
+
+  const entity = viewer.entities.add({
+    name: `Transmission Pole ${poleId}`,
+    position: centerPosition,
+    properties: {
+      transmissionPoleId: poleId,
+      heightMeters: poleHeight,
+    },
+    cylinder: {
+      length: poleHeight,
+      topRadius: 0.16,
+      bottomRadius: 0.28,
+      material: Cesium.Color.DIMGRAY,
+      outline: true,
+      outlineColor: Cesium.Color.WHITE.withAlpha(0.65),
+    },
+  });
+
+  const topEntity = viewer.entities.add({
+    name: `Transmission Pole ${poleId} top`,
+    position: topPosition,
+    point: {
+      pixelSize: 9,
+      color: Cesium.Color.ORANGE,
+      outlineColor: Cesium.Color.WHITE,
+      outlineWidth: 2,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+    label: {
+      text: `P${poleId}`,
+      font: "12px sans-serif",
+      fillColor: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.BLACK,
+      outlineWidth: 3,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      pixelOffset: new Cesium.Cartesian2(0, -20),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  });
+
+  const baseEntity = viewer.entities.add({
+    name: `Transmission Pole ${poleId} base`,
+    position: basePosition,
+    point: {
+      pixelSize: 7,
+      color: Cesium.Color.DARKORANGE,
+      outlineColor: Cesium.Color.WHITE,
+      outlineWidth: 1,
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+    },
+  });
+
+  cesiumTransmissionPoles.push({
+    id: poleId,
+    entity,
+    topEntity,
+    baseEntity,
+    basePosition,
+    topPosition,
+    heightMeters: poleHeight,
+  });
+}
+
+function setCesiumTransmissionPoleSelected(pole, selected) {
+  const Cesium = window.Cesium;
+  if (!Cesium || !pole?.topEntity?.point) return;
+  pole.topEntity.point.color = selected ? Cesium.Color.LIME : Cesium.Color.ORANGE;
+  pole.topEntity.point.pixelSize = selected ? 12 : 9;
+}
+
+function clearCesiumTransmissionCableSelection() {
+  cesiumTransmissionSelectedPoles.splice(0).forEach((pole) => {
+    setCesiumTransmissionPoleSelected(pole, false);
+  });
+}
+
+function addCesiumTransmissionCable(startPole, endPole) {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !startPole || !endPole || startPole === endPole) return;
+
+  const positions = createCesiumCablePositions(startPole.topPosition, endPole.topPosition);
+  if (positions.length < 2) return;
+
+  const entity = viewer.entities.add({
+    name: `Cable P${startPole.id}-P${endPole.id}`,
+    polyline: {
+      positions,
+      width: 3,
+      material: new Cesium.PolylineGlowMaterialProperty({
+        glowPower: 0.15,
+        color: Cesium.Color.ORANGE,
+      }),
+    },
+  });
+
+  cesiumTransmissionCables.push({
+    entity,
+    startPoleId: startPole.id,
+    endPoleId: endPole.id,
+    positions,
+  });
+}
+
+function setCesiumTransmissionCableMode(enabled) {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !toggleCesiumTransmissionCableButton) return;
+
+  if (enabled) {
+    setCesiumDrawFootprintMode(false);
+    setCesiumTransmissionPoleMode(false);
+    setCesiumManholeMode(false);
+    setCesiumPipelineMode(false);
+    if (isCesiumSolarMode) setCesiumSolarMode(false);
+  }
+
+  isCesiumTransmissionCableMode = enabled;
+  toggleCesiumTransmissionCableButton.classList.toggle("is-active", enabled);
+  toggleCesiumTransmissionCableButton.title = enabled
+    ? "Click two transmission poles to connect them"
+    : "Connect two transmission poles with cable";
+
+  clearCesiumTransmissionCableSelection();
+
+  if (!enabled) {
+    if (cesiumTransmissionCableHandler) {
+      cesiumTransmissionCableHandler.destroy();
+      cesiumTransmissionCableHandler = null;
+    }
+    return;
+  }
+
+  setMapMode3d(true);
+  cesiumTransmissionCableHandler = new Cesium.ScreenSpaceEventHandler(
+    viewer.scene.canvas,
+  );
+  cesiumTransmissionCableHandler.setInputAction((event) => {
+    const picked = viewer.scene.pick(event.position);
+    const pole = getCesiumTransmissionPoleFromEntity(picked?.id);
+    if (!pole || cesiumTransmissionSelectedPoles.includes(pole)) return;
+
+    cesiumTransmissionSelectedPoles.push(pole);
+    setCesiumTransmissionPoleSelected(pole, true);
+
+    if (cesiumTransmissionSelectedPoles.length === 2) {
+      addCesiumTransmissionCable(
+        cesiumTransmissionSelectedPoles[0],
+        cesiumTransmissionSelectedPoles[1],
+      );
+      clearCesiumTransmissionCableSelection();
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+}
+
+function getCesiumManholeFromEntity(entity) {
+  if (!entity) return null;
+  return cesiumManholes.find(
+    (manhole) =>
+      manhole.entity === entity ||
+      manhole.coverEntity === entity ||
+      manhole.bottomEntity === entity,
+  );
+}
+
+function setCesiumManholeMode(enabled) {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !toggleCesiumManholeButton) return;
+
+  if (enabled) {
+    setCesiumDrawFootprintMode(false);
+    setCesiumTransmissionPoleMode(false);
+    setCesiumTransmissionCableMode(false);
+    setCesiumPipelineMode(false);
+    if (isCesiumSolarMode) setCesiumSolarMode(false);
+  }
+
+  isCesiumManholeMode = enabled;
+  toggleCesiumManholeButton.classList.toggle("is-active", enabled);
+  toggleCesiumManholeButton.title = enabled
+    ? "Click terrain to place underground manholes"
+    : "Draw underground manholes";
+
+  if (!enabled) {
+    if (cesiumManholeHandler) {
+      cesiumManholeHandler.destroy();
+      cesiumManholeHandler = null;
+    }
+    return;
+  }
+
+  setMapMode3d(true);
+  cesiumManholeHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  cesiumManholeHandler.setInputAction((event) => {
+    addCesiumManhole(event.position);
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+}
+
+function addCesiumManhole(screenPosition) {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  const coverPosition = getCesiumGroundPosition(screenPosition);
+  if (!viewer || !Cesium || !coverPosition) return;
+
+  const depthMeters = 2;
+  const manholeId = cesiumManholes.length + 1;
+  const centerPosition = getCesiumPositionWithHeightOffset(
+    coverPosition,
+    -depthMeters / 2,
+  );
+  const bottomPosition = getCesiumPositionWithHeightOffset(coverPosition, -depthMeters);
+  if (!centerPosition || !bottomPosition) return;
+
+  const entity = viewer.entities.add({
+    name: `Manhole ${manholeId}`,
+    position: centerPosition,
+    properties: {
+      manholeId,
+      depthMeters,
+      assetType: "underground-manhole",
+    },
+    cylinder: {
+      length: depthMeters,
+      topRadius: 0.85,
+      bottomRadius: 0.85,
+      material: Cesium.Color.CYAN.withAlpha(0.55),
+      outline: true,
+      outlineColor: Cesium.Color.WHITE.withAlpha(0.8),
+    },
+  });
+
+  const coverEntity = viewer.entities.add({
+    name: `Manhole ${manholeId} cover`,
+    position: coverPosition,
+    ellipse: {
+      semiMajorAxis: 0.95,
+      semiMinorAxis: 0.95,
+      material: Cesium.Color.DARKSLATEGRAY.withAlpha(0.85),
+      outline: true,
+      outlineColor: Cesium.Color.CYAN,
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+    },
+    label: {
+      text: `M${manholeId}`,
+      font: "12px sans-serif",
+      fillColor: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.BLACK,
+      outlineWidth: 3,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      pixelOffset: new Cesium.Cartesian2(0, -22),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  });
+
+  const bottomEntity = viewer.entities.add({
+    name: `Manhole ${manholeId} invert`,
+    position: bottomPosition,
+    point: {
+      pixelSize: 8,
+      color: Cesium.Color.CYAN,
+      outlineColor: Cesium.Color.WHITE,
+      outlineWidth: 2,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  });
+
+  cesiumManholes.push({
+    id: manholeId,
+    entity,
+    coverEntity,
+    bottomEntity,
+    coverPosition,
+    bottomPosition,
+    depthMeters,
+  });
+}
+
+function setCesiumManholeSelected(manhole, selected) {
+  const Cesium = window.Cesium;
+  if (!Cesium || !manhole?.bottomEntity?.point) return;
+  manhole.bottomEntity.point.color = selected ? Cesium.Color.LIME : Cesium.Color.CYAN;
+  manhole.bottomEntity.point.pixelSize = selected ? 12 : 8;
+}
+
+function clearCesiumPipelineSelection() {
+  cesiumSelectedManholes.splice(0).forEach((manhole) => {
+    setCesiumManholeSelected(manhole, false);
+  });
+}
+
+function addCesiumPipeline(startManhole, endManhole) {
+  const viewer = cesiumViewer;
+  const Cesium = window.Cesium;
+  if (
+    !viewer ||
+    !Cesium ||
+    !startManhole ||
+    !endManhole ||
+    startManhole === endManhole
+  ) {
+    return;
+  }
+
+  const positions = [startManhole.bottomPosition, endManhole.bottomPosition];
+  const pipelineId = cesiumPipelines.length + 1;
+  const entity = viewer.entities.add({
+    name: `Pipeline M${startManhole.id}-M${endManhole.id}`,
+    properties: {
+      pipelineId,
+      startManholeId: startManhole.id,
+      endManholeId: endManhole.id,
+      assetType: "underground-pipeline",
+    },
+    polyline: {
+      positions,
+      width: 7,
+      material: new Cesium.PolylineGlowMaterialProperty({
+        glowPower: 0.18,
+        color: Cesium.Color.CYAN,
+      }),
+      depthFailMaterial: Cesium.Color.CYAN.withAlpha(0.35),
+      clampToGround: false,
+    },
+  });
+
+  cesiumPipelines.push({
+    entity,
+    startManholeId: startManhole.id,
+    endManholeId: endManhole.id,
+    positions,
+  });
+}
+
+function setCesiumPipelineMode(enabled) {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !toggleCesiumPipelineButton) return;
+
+  if (enabled) {
+    setCesiumDrawFootprintMode(false);
+    setCesiumTransmissionPoleMode(false);
+    setCesiumTransmissionCableMode(false);
+    setCesiumManholeMode(false);
+    if (isCesiumSolarMode) setCesiumSolarMode(false);
+  }
+
+  isCesiumPipelineMode = enabled;
+  toggleCesiumPipelineButton.classList.toggle("is-active", enabled);
+  toggleCesiumPipelineButton.title = enabled
+    ? "Click two manholes to connect an underground pipe"
+    : "Connect two manholes with an underground pipe";
+
+  clearCesiumPipelineSelection();
+
+  if (!enabled) {
+    if (cesiumPipelineHandler) {
+      cesiumPipelineHandler.destroy();
+      cesiumPipelineHandler = null;
+    }
+    return;
+  }
+
+  setMapMode3d(true);
+  cesiumPipelineHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  cesiumPipelineHandler.setInputAction((event) => {
+    const picked = viewer.scene.pick(event.position);
+    const manhole = getCesiumManholeFromEntity(picked?.id);
+    if (!manhole || cesiumSelectedManholes.includes(manhole)) return;
+
+    cesiumSelectedManholes.push(manhole);
+    setCesiumManholeSelected(manhole, true);
+
+    if (cesiumSelectedManholes.length === 2) {
+      addCesiumPipeline(cesiumSelectedManholes[0], cesiumSelectedManholes[1]);
+      clearCesiumPipelineSelection();
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+}
+
 function getCesiumDrawPreviewPositions() {
   if (cesiumDrawPositions.length === 0) return [];
   return cesiumDrawPreviewPosition
@@ -4360,6 +4875,13 @@ function setCesiumDrawFootprintMode(enabled) {
   const Cesium = window.Cesium;
   if (!viewer || !Cesium || !toggleCesiumDrawFootprintButton) return;
 
+  if (enabled) {
+    setCesiumTransmissionPoleMode(false);
+    setCesiumTransmissionCableMode(false);
+    setCesiumManholeMode(false);
+    setCesiumPipelineMode(false);
+  }
+
   isCesiumDrawFootprintMode = enabled;
   toggleCesiumDrawFootprintButton.classList.toggle("is-active", enabled);
   toggleCesiumDrawFootprintButton.title = enabled
@@ -4399,6 +4921,10 @@ function setCesiumSolarMode(enabled) {
 
   if (enabled) {
     setCesiumDrawFootprintMode(false);
+    setCesiumTransmissionPoleMode(false);
+    setCesiumTransmissionCableMode(false);
+    setCesiumManholeMode(false);
+    setCesiumPipelineMode(false);
   }
 
   isCesiumSolarMode = enabled;
@@ -4575,6 +5101,22 @@ toggleGooglePhotorealisticButton?.addEventListener("click", () => {
 
 toggleCesiumDrawFootprintButton?.addEventListener("click", () => {
   setCesiumDrawFootprintMode(!isCesiumDrawFootprintMode);
+});
+
+toggleCesiumTransmissionPoleButton?.addEventListener("click", () => {
+  setCesiumTransmissionPoleMode(!isCesiumTransmissionPoleMode);
+});
+
+toggleCesiumTransmissionCableButton?.addEventListener("click", () => {
+  setCesiumTransmissionCableMode(!isCesiumTransmissionCableMode);
+});
+
+toggleCesiumManholeButton?.addEventListener("click", () => {
+  setCesiumManholeMode(!isCesiumManholeMode);
+});
+
+toggleCesiumPipelineButton?.addEventListener("click", () => {
+  setCesiumPipelineMode(!isCesiumPipelineMode);
 });
 
 cesiumDrawTypeSelect?.addEventListener("change", () => {
