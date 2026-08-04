@@ -19325,6 +19325,31 @@ function findAgentLayer(message) {
   });
 }
 
+function findAgentLayerByName(layerName) {
+  const normalizedLayerName = normalizeAgentText(layerName);
+  if (!normalizedLayerName) return null;
+
+  const layers = getLayerAgentItems(map.getLayers()).filter(
+    (item) => item.title || item.layerParam,
+  );
+
+  return layers.find((item) => {
+    const names = [
+      item.title,
+      item.layerParam,
+      item.layerParam?.split(":").pop(),
+    ].map(normalizeAgentText);
+
+    return names.some(
+      (name) =>
+        name &&
+        (name === normalizedLayerName ||
+          name.includes(normalizedLayerName) ||
+          normalizedLayerName.includes(name)),
+    );
+  });
+}
+
 function formatAgentLayerName(item) {
   return item.title || item.layerParam || "Unnamed layer";
 }
@@ -19615,6 +19640,19 @@ function getVisibleLayerTitles(layers) {
   return titles;
 }
 
+function getAllLayerTitlesForAgent(layers) {
+  return getLayerAgentItems(layers)
+    .filter((item) => item.title || item.layerParam)
+    .map((item) => ({
+      title: item.title,
+      layerParam: item.layerParam,
+      groupTitle: item.groupTitle,
+      visible: item.visible,
+      arcgisFeatureServiceUrl: item.arcgisFeatureServiceUrl,
+    }))
+    .slice(0, 120);
+}
+
 function getChatMapContext() {
   const view = map.getView();
 
@@ -19623,6 +19661,7 @@ function getChatMapContext() {
     zoom: view.getZoom(),
     projection: view.getProjection().getCode(),
     visible_layers: getVisibleLayerTitles(map.getLayers()),
+    layers: getAllLayerTitlesForAgent(map.getLayers()),
   };
 }
 
@@ -19641,10 +19680,108 @@ async function getBackendChatReply(message) {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.error || "The backend chat request failed.");
+    const error = new Error(data.error || "The backend chat request failed.");
+    error.status = response.status;
+    throw error;
   }
 
-  return data.reply;
+  return data;
+}
+
+function getAgentLayerExtent(layerMatch) {
+  const layer = layerMatch?.layer;
+  const source = layer?.getSource?.();
+  const vectorExtent = source?.getExtent?.();
+
+  if (
+    Array.isArray(vectorExtent) &&
+    vectorExtent.every(Number.isFinite) &&
+    vectorExtent[0] !== Infinity &&
+    vectorExtent[2] !== -Infinity
+  ) {
+    return vectorExtent;
+  }
+
+  const layerExtent = layer?.getExtent?.();
+  if (Array.isArray(layerExtent) && layerExtent.every(Number.isFinite)) {
+    return layerExtent;
+  }
+
+  return null;
+}
+
+async function executeBackendAgentAction(action) {
+  if (!action?.type) return null;
+
+  if (action.type === "zoom_to_tirana") {
+    const view = map.getView();
+    view.animate({
+      center: fromLonLat([19.8189, 41.3275], view.getProjection()),
+      zoom: 14,
+      duration: 700,
+    });
+    return "Zoomed to Tirana.";
+  }
+
+  if (action.type === "toggle_layer_visibility") {
+    const layerMatch = findAgentLayerByName(action.layer);
+    if (!layerMatch) throw new Error(`Layer not found: ${action.layer}`);
+    layerMatch.layer.setVisible(Boolean(action.value));
+    return `${Boolean(action.value) ? "Showed" : "Hid"} ${formatAgentLayerName(
+      layerMatch,
+    )}.`;
+  }
+
+  if (action.type === "zoom_to_layer") {
+    const layerMatch = findAgentLayerByName(action.layer);
+    if (!layerMatch) throw new Error(`Layer not found: ${action.layer}`);
+    const extent = getAgentLayerExtent(layerMatch);
+    if (!extent) throw new Error(`No local extent found for ${action.layer}`);
+    map.getView().fit(extent, {
+      duration: 800,
+      padding: [60, 60, 60, 60],
+      maxZoom: 18,
+    });
+    return `Zoomed to ${formatAgentLayerName(layerMatch)}.`;
+  }
+
+  if (action.type === "select_layer") {
+    const layerMatch = findAgentLayerByName(action.layer);
+    if (!layerMatch) throw new Error(`Layer not found: ${action.layer}`);
+    attributeLayerSelect.value = formatAgentLayerName(layerMatch);
+    attributeLayerSelect.dispatchEvent(new Event("change"));
+    return `Selected ${formatAgentLayerName(layerMatch)}.`;
+  }
+
+  if (action.type === "search_layer_features") {
+    return `Search requested for ${action.layer}: ${action.query}`;
+  }
+
+  if (action.type === "set_layer_style") {
+    return `Style change requested for ${action.layer}: ${action.style}`;
+  }
+
+  if (action.type === "run_site_selection") {
+    return "Site selection action queued.";
+  }
+
+  return `Unknown action ignored: ${action.type}`;
+}
+
+async function executeBackendAgentActions(actions = []) {
+  const results = [];
+
+  for (const action of actions) {
+    try {
+      const result = await executeBackendAgentAction(action);
+      if (result) results.push(result);
+    } catch (error) {
+      results.push(error.message);
+      console.warn("Backend agent action failed:", action, error);
+    }
+  }
+
+  return results;
 }
 
 if (chatForm && chatInput && chatMessages) {
@@ -19657,27 +19794,37 @@ if (chatForm && chatInput && chatMessages) {
     addChatMessage("You", message, "user");
     chatInput.value = "";
 
-    const action = await getChatAction(message);
-    if (action) {
-      try {
-        const runReply = await action.run();
-        const actionReply = action.reply || runReply;
-        addChatMessage("Assistant", actionReply, "bot");
-      } catch (error) {
-        addChatMessage(
-          "Assistant",
-          `I found the ${action.name} tool, but it failed: ${error.message}`,
-          "bot",
-        );
-        console.warn("Chat action failed:", error);
-      }
-      return;
-    }
-
     try {
-      const reply = await getBackendChatReply(message);
-      addChatMessage("Assistant", reply, "bot");
+      const data = await getBackendChatReply(message);
+      const actionResults = await executeBackendAgentActions(data.actions);
+      const reply = [data.reply, ...actionResults]
+        .filter(Boolean)
+        .join("\n");
+      addChatMessage("Assistant", reply || "Done.", "bot");
     } catch (error) {
+      if (error.status === 401 || error.status === 503) {
+        addChatMessage("Assistant", error.message, "bot");
+        console.warn("Backend chatbot configuration error:", error);
+        return;
+      }
+
+      const action = await getChatAction(message);
+      if (action) {
+        try {
+          const runReply = await action.run();
+          const actionReply = action.reply || runReply;
+          addChatMessage("Assistant", actionReply, "bot");
+        } catch (actionError) {
+          addChatMessage(
+            "Assistant",
+            `I found the ${action.name} tool, but it failed: ${actionError.message}`,
+            "bot",
+          );
+          console.warn("Chat action failed:", actionError);
+        }
+        return;
+      }
+
       addChatMessage("Assistant", getChatbotReply(message), "bot");
       console.warn("Backend chatbot unavailable:", error);
     }
