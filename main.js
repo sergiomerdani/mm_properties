@@ -1052,6 +1052,44 @@ function getLabelProperty(feature) {
   return "";
 }
 
+const referenceZones2025FeatureCache = new globalThis.Map();
+
+function getReferenceZoneCacheKey(feature, name, value2025) {
+  const id = feature?.getId?.();
+  if (id !== undefined && id !== null) return String(id);
+  return `${name || "zone"}:${Number.isFinite(value2025) ? value2025 : "na"}`;
+}
+
+function cacheReferenceZone2025Feature(feature) {
+  if (!feature?.getProperties) return;
+
+  const properties = Object.fromEntries(
+    Object.entries(feature.getProperties()).filter(
+      ([key, value]) =>
+        key !== "geometry" &&
+        !Array.isArray(value) &&
+        (value === null || ["string", "number", "boolean"].includes(typeof value)),
+    ),
+  );
+  const name = getLabelProperty(feature);
+  const value2025 = getNumericFeatureValueForYear(feature, 2025);
+  const value2023 = getNumericFeatureValueForYear(feature, 2023);
+  const value2019 = getNumericFeatureValueForYear(feature, 2019);
+
+  if (!name && !Number.isFinite(value2025)) return;
+
+  referenceZones2025FeatureCache.set(
+    getReferenceZoneCacheKey(feature, name, value2025),
+    {
+      name: name || "Unnamed zone",
+      value2025,
+      value2023,
+      value2019,
+      properties,
+    },
+  );
+}
+
 function getReferenceZone2025Color(value) {
   if (!Number.isFinite(value)) return "rgba(148, 163, 184, 0.2)";
   if (value >= 3000) return "rgba(127, 29, 29, 0.2)";
@@ -1066,6 +1104,7 @@ function getReferenceZone2025Style(feature, resolution) {
   const value = getNumericPropertyByName(feature, ["2025"]);
   const label = resolution < 40 ? getLabelProperty(feature) : "";
   const fillColor = getReferenceZone2025Color(value);
+  cacheReferenceZone2025Feature(feature);
 
   return new Style({
     fill: new Fill({ color: fillColor }),
@@ -19711,11 +19750,21 @@ function findAgentBaseLayerByName(baseLayerName) {
 function getChatMapContext() {
   const view = map.getView();
   const resolution = view.getResolution();
+  const size = map.getSize();
+  const extent = size ? view.calculateExtent(size) : null;
+  const extent4326 =
+    extent && extent.every(Number.isFinite)
+      ? [
+          ...toLonLat([extent[0], extent[1]], view.getProjection()),
+          ...toLonLat([extent[2], extent[3]], view.getProjection()),
+        ]
+      : null;
 
   return {
     center: view.getCenter(),
     zoom: view.getZoom(),
     projection: view.getProjection().getCode(),
+    extent_4326: extent4326,
     scale: resolution
       ? Math.round(resolutionToGeoServerScale(resolution, view))
       : null,
@@ -19724,6 +19773,7 @@ function getChatMapContext() {
     visible_layers: getVisibleLayerTitles(map.getLayers()),
     base_layers: getBaseLayerTitlesForAgent(),
     layers: getAllLayerTitlesForAgent(map.getLayers()),
+    reference_zones_2025_records: getReferenceZoneContextRecords(),
   };
 }
 
@@ -19827,6 +19877,88 @@ async function zoomToNominatimPlace(query) {
   return place.display_name || searchText;
 }
 
+function formatReferenceZonePrice(value) {
+  if (!Number.isFinite(value)) return "n/a";
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function getReferenceZoneRecordsFromFeatures(features = []) {
+  return features
+    .map((feature) => {
+      if (!feature?.getProperties) return null;
+      const name = getLabelProperty(feature) || "Unnamed zone";
+      const value2025 = getNumericFeatureValueForYear(feature, 2025);
+      return {
+        name,
+        value2025,
+        value2023: getNumericFeatureValueForYear(feature, 2023),
+        value2019: getNumericFeatureValueForYear(feature, 2019),
+      };
+    })
+    .filter((record) => Number.isFinite(record?.value2025));
+}
+
+function dedupeReferenceZoneRecords(records = []) {
+  const deduped = new globalThis.Map();
+  records.forEach((record) => {
+    const key = `${record.name}:${record.value2025}`;
+    const existing = deduped.get(key);
+    if (!existing || record.value2025 > existing.value2025) {
+      deduped.set(key, record);
+    }
+  });
+  return Array.from(deduped.values());
+}
+
+function getLoadedReferenceZoneRecords(limit = 5) {
+  const records = Array.from(referenceZones2025FeatureCache.values());
+  const source = referenceZones2025Layer?.getSource?.();
+  const view = map.getView();
+  const size = map.getSize();
+
+  if (
+    source &&
+    typeof source.getFeaturesInExtent === "function" &&
+    size &&
+    view
+  ) {
+    const extent = view.calculateExtent(size);
+    records.push(...getReferenceZoneRecordsFromFeatures(source.getFeaturesInExtent(extent)));
+  }
+
+  return dedupeReferenceZoneRecords(records)
+    .filter((record) => Number.isFinite(record.value2025))
+    .sort((a, b) => b.value2025 - a.value2025)
+    .slice(0, Math.max(1, Number(limit) || 5));
+}
+
+function getReferenceZoneContextRecords(limit = 100) {
+  return getLoadedReferenceZoneRecords(limit).map((record) => ({
+    name: record.name,
+    value_2025: record.value2025,
+    value_2023: record.value2023,
+    value_2019: record.value2019,
+    properties: record.properties,
+  }));
+}
+
+async function waitForReferenceZoneRecords(limit = 5) {
+  const wasVisible = referenceZones2025Layer.getVisible();
+  if (!wasVisible) referenceZones2025Layer.setVisible(true);
+  map.render();
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const records = getLoadedReferenceZoneRecords(limit);
+    if (records.length) return records;
+    await new Promise((resolve) => window.setTimeout(resolve, 350));
+    map.render();
+  }
+
+  return getLoadedReferenceZoneRecords(limit);
+}
+
 async function executeBackendAgentAction(action) {
   if (!action?.type) return null;
 
@@ -19893,6 +20025,10 @@ async function executeBackendAgentAction(action) {
   if (action.type === "zoom_to_place") {
     const placeName = await zoomToNominatimPlace(action.query);
     return `Zoomed to ${placeName}.`;
+  }
+
+  if (action.type === "get_highest_reference_zones") {
+    return null;
   }
 
   if (action.type === "zoom_to_layer") {
