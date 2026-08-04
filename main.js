@@ -6991,6 +6991,23 @@ function setMapScale() {
   view.setResolution(res);
 }
 
+function setMapScaleDenominator(scaleDenominator) {
+  const scale = Number(scaleDenominator);
+  if (!Number.isFinite(scale) || scale <= 0) {
+    throw new Error("Scale must be a positive number.");
+  }
+
+  const scaleInput = document.getElementById("scaleInput");
+  if (scaleInput) {
+    scaleInput.value = `1:${Math.round(scale)}`;
+  }
+
+  const view = map.getView();
+  const res = geoServerScaleToResolution(scale, view);
+  view.setResolution(res);
+  calculateScale();
+}
+
 // Add event listener to the input field to set the map scale
 const inputElement = document.getElementById("scaleInput");
 inputElement.addEventListener("keyup", function (event) {
@@ -19653,14 +19670,59 @@ function getAllLayerTitlesForAgent(layers) {
     .slice(0, 120);
 }
 
+function getBaseLayerAgentItems() {
+  return (
+    baseLayerGroup
+      ?.getLayers()
+      ?.getArray()
+      ?.map((layer) => ({
+        layer,
+        title: layer.get("title") || layer.get("name") || "",
+        visible: layer.getVisible?.() ?? false,
+      }))
+      ?.filter((item) => item.title) || []
+  );
+}
+
+function getBaseLayerTitlesForAgent() {
+  return getBaseLayerAgentItems().map((item) => ({
+    title: item.title,
+    visible: item.visible,
+  }));
+}
+
+function findAgentBaseLayerByName(baseLayerName) {
+  const normalizedBaseLayerName = normalizeAgentText(baseLayerName);
+  if (!normalizedBaseLayerName) return null;
+
+  return getBaseLayerAgentItems().find((item) => {
+    const title = normalizeAgentText(item.title);
+    return (
+      title === normalizedBaseLayerName ||
+      title.includes(normalizedBaseLayerName) ||
+      normalizedBaseLayerName.includes(title) ||
+      (normalizedBaseLayerName.includes("satellite") &&
+        title.includes("satellite")) ||
+      (normalizedBaseLayerName.includes("imagery") && title.includes("imagery"))
+    );
+  });
+}
+
 function getChatMapContext() {
   const view = map.getView();
+  const resolution = view.getResolution();
 
   return {
     center: view.getCenter(),
     zoom: view.getZoom(),
     projection: view.getProjection().getCode(),
+    scale: resolution
+      ? Math.round(resolutionToGeoServerScale(resolution, view))
+      : null,
+    map_mode: isCesiumMode ? "3d" : "2d",
+    terrain_enabled: isCesiumTerrainEnabled,
     visible_layers: getVisibleLayerTitles(map.getLayers()),
+    base_layers: getBaseLayerTitlesForAgent(),
     layers: getAllLayerTitlesForAgent(map.getLayers()),
   };
 }
@@ -19710,6 +19772,61 @@ function getAgentLayerExtent(layerMatch) {
   return null;
 }
 
+async function zoomToNominatimPlace(query) {
+  const searchText = String(query || "").trim();
+  if (!searchText) throw new Error("Place search query is required.");
+
+  const response = await fetch(
+    "https://nominatim.openstreetmap.org/search?" +
+      new URLSearchParams({
+        q: searchText,
+        format: "json",
+        limit: "1",
+        addressdetails: "1",
+      }),
+  );
+
+  if (!response.ok) {
+    throw new Error(`Nominatim request failed with status ${response.status}`);
+  }
+
+  const results = await response.json();
+  const place = results?.[0];
+  if (!place) throw new Error(`No place found for ${searchText}.`);
+
+  const view = map.getView();
+  const projection = view.getProjection();
+  const boundingBox = place.boundingbox?.map(Number);
+
+  if (
+    Array.isArray(boundingBox) &&
+    boundingBox.length === 4 &&
+    boundingBox.every(Number.isFinite)
+  ) {
+    const [south, north, west, east] = boundingBox;
+    const bottomLeft = fromLonLat([west, south], projection);
+    const topRight = fromLonLat([east, north], projection);
+    view.fit([bottomLeft[0], bottomLeft[1], topRight[0], topRight[1]], {
+      duration: 800,
+      padding: [60, 60, 60, 60],
+      maxZoom: 16,
+    });
+  } else {
+    const lon = Number(place.lon);
+    const lat = Number(place.lat);
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+      throw new Error(`Nominatim returned invalid coordinates for ${searchText}.`);
+    }
+    view.animate({
+      center: fromLonLat([lon, lat], projection),
+      zoom: 14,
+      duration: 800,
+    });
+  }
+
+  return place.display_name || searchText;
+}
+
 async function executeBackendAgentAction(action) {
   if (!action?.type) return null;
 
@@ -19730,6 +19847,52 @@ async function executeBackendAgentAction(action) {
     return `${Boolean(action.value) ? "Showed" : "Hid"} ${formatAgentLayerName(
       layerMatch,
     )}.`;
+  }
+
+  if (action.type === "set_map_mode") {
+    const mode = String(action.mode || "").toLowerCase();
+    if (mode !== "2d" && mode !== "3d") {
+      throw new Error(`Invalid map mode: ${action.mode}`);
+    }
+
+    setMapMode3d(mode === "3d");
+    return `Switched to ${mode.toUpperCase()} mode.`;
+  }
+
+  if (action.type === "set_base_layer") {
+    const baseLayerMatch = findAgentBaseLayerByName(action.base_layer);
+    if (!baseLayerMatch) {
+      throw new Error(`Base layer not found: ${action.base_layer}`);
+    }
+
+    getBaseLayerAgentItems().forEach((item) => {
+      item.layer.setVisible(item.layer === baseLayerMatch.layer);
+    });
+    if (isCesiumMode) {
+      setCesiumBaseLayerFromOpenLayers(baseLayerMatch.layer);
+    }
+    return `Changed base layer to ${baseLayerMatch.title}.`;
+  }
+
+  if (action.type === "set_elevation_tool") {
+    setMapMode3d(true);
+    setCesiumElevationTooltipEnabled(Boolean(action.value));
+    return `${Boolean(action.value) ? "Turned on" : "Turned off"} elevation readout.`;
+  }
+
+  if (action.type === "set_terrain") {
+    await setCesiumTerrainEnabled(Boolean(action.value));
+    return `${Boolean(action.value) ? "Turned on" : "Turned off"} 3D terrain.`;
+  }
+
+  if (action.type === "set_map_scale") {
+    setMapScaleDenominator(action.scale);
+    return `Set map scale to 1:${Math.round(Number(action.scale))}.`;
+  }
+
+  if (action.type === "zoom_to_place") {
+    const placeName = await zoomToNominatimPlace(action.query);
+    return `Zoomed to ${placeName}.`;
   }
 
   if (action.type === "zoom_to_layer") {
