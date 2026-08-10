@@ -1,6 +1,7 @@
 import "./style.css";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
+import assistantLoadingLogo from "./assets/agent-loading-logo.png";
 import { Map, View } from "ol";
 import TileLayer from "ol/layer/Tile";
 import { OSM, BingMaps, Vector as VectorSource, XYZ } from "ol/source";
@@ -5030,6 +5031,57 @@ function flyCesiumToOpenLayersView() {
   viewer.camera.flyTo({
     destination: Cesium.Cartesian3.fromDegrees(lonLat[0], lonLat[1], height),
     duration: 0.45,
+  });
+}
+
+function flyCesiumToLonLat(lonLat, zoom = 14) {
+  if (!isCesiumMode) return;
+
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium) return;
+
+  const [lon, lat] = lonLat.map(Number);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(
+      lon,
+      lat,
+      getCesiumCameraHeightFromZoom(zoom),
+    ),
+    orientation: {
+      heading: viewer.camera.heading,
+      pitch: Cesium.Math.toRadians(-55),
+      roll: 0,
+    },
+    duration: 0.8,
+  });
+}
+
+function flyCesiumToExtent4326(extent4326, fallbackZoom = 13) {
+  if (!isCesiumMode) return;
+
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !Array.isArray(extent4326)) return;
+
+  const [west, south, east, north] = extent4326.map(Number);
+  if (![west, south, east, north].every(Number.isFinite)) return;
+
+  if (Math.abs(east - west) < 0.001 && Math.abs(north - south) < 0.001) {
+    flyCesiumToLonLat([(west + east) / 2, (south + north) / 2], fallbackZoom);
+    return;
+  }
+
+  viewer.camera.flyTo({
+    destination: Cesium.Rectangle.fromDegrees(west, south, east, north),
+    orientation: {
+      heading: viewer.camera.heading,
+      pitch: Cesium.Math.toRadians(-55),
+      roll: 0,
+    },
+    duration: 0.8,
   });
 }
 
@@ -19304,6 +19356,44 @@ function addChatMessage(author, text, type) {
   message.append(authorEl, bubble);
   chatMessages.appendChild(message);
   chatMessages.scrollTop = chatMessages.scrollHeight;
+  return message;
+}
+
+function addAssistantLoadingMessage() {
+  const message = document.createElement("div");
+  message.className = "chat-message chat-message--bot chat-message--loading";
+
+  const authorEl = document.createElement("div");
+  authorEl.className = "chat-message__author";
+  authorEl.textContent = "Assistant";
+
+  const bubble = document.createElement("div");
+  bubble.className = "chat-message__bubble chat-loading";
+  bubble.setAttribute("role", "status");
+  bubble.setAttribute("aria-live", "polite");
+
+  const logo = document.createElement("img");
+  logo.className = "chat-loading__logo";
+  logo.src = assistantLoadingLogo;
+  logo.alt = "";
+  logo.decoding = "async";
+
+  const text = document.createElement("span");
+  text.className = "chat-loading__text";
+  text.textContent = "Thinking...";
+
+  bubble.append(logo, text);
+  message.append(authorEl, bubble);
+  chatMessages.appendChild(message);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+
+  return message;
+}
+
+function removeChatMessage(message) {
+  if (message?.parentNode) {
+    message.parentNode.removeChild(message);
+  }
 }
 
 function getChatbotReply(message) {
@@ -19861,6 +19951,7 @@ async function zoomToNominatimPlace(query) {
       padding: [60, 60, 60, 60],
       maxZoom: 16,
     });
+    flyCesiumToExtent4326([west, south, east, north]);
   } else {
     const lon = Number(place.lon);
     const lat = Number(place.lat);
@@ -19872,6 +19963,7 @@ async function zoomToNominatimPlace(query) {
       zoom: 14,
       duration: 800,
     });
+    flyCesiumToLonLat([lon, lat], 14);
   }
 
   return place.display_name || searchText;
@@ -19969,6 +20061,7 @@ async function executeBackendAgentAction(action) {
       zoom: 14,
       duration: 700,
     });
+    flyCesiumToLonLat([19.8189, 41.3275], 14);
     return "Zoomed to Tirana.";
   }
 
@@ -20092,6 +20185,7 @@ if (chatForm && chatInput && chatMessages) {
 
     addChatMessage("You", message, "user");
     chatInput.value = "";
+    const loadingMessage = addAssistantLoadingMessage();
 
     try {
       const data = await getBackendChatReply(message);
@@ -20099,8 +20193,10 @@ if (chatForm && chatInput && chatMessages) {
       const reply = [data.reply, ...actionResults]
         .filter(Boolean)
         .join("\n");
+      removeChatMessage(loadingMessage);
       addChatMessage("Assistant", reply || "Done.", "bot");
     } catch (error) {
+      removeChatMessage(loadingMessage);
       if (error.status === 401 || error.status === 503) {
         addChatMessage("Assistant", error.message, "bot");
         console.warn("Backend chatbot configuration error:", error);
@@ -20211,7 +20307,7 @@ function createAsigZrppWmsLayer(title, layerName) {
 
 const kadasterWmsGroup = new LayerGroup({
   title: "Kadaster WMS",
-  openInLayerSwitcher: true,
+  openInLayerSwitcher: false,
   displayInLayerSwitcher: true,
   layers: [
     createKadasterWmsLayer("Himare WMS", "https://apps.kadaster.al/himarewms"),
