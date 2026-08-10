@@ -1008,21 +1008,48 @@ const referencePriceStyle = new Style({
   }),
 });
 
+function parseReferenceZoneNumericValue(value) {
+  if (typeof value === "number") return value;
+  if (value === null || value === undefined || typeof value === "boolean") return NaN;
+
+  const rawValue = String(value).trim();
+  if (!rawValue) return NaN;
+
+  let normalizedValue = rawValue.replace(/\s/g, "");
+  if (normalizedValue.includes(",") && normalizedValue.includes(".")) {
+    normalizedValue = normalizedValue.replace(/,/g, "");
+  } else if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(normalizedValue)) {
+    normalizedValue = normalizedValue.replace(/,/g, "");
+  } else {
+    normalizedValue = normalizedValue.replace(",", ".");
+  }
+
+  return Number(normalizedValue);
+}
+
 function getNumericPropertyByName(feature, patterns) {
   const props = feature.getProperties();
+  const normalizedPatterns = patterns.map((pattern) =>
+    String(pattern).toLowerCase(),
+  );
 
   for (const [key, value] of Object.entries(props)) {
     if (key === "geometry") continue;
     const normalizedKey = key.toLowerCase();
-    const matches = patterns.some((pattern) => normalizedKey.includes(pattern));
-    const numericValue =
-      typeof value === "number"
-        ? value
-        : Number(String(value).replace(",", "."));
+    const numericValue = parseReferenceZoneNumericValue(value);
 
-    if (matches && Number.isFinite(numericValue)) {
+    if (normalizedPatterns.includes(normalizedKey) && Number.isFinite(numericValue)) {
       return numericValue;
     }
+  }
+
+  for (const [key, value] of Object.entries(props)) {
+    if (key === "geometry") continue;
+    const normalizedKey = key.toLowerCase();
+    const matches = normalizedPatterns.some((pattern) => normalizedKey.includes(pattern));
+    const numericValue = parseReferenceZoneNumericValue(value);
+
+    if (matches && Number.isFinite(numericValue)) return numericValue;
   }
 
   return null;
@@ -1091,18 +1118,51 @@ function cacheReferenceZone2025Feature(feature) {
   );
 }
 
+const defaultReferenceZone2025StyleClasses = [
+  { min: 0, max: 25000, color: "#22c55e" },
+  { min: 25000, max: 50000, color: "#eab308" },
+  { min: 50000, max: 75000, color: "#f97316" },
+  { min: 75000, max: 100000, color: "#dc2626" },
+  { min: 100000, max: Infinity, color: "#7f1d1d" },
+];
+let referenceZone2025StyleClasses = defaultReferenceZone2025StyleClasses.map(
+  (styleClass) => ({ ...styleClass }),
+);
+let referenceZone2025StyleField = "2025";
+const referenceZoneStylePalette = [
+  "#22c55e",
+  "#a3e635",
+  "#eab308",
+  "#f97316",
+  "#ef4444",
+  "#b91c1c",
+  "#7f1d1d",
+  "#581c87",
+  "#1e3a8a",
+];
+
+function referenceZoneHexToRgba(hex, alpha = 1) {
+  const normalized = String(hex || "").replace("#", "").trim();
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    return `rgba(148, 163, 184, ${alpha})`;
+  }
+
+  const red = parseInt(normalized.slice(0, 2), 16);
+  const green = parseInt(normalized.slice(2, 4), 16);
+  const blue = parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
 function getReferenceZone2025Color(value) {
   if (!Number.isFinite(value)) return "rgba(148, 163, 184, 0.2)";
-  if (value >= 3000) return "rgba(127, 29, 29, 0.2)";
-  if (value >= 2200) return "rgba(220, 38, 38, 0.2)";
-  if (value >= 1600) return "rgba(249, 115, 22, 0.2)";
-  if (value >= 1000) return "rgba(234, 179, 8, 0.2)";
-  if (value >= 500) return "rgba(132, 204, 22, 0.2)";
-  return "rgba(34, 197, 94, 0.2)";
+  const matchingClass = [...referenceZone2025StyleClasses]
+    .sort((a, b) => Number(b.min) - Number(a.min))
+    .find((styleClass) => value >= Number(styleClass.min));
+  return referenceZoneHexToRgba(matchingClass?.color || "#94a3b8", 0.2);
 }
 
 function getReferenceZone2025Style(feature, resolution) {
-  const value = getNumericPropertyByName(feature, ["2025"]);
+  const value = getNumericPropertyByName(feature, [referenceZone2025StyleField]);
   const label = resolution < 40 ? getLabelProperty(feature) : "";
   const fillColor = getReferenceZone2025Color(value);
   cacheReferenceZone2025Feature(feature);
@@ -1206,6 +1266,16 @@ const map = new Map({
 
 const cesiumContainer = document.getElementById("cesiumContainer");
 const cesiumElevationTooltip = document.getElementById("cesiumElevationTooltip");
+const cesiumAxisNavigator = document.getElementById("cesiumAxisNavigator");
+const cesiumAxisXLine = document.getElementById("cesiumAxisX");
+const cesiumAxisYLine = document.getElementById("cesiumAxisY");
+const cesiumAxisZLine = document.getElementById("cesiumAxisZ");
+const cesiumAxisXLabel = document.getElementById("cesiumAxisXLabel");
+const cesiumAxisYLabel = document.getElementById("cesiumAxisYLabel");
+const cesiumAxisZLabel = document.getElementById("cesiumAxisZLabel");
+const cesiumAxisXValue = document.getElementById("cesiumAxisXValue");
+const cesiumAxisYValue = document.getElementById("cesiumAxisYValue");
+const cesiumAxisZValue = document.getElementById("cesiumAxisZValue");
 const toggle3dMapButton = document.getElementById("toggle3dMap");
 const centerCesiumMapButton = document.getElementById("centerCesiumMap");
 const resetCesiumGlobeButton = document.getElementById("resetCesiumGlobe");
@@ -1324,6 +1394,18 @@ const cesiumSunPlay = document.getElementById("cesiumSunPlay");
 const cesiumSunReset = document.getElementById("cesiumSunReset");
 const cesiumSunStatus = document.getElementById("cesiumSunStatus");
 const cesiumSunResults = document.getElementById("cesiumSunResults");
+const referenceZoneStyleButton = document.getElementById("reference-zone-style");
+const referenceZoneStylePanel = document.getElementById("referenceZoneStylePanel");
+const referenceZoneStyleClose = document.getElementById("referenceZoneStyleClose");
+const referenceZoneStyleApply = document.getElementById("referenceZoneStyleApply");
+const referenceZoneStyleReset = document.getElementById("referenceZoneStyleReset");
+const referenceZoneStyleFieldSelect = document.getElementById(
+  "referenceZoneStyleField",
+);
+const referenceZoneStyleDivisionsInput = document.getElementById(
+  "referenceZoneStyleDivisions",
+);
+const referenceZoneStyleLegend = document.getElementById("referenceZoneStyleLegend");
 const cesiumIonAccessToken =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyZjlhZTVlOS1hZDg2LTQxNTgtYmFjYS1iYTRjNDcxOWFhNjQiLCJpZCI6MTE1MTg4LCJpYXQiOjE2Nzg0NjMyNTJ9.FntmGyy-qhgprvx60qrCryPonYG7hKjdxTi11M3j9yA";
 let cesiumViewer = null;
@@ -1379,6 +1461,7 @@ const cesiumTerrainAnalysisEntities = [];
 const cesiumGeneratedProfileByEntityId = new globalThis.Map();
 let cesiumProfileLinePickHandler = null;
 let cesiumElevationTooltipHandler = null;
+let cesiumAxisNavigatorPostRenderListener = null;
 let isCesiumElevationTooltipEnabled = false;
 let isCesiumSolarMode = false;
 let isCesiumSolarRotating = false;
@@ -1676,6 +1759,72 @@ function setCesiumElevationTooltipEnabled(enabled) {
   } else {
     hideCesiumElevationTooltip();
   }
+}
+
+function setCesiumAxisElement(axis, x, y, depth) {
+  const lineByAxis = {
+    x: cesiumAxisXLine,
+    y: cesiumAxisYLine,
+    z: cesiumAxisZLine,
+  };
+  const labelByAxis = {
+    x: cesiumAxisXLabel,
+    y: cesiumAxisYLabel,
+    z: cesiumAxisZLabel,
+  };
+  const line = lineByAxis[axis];
+  const label = labelByAxis[axis];
+  if (!line || !label) return;
+
+  const center = 48;
+  const length = 31;
+  const endX = center + x * length;
+  const endY = center + y * length;
+  const labelX = center + x * (length + 9);
+  const labelY = center + y * (length + 9);
+  const opacity = 0.45 + Math.max(0, 1 - Math.abs(depth)) * 0.55;
+
+  line.setAttribute("x2", endX.toFixed(1));
+  line.setAttribute("y2", endY.toFixed(1));
+  line.style.opacity = opacity.toFixed(2);
+  label.setAttribute("x", labelX.toFixed(1));
+  label.setAttribute("y", labelY.toFixed(1));
+  label.style.opacity = opacity.toFixed(2);
+}
+
+function updateCesiumAxisNavigator() {
+  if (!cesiumAxisNavigator || !cesiumViewer || !window.Cesium) return;
+  cesiumAxisNavigator.hidden = !isCesiumMode;
+  if (!isCesiumMode) return;
+
+  const Cesium = window.Cesium;
+  const camera = cesiumViewer.camera;
+  const axes = {
+    x: Cesium.Cartesian3.UNIT_X,
+    y: Cesium.Cartesian3.UNIT_Y,
+    z: Cesium.Cartesian3.UNIT_Z,
+  };
+
+  Object.entries(axes).forEach(([axis, vector]) => {
+    setCesiumAxisElement(
+      axis,
+      Cesium.Cartesian3.dot(vector, camera.rightWC),
+      -Cesium.Cartesian3.dot(vector, camera.upWC),
+      Cesium.Cartesian3.dot(vector, camera.directionWC),
+    );
+  });
+
+  if (cesiumAxisXValue) cesiumAxisXValue.value = camera.directionWC.x.toFixed(2);
+  if (cesiumAxisYValue) cesiumAxisYValue.value = camera.directionWC.y.toFixed(2);
+  if (cesiumAxisZValue) cesiumAxisZValue.value = camera.directionWC.z.toFixed(2);
+}
+
+function ensureCesiumAxisNavigator() {
+  if (!cesiumViewer || cesiumAxisNavigatorPostRenderListener) return;
+
+  cesiumAxisNavigatorPostRenderListener =
+    cesiumViewer.scene.postRender.addEventListener(updateCesiumAxisNavigator);
+  updateCesiumAxisNavigator();
 }
 
 function formatDateInputValue(date = new Date()) {
@@ -2101,6 +2250,7 @@ function initCesiumViewer() {
   setCesiumBaseLayerFromOpenLayers();
   ensureCesiumProfileLinePickHandler();
   ensureCesiumElevationTooltipHandler();
+  ensureCesiumAxisNavigator();
   return cesiumViewer;
 }
 
@@ -5148,8 +5298,10 @@ function setMapMode3d(enabled, options = {}) {
     if (options.centerOnMap) {
       flyCesiumToOpenLayersView();
     }
+    updateCesiumAxisNavigator();
     cesiumViewer.resize();
   } else {
+    if (cesiumAxisNavigator) cesiumAxisNavigator.hidden = true;
     isCesiumElevationTooltipEnabled = false;
     toggleCesiumElevationButton?.classList.remove("is-active");
     hideCesiumElevationTooltip();
@@ -5407,6 +5559,193 @@ cesiumSunButton?.addEventListener("click", () => {
   } else {
     setCesiumSunPlaying(false);
   }
+});
+
+function getReferenceZoneCachedPropertyRecords() {
+  return Array.from(referenceZones2025FeatureCache.values())
+    .map((record) => record.properties || {})
+    .filter((properties) => Object.keys(properties).length);
+}
+
+function getReferenceZoneNumericFields() {
+  const fieldNames = new Set();
+  getReferenceZoneCachedPropertyRecords().forEach((properties) => {
+    Object.entries(properties).forEach(([key, value]) => {
+      const numericValue = parseReferenceZoneNumericValue(value);
+      if (Number.isFinite(numericValue)) fieldNames.add(key);
+    });
+  });
+  return Array.from(fieldNames).sort((a, b) => a.localeCompare(b));
+}
+
+function getReferenceZoneNumericValues(fieldName) {
+  return getReferenceZoneCachedPropertyRecords()
+    .map((properties) => {
+      const value = properties[fieldName];
+      return parseReferenceZoneNumericValue(value);
+    })
+    .filter(Number.isFinite);
+}
+
+function populateReferenceZoneStyleFields() {
+  if (!referenceZoneStyleFieldSelect) return;
+
+  const currentValue = referenceZoneStyleFieldSelect.value || referenceZone2025StyleField;
+  const fields = getReferenceZoneNumericFields();
+  referenceZoneStyleFieldSelect.innerHTML = "";
+
+  if (!fields.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No loaded numeric fields yet";
+    referenceZoneStyleFieldSelect.appendChild(option);
+    return;
+  }
+
+  fields.forEach((fieldName) => {
+    const option = document.createElement("option");
+    option.value = fieldName;
+    option.textContent = fieldName;
+    referenceZoneStyleFieldSelect.appendChild(option);
+  });
+
+  const preferredField =
+    fields.find((fieldName) => fieldName === currentValue) ||
+    fields.find((fieldName) => fieldName.toLowerCase().includes("2025")) ||
+    fields[0];
+
+  if (preferredField) {
+    referenceZoneStyleFieldSelect.value = preferredField;
+  }
+}
+
+function calculateReferenceZoneStyleClasses(fieldName, divisions) {
+  const values = getReferenceZoneNumericValues(fieldName);
+  if (!values.length) {
+    throw new Error(
+      "No numeric values are loaded for this field. Turn on reference_zones_2025 and zoom to an area first.",
+    );
+  }
+
+  const classCount = Math.max(2, Math.min(Number(divisions) || 5, 9));
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+
+  if (minValue === maxValue) {
+    return [
+      {
+        min: minValue,
+        max: maxValue,
+        color: referenceZoneStylePalette[0],
+      },
+    ];
+  }
+
+  const interval = (maxValue - minValue) / classCount;
+  return Array.from({ length: classCount }, (_item, index) => ({
+    min: minValue + interval * index,
+    max: index === classCount - 1 ? maxValue : minValue + interval * (index + 1),
+    color:
+      referenceZoneStylePalette[
+        Math.round((index / Math.max(1, classCount - 1)) * (referenceZoneStylePalette.length - 1))
+      ],
+  }));
+}
+
+function formatReferenceZoneClassValue(value) {
+  if (!Number.isFinite(value)) return "";
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: Math.abs(value) >= 100 ? 0 : 2,
+  }).format(value);
+}
+
+function renderReferenceZoneStyleLegend() {
+  if (!referenceZoneStyleLegend) return;
+
+  referenceZoneStyleLegend.innerHTML = referenceZone2025StyleClasses
+    .map((styleClass) => {
+      const label =
+        styleClass.min === styleClass.max
+          ? formatReferenceZoneClassValue(styleClass.min)
+          : `${formatReferenceZoneClassValue(styleClass.min)} to ${formatReferenceZoneClassValue(
+              styleClass.max,
+            )}`;
+      return `
+        <div class="reference-zone-style-legend__item">
+          <span class="reference-zone-style-legend__swatch" style="background:${referenceZoneHexToRgba(
+            styleClass.color,
+            0.55,
+          )}"></span>
+          <span>${label}</span>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function applyReferenceZoneFrontendStyle() {
+  try {
+    referenceZones2025Layer.setVisible(true);
+    referenceZones2025Layer.changed();
+    const fieldName = referenceZoneStyleFieldSelect?.value;
+    if (!fieldName) {
+      throw new Error("Choose a numeric field first.");
+    }
+    referenceZone2025StyleField = fieldName;
+    referenceZone2025StyleClasses = calculateReferenceZoneStyleClasses(
+      fieldName,
+      referenceZoneStyleDivisionsInput?.value,
+    );
+    renderReferenceZoneStyleLegend();
+    referenceZones2025Layer.setStyle(getReferenceZone2025Style);
+    referenceZones2025Layer.changed();
+    layerSwitcher?.drawPanel?.();
+  } catch (error) {
+    alert(error.message || "Could not apply the reference zone style.");
+  }
+}
+
+function openReferenceZoneStylePanel() {
+  if (!referenceZoneStylePanel) return;
+  referenceZoneStylePanel.hidden = false;
+  referenceZones2025Layer.setVisible(true);
+  referenceZones2025Layer.changed();
+  window.setTimeout(() => {
+    populateReferenceZoneStyleFields();
+    renderReferenceZoneStyleLegend();
+  }, 250);
+}
+
+referenceZoneStyleButton?.addEventListener("click", () => {
+  if (!referenceZoneStylePanel) return;
+  if (referenceZoneStylePanel.hidden) {
+    openReferenceZoneStylePanel();
+  } else {
+    referenceZoneStylePanel.hidden = true;
+  }
+});
+
+referenceZoneStyleClose?.addEventListener("click", () => {
+  if (referenceZoneStylePanel) referenceZoneStylePanel.hidden = true;
+});
+
+referenceZoneStyleApply?.addEventListener("click", applyReferenceZoneFrontendStyle);
+
+referenceZoneStyleReset?.addEventListener("click", () => {
+  referenceZone2025StyleClasses = defaultReferenceZone2025StyleClasses.map(
+    (styleClass) => ({ ...styleClass }),
+  );
+  referenceZone2025StyleField = "2025";
+  if (referenceZoneStyleDivisionsInput) referenceZoneStyleDivisionsInput.value = "5";
+  populateReferenceZoneStyleFields();
+  renderReferenceZoneStyleLegend();
+  referenceZones2025Layer.setStyle(getReferenceZone2025Style);
+  referenceZones2025Layer.changed();
+});
+
+referenceZones2025Layer.getSource()?.on("tileloadend", () => {
+  if (!referenceZoneStylePanel || referenceZoneStylePanel.hidden) return;
+  populateReferenceZoneStyleFields();
 });
 
 cesiumSunClose?.addEventListener("click", () => {

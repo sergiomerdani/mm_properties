@@ -124,6 +124,13 @@
           <button class="fa-button" id="heatmap" title="Create Heatmap">
             🔥
           </button>
+          <button
+            class="fa-button"
+            id="reference-zone-style"
+            title="Style Reference Price Zones"
+          >
+            <i class="fa-solid fa-palette"></i>
+          </button>
           <div class="btn-group navbar-tool-group">
             <button id="btnGeoprocess" class="fa-button" title="Geoprocessing">
               <i class="fa-solid fa-diagram-project"></i>
@@ -1425,6 +1432,49 @@
         <div id="cesiumContainer" hidden></div>
         <div id="cesiumElevationTooltip" class="cesium-elevation-tooltip" hidden>
           Elev: -
+        </div>
+        <div id="referenceZoneStylePanel" class="reference-zone-style-panel" hidden>
+          <div class="reference-zone-style-panel__header">
+            <strong>Reference Zones Style</strong>
+            <button id="referenceZoneStyleClose" type="button" title="Close">×</button>
+          </div>
+          <div class="reference-zone-style-panel__body">
+            <div class="reference-zone-style-panel__hint">
+              Choose a numeric field from loaded tile properties. Classes are calculated automatically.
+            </div>
+            <div class="reference-zone-style-panel__controls">
+              <label class="reference-zone-style-field">
+                <span>Field</span>
+                <select id="referenceZoneStyleField"></select>
+              </label>
+              <label class="reference-zone-style-field">
+                <span>Divisions</span>
+                <input id="referenceZoneStyleDivisions" type="number" min="2" max="9" step="1" value="5" />
+              </label>
+            </div>
+            <div id="referenceZoneStyleLegend" class="reference-zone-style-legend"></div>
+            <div class="reference-zone-style-panel__actions">
+              <button id="referenceZoneStyleApply" type="button">Calculate & Apply</button>
+              <button id="referenceZoneStyleReset" type="button">Reset</button>
+            </div>
+          </div>
+        </div>
+        <div id="cesiumAxisNavigator" class="cesium-axis-navigator" hidden>
+          <div class="cesium-axis-navigator__title">3D Navigator</div>
+          <svg class="cesium-axis-navigator__svg" viewBox="0 0 96 96" aria-hidden="true">
+            <circle cx="48" cy="48" r="3"></circle>
+            <line id="cesiumAxisX" x1="48" y1="48" x2="72" y2="48"></line>
+            <line id="cesiumAxisY" x1="48" y1="48" x2="48" y2="24"></line>
+            <line id="cesiumAxisZ" x1="48" y1="48" x2="48" y2="72"></line>
+            <text id="cesiumAxisXLabel" x="76" y="49">X</text>
+            <text id="cesiumAxisYLabel" x="48" y="18">Y</text>
+            <text id="cesiumAxisZLabel" x="48" y="84">Z</text>
+          </svg>
+          <div class="cesium-axis-navigator__values">
+            <span><b>X</b><output id="cesiumAxisXValue">0.00</output></span>
+            <span><b>Y</b><output id="cesiumAxisYValue">0.00</output></span>
+            <span><b>Z</b><output id="cesiumAxisZValue">0.00</output></span>
+          </div>
         </div>
         <button id="toggle3dMap" class="map-mode-toggle" title="Switch to 3D Globe">
           <i class="fa-solid fa-globe"></i>

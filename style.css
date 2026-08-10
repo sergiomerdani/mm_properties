@@ -1413,6 +1413,244 @@ button {
   display: none;
 }
 
+.reference-zone-style-panel {
+  position: absolute;
+  top: 76px;
+  right: 18px;
+  z-index: 2600;
+  width: 310px;
+  overflow: hidden;
+  border: 1px solid #c7d4df;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.98);
+  color: #1f2a37;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.24);
+}
+
+.reference-zone-style-panel[hidden] {
+  display: none;
+}
+
+.reference-zone-style-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #dbe5ef;
+  background: #ffffff;
+}
+
+.reference-zone-style-panel__header strong {
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.reference-zone-style-panel__header button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.reference-zone-style-panel__body {
+  padding: 12px;
+}
+
+.reference-zone-style-panel__hint {
+  margin-bottom: 10px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.reference-zone-style-panel__controls {
+  display: grid;
+  gap: 8px;
+}
+
+.reference-zone-style-field {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.reference-zone-style-field select,
+.reference-zone-style-field input[type="number"] {
+  min-width: 0;
+  height: 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 13px;
+  background: #ffffff;
+}
+
+.reference-zone-style-legend {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.reference-zone-style-legend:empty {
+  display: none;
+}
+
+.reference-zone-style-legend__item {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #334155;
+}
+
+.reference-zone-style-legend__swatch {
+  width: 22px;
+  height: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 4px;
+}
+
+.reference-zone-style-panel__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.reference-zone-style-panel__actions button {
+  height: 34px;
+  border: 1px solid #c7d4df;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1f2a37;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.reference-zone-style-panel__actions button:first-child {
+  border-color: #0d6efd;
+  background: #0d6efd;
+  color: #ffffff;
+}
+
+.cesium-axis-navigator {
+  position: absolute;
+  right: 12px;
+  bottom: 18px;
+  z-index: 1350;
+  width: 132px;
+  padding: 10px;
+  border: 1px solid rgba(199, 212, 223, 0.9);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #1f2a37;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.22);
+  pointer-events: none;
+}
+
+.cesium-axis-navigator[hidden] {
+  display: none;
+}
+
+.cesium-axis-navigator__title {
+  margin-bottom: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.cesium-axis-navigator__svg {
+  display: block;
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(226, 232, 240, 0.88), rgba(248, 250, 252, 0.36));
+}
+
+.cesium-axis-navigator__svg circle {
+  fill: #0f172a;
+}
+
+.cesium-axis-navigator__svg line {
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+#cesiumAxisX {
+  stroke: #ef4444;
+}
+
+#cesiumAxisY {
+  stroke: #22c55e;
+}
+
+#cesiumAxisZ {
+  stroke: #2563eb;
+}
+
+.cesium-axis-navigator__svg text {
+  font-size: 11px;
+  font-weight: 900;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  paint-order: stroke;
+  stroke: #ffffff;
+  stroke-width: 3px;
+}
+
+#cesiumAxisXLabel {
+  fill: #b91c1c;
+}
+
+#cesiumAxisYLabel {
+  fill: #15803d;
+}
+
+#cesiumAxisZLabel {
+  fill: #1d4ed8;
+}
+
+.cesium-axis-navigator__values {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.cesium-axis-navigator__values span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 4px 3px;
+  border: 1px solid #dbe5ef;
+  border-radius: 5px;
+  background: #f8fafc;
+  text-align: center;
+}
+
+.cesium-axis-navigator__values b {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.cesium-axis-navigator__values output {
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
 .map-mode-toggle,
 .map-center3d-toggle,
 .map-globe-center-toggle,
