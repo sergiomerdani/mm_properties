@@ -1088,6 +1088,22 @@ function getReferenceZoneCacheKey(feature, name, value2025) {
   return `${name || "zone"}:${Number.isFinite(value2025) ? value2025 : "na"}`;
 }
 
+function getReferenceZoneFeatureGeoJsonGeometry(feature) {
+  const geometry = feature?.getGeometry?.();
+  if (!geometry?.clone) return null;
+
+  try {
+    const featureProjection = map?.getView?.().getProjection?.() || "EPSG:3857";
+    return new GeoJSON().writeGeometryObject(geometry.clone(), {
+      dataProjection: "EPSG:4326",
+      featureProjection,
+    });
+  } catch (error) {
+    console.warn("Could not cache reference zone geometry for 3D:", error);
+    return null;
+  }
+}
+
 function cacheReferenceZone2025Feature(feature) {
   if (!feature?.getProperties) return;
 
@@ -1103,6 +1119,7 @@ function cacheReferenceZone2025Feature(feature) {
   const value2025 = getNumericFeatureValueForYear(feature, 2025);
   const value2023 = getNumericFeatureValueForYear(feature, 2023);
   const value2019 = getNumericFeatureValueForYear(feature, 2019);
+  const geometry = getReferenceZoneFeatureGeoJsonGeometry(feature);
 
   if (!name && !Number.isFinite(value2025)) return;
 
@@ -1114,6 +1131,7 @@ function cacheReferenceZone2025Feature(feature) {
       value2023,
       value2019,
       properties,
+      geometry,
     },
   );
 }
@@ -1205,6 +1223,7 @@ const referenceZones2025Layer = new VectorTileLayer({
   }),
   style: getReferenceZone2025Style,
   visible: false,
+  minZoom: 8,
   title: "reference_zones_2025",
   displayInLayerSwitcher: true,
 });
@@ -1319,6 +1338,9 @@ const toggleKufiNsTerrainWmsButton = document.getElementById(
 const toggleKategoriTokeTerrainWmsButton = document.getElementById(
   "toggleKategoriTokeTerrainWms",
 );
+const toggleReferenceZonesTerrainButton = document.getElementById(
+  "toggleReferenceZonesTerrain",
+);
 const himareTerrainOpacityInput = document.getElementById("himareTerrainOpacity");
 const dhermiTerrainOpacityInput = document.getElementById("dhermiTerrainOpacity");
 const palaseTerrainOpacityInput = document.getElementById("palaseTerrainOpacity");
@@ -1327,6 +1349,9 @@ const qkdTerrainOpacityInput = document.getElementById("qkdTerrainOpacity");
 const kufiNsTerrainOpacityInput = document.getElementById("kufiNsTerrainOpacity");
 const kategoriTokeTerrainOpacityInput = document.getElementById(
   "kategoriTokeTerrainOpacity",
+);
+const referenceZonesTerrainOpacityInput = document.getElementById(
+  "referenceZonesTerrainOpacity",
 );
 const cesiumProfileButton = document.getElementById("cesiumProfileButton");
 const cesiumProfilePanel = document.getElementById("cesiumProfilePanel");
@@ -1456,6 +1481,8 @@ let kufiNsTerrainWmsLayer = null;
 let isKufiNsTerrainWmsVisible = false;
 let kategoriTokeTerrainWmsLayer = null;
 let isKategoriTokeTerrainWmsVisible = false;
+let referenceZonesTerrainDataSource = null;
+let isReferenceZonesTerrainVisible = false;
 let cesiumProfileChart = null;
 const cesiumTerrainAnalysisEntities = [];
 const cesiumGeneratedProfileByEntityId = new globalThis.Map();
@@ -2718,6 +2745,270 @@ function setKategoriTokeTerrainWmsVisible(enabled) {
 
   if (enabled) {
     setMapMode3d(true);
+  }
+}
+
+function getReferenceZonesTerrainFeatures() {
+  return Array.from(referenceZones2025FeatureCache.values())
+    .filter((record) => record.geometry)
+    .map((record) => {
+      const value = parseReferenceZoneNumericValue(
+        record.properties?.[referenceZone2025StyleField],
+      );
+      return {
+        type: "Feature",
+        geometry: record.geometry,
+        properties: {
+          ...record.properties,
+          name: record.name,
+          __fillColor: getReferenceZone2025Color(value),
+        },
+      };
+    });
+}
+
+function clampReferenceZoneLatitude(latitude) {
+  return Math.max(-85.05112878, Math.min(85.05112878, latitude));
+}
+
+function lonLatToReferenceZoneTile(lon, lat, zoom) {
+  const scale = 2 ** zoom;
+  const clampedLat = clampReferenceZoneLatitude(lat);
+  const latRadians = (clampedLat * Math.PI) / 180;
+  return {
+    x: Math.floor(((lon + 180) / 360) * scale),
+    y: Math.floor(
+      ((1 - Math.log(Math.tan(latRadians) + 1 / Math.cos(latRadians)) / Math.PI) / 2) *
+        scale,
+    ),
+  };
+}
+
+function referenceZoneTileToLonLat(x, y, zoom) {
+  const scale = 2 ** zoom;
+  const lon = (x / scale) * 360 - 180;
+  const latitudeRadians = Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / scale)));
+  return [lon, (latitudeRadians * 180) / Math.PI];
+}
+
+function getReferenceZoneTileExtent3857(x, y, zoom) {
+  const westNorth = referenceZoneTileToLonLat(x, y, zoom);
+  const eastSouth = referenceZoneTileToLonLat(x + 1, y + 1, zoom);
+  const westSouth3857 = fromLonLat([westNorth[0], eastSouth[1]]);
+  const eastNorth3857 = fromLonLat([eastSouth[0], westNorth[1]]);
+  return [westSouth3857[0], westSouth3857[1], eastNorth3857[0], eastNorth3857[1]];
+}
+
+function getReferenceZonesVisibleLonLatExtent() {
+  const Cesium = window.Cesium;
+  if (isCesiumMode && cesiumViewer && Cesium) {
+    const rectangle = cesiumViewer.camera.computeViewRectangle(
+      cesiumViewer.scene.globe.ellipsoid,
+    );
+    if (rectangle) {
+      return [
+        Cesium.Math.toDegrees(rectangle.west),
+        Cesium.Math.toDegrees(rectangle.south),
+        Cesium.Math.toDegrees(rectangle.east),
+        Cesium.Math.toDegrees(rectangle.north),
+      ];
+    }
+  }
+
+  const size = map.getSize();
+  const extent = size ? map.getView().calculateExtent(size) : map.getView().calculateExtent();
+  const projection = map.getView().getProjection();
+  const bottomLeft = transform([extent[0], extent[1]], projection, "EPSG:4326");
+  const topRight = transform([extent[2], extent[3]], projection, "EPSG:4326");
+  return [bottomLeft[0], bottomLeft[1], topRight[0], topRight[1]];
+}
+
+function getReferenceZonesVisibleTiles(zoom = 12) {
+  const [west, south, east, north] = getReferenceZonesVisibleLonLatExtent();
+  const westValue = Math.max(-180, Math.min(180, Math.min(west, east)));
+  const eastValue = Math.max(-180, Math.min(180, Math.max(west, east)));
+  const southValue = clampReferenceZoneLatitude(Math.min(south, north));
+  const northValue = clampReferenceZoneLatitude(Math.max(south, north));
+  const topLeft = lonLatToReferenceZoneTile(westValue, northValue, zoom);
+  const bottomRight = lonLatToReferenceZoneTile(eastValue, southValue, zoom);
+  const maxIndex = 2 ** zoom - 1;
+  const minX = Math.max(0, Math.min(topLeft.x, bottomRight.x));
+  const maxX = Math.min(maxIndex, Math.max(topLeft.x, bottomRight.x));
+  const minY = Math.max(0, Math.min(topLeft.y, bottomRight.y));
+  const maxY = Math.min(maxIndex, Math.max(topLeft.y, bottomRight.y));
+  const tiles = [];
+
+  for (let x = minX; x <= maxX; x += 1) {
+    for (let y = minY; y <= maxY; y += 1) {
+      tiles.push({ x, y, z: zoom });
+    }
+  }
+
+  return tiles;
+}
+
+async function fetchReferenceZonesTerrainFeaturesFromTiles() {
+  const zoom = 12;
+  const tiles = getReferenceZonesVisibleTiles(zoom);
+  if (tiles.length > 120) {
+    throw new Error("Zoom closer to the reference zones area before loading them in 3D.");
+  }
+
+  const format = new MVT({ featureClass: Feature });
+  const geoJson = new GeoJSON();
+  const seenKeys = new Set();
+  const outputFeatures = [];
+
+  await Promise.all(
+    tiles.map(async (tile) => {
+      const url = `https://tiles.kaktu.al/data/reference_zones_2025/${tile.z}/${tile.x}/${tile.y}.pbf`;
+      try {
+        const response = await fetch(url);
+        if (!response.ok) return;
+
+        const buffer = await response.arrayBuffer();
+        const tileExtent = getReferenceZoneTileExtent3857(tile.x, tile.y, tile.z);
+        const features = format.readFeatures(buffer, {
+          extent: tileExtent,
+          featureProjection: "EPSG:3857",
+        });
+
+        features.forEach((feature) => {
+          const properties = Object.fromEntries(
+            Object.entries(feature.getProperties()).filter(([key]) => key !== "geometry"),
+          );
+          const geometry = feature.getGeometry();
+          if (!geometry) return;
+
+          const geometryObject = geoJson.writeGeometryObject(geometry, {
+            dataProjection: "EPSG:4326",
+            featureProjection: "EPSG:3857",
+          });
+          const name = getLabelProperty(feature);
+          const value = parseReferenceZoneNumericValue(
+            properties?.[referenceZone2025StyleField],
+          );
+          const key = feature.getId?.() || `${name}:${JSON.stringify(geometryObject.coordinates)}`;
+          if (seenKeys.has(key)) return;
+          seenKeys.add(key);
+          outputFeatures.push({
+            type: "Feature",
+            geometry: geometryObject,
+            properties: {
+              ...properties,
+              name,
+              __fillColor: getReferenceZone2025Color(value),
+            },
+          });
+        });
+      } catch (error) {
+        console.warn("Could not read reference zone tile for 3D:", url, error);
+      }
+    }),
+  );
+
+  return outputFeatures;
+}
+
+function updateReferenceZonesTerrainOpacity() {
+  const Cesium = window.Cesium;
+  if (!Cesium || !referenceZonesTerrainDataSource) return;
+
+  const opacity = getTerrainOpacity(referenceZonesTerrainOpacityInput);
+  referenceZonesTerrainDataSource.entities.values.forEach((entity) => {
+    const fillColor =
+      entity.properties?.__fillColor?.getValue?.() ||
+      entity.properties?.__fillColor ||
+      "rgba(34, 197, 94, 0.2)";
+    const color =
+      Cesium.Color.fromCssColorString(fillColor)?.withAlpha(opacity) ||
+      Cesium.Color.fromBytes(34, 197, 94, Math.round(opacity * 255));
+
+    if (entity.polygon) {
+      entity.polygon.material = color;
+      entity.polygon.outline = true;
+      entity.polygon.outlineColor = color.withAlpha(Math.min(1, opacity + 0.25));
+      if (Cesium.HeightReference) {
+        entity.polygon.heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
+      }
+      if (Cesium.ClassificationType) {
+        entity.polygon.classificationType = Cesium.ClassificationType.BOTH;
+      }
+    }
+  });
+}
+
+async function rebuildReferenceZonesTerrainDataSource(options = {}) {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium) return null;
+
+  if (referenceZonesTerrainDataSource) {
+    viewer.dataSources.remove(referenceZonesTerrainDataSource, true);
+    referenceZonesTerrainDataSource = null;
+  }
+
+  let features = getReferenceZonesTerrainFeatures();
+  if (!features.length || options.forceFetch) {
+    features = await fetchReferenceZonesTerrainFeaturesFromTiles();
+  }
+  if (!features.length) return null;
+
+  referenceZonesTerrainDataSource = await Cesium.GeoJsonDataSource.load(
+    {
+      type: "FeatureCollection",
+      features,
+    },
+    {
+      clampToGround: true,
+    },
+  );
+  referenceZonesTerrainDataSource.name = "reference_zones_2025";
+  referenceZonesTerrainDataSource.show = isReferenceZonesTerrainVisible;
+  await viewer.dataSources.add(referenceZonesTerrainDataSource);
+  updateReferenceZonesTerrainOpacity();
+  return referenceZonesTerrainDataSource;
+}
+
+async function setReferenceZonesTerrainVisible(enabled) {
+  const viewer = initCesiumViewer();
+  const Cesium = window.Cesium;
+  if (!viewer || !Cesium || !toggleReferenceZonesTerrainButton) return;
+
+  isReferenceZonesTerrainVisible = enabled;
+  toggleReferenceZonesTerrainButton.classList.toggle("is-loading", enabled);
+
+  try {
+    if (enabled) {
+      await rebuildReferenceZonesTerrainDataSource({ forceFetch: true });
+    }
+
+    if (enabled && !referenceZonesTerrainDataSource) {
+      isReferenceZonesTerrainVisible = false;
+      toggleReferenceZonesTerrainButton.classList.remove("is-active");
+      alert(
+        "No loaded reference zone geometries yet. Turn on reference_zones_2025 in 2D, zoom to the area, then use Ref Zones in 3D.",
+      );
+      return;
+    }
+
+    if (referenceZonesTerrainDataSource) {
+      referenceZonesTerrainDataSource.show = enabled;
+    }
+
+    toggleReferenceZonesTerrainButton.classList.toggle("is-active", enabled);
+    toggleReferenceZonesTerrainButton.title = enabled
+      ? "Hide reference zones from 3D terrain"
+      : "Show reference zones on 3D terrain";
+
+    if (enabled) {
+      setMapMode3d(true);
+    }
+  } catch (error) {
+    console.error("Could not drape reference zones in 3D:", error);
+    alert(error.message || "Could not drape reference zones in 3D.");
+  } finally {
+    toggleReferenceZonesTerrainButton.classList.remove("is-loading");
   }
 }
 
@@ -5396,6 +5687,10 @@ toggleKategoriTokeTerrainWmsButton?.addEventListener("click", () => {
   setKategoriTokeTerrainWmsVisible(!isKategoriTokeTerrainWmsVisible);
 });
 
+toggleReferenceZonesTerrainButton?.addEventListener("click", () => {
+  setReferenceZonesTerrainVisible(!isReferenceZonesTerrainVisible);
+});
+
 bindTerrainOpacitySlider(himareTerrainOpacityInput, () => himareTerrainWmsLayer);
 bindTerrainOpacitySlider(dhermiTerrainOpacityInput, () => dhermiTerrainWmsLayer);
 bindTerrainOpacitySlider(palaseTerrainOpacityInput, () => palaseTerrainWmsLayer);
@@ -5406,6 +5701,9 @@ bindTerrainOpacitySlider(
   kategoriTokeTerrainOpacityInput,
   () => kategoriTokeTerrainWmsLayer,
 );
+referenceZonesTerrainOpacityInput?.addEventListener("input", () => {
+  updateReferenceZonesTerrainOpacity();
+});
 
 cesiumProfileButton?.addEventListener("click", () => {
   createTerrainProfileFromLatestLine();
@@ -5699,6 +5997,9 @@ function applyReferenceZoneFrontendStyle() {
     renderReferenceZoneStyleLegend();
     referenceZones2025Layer.setStyle(getReferenceZone2025Style);
     referenceZones2025Layer.changed();
+    if (isReferenceZonesTerrainVisible) {
+      rebuildReferenceZonesTerrainDataSource();
+    }
     layerSwitcher?.drawPanel?.();
   } catch (error) {
     alert(error.message || "Could not apply the reference zone style.");
@@ -5741,6 +6042,9 @@ referenceZoneStyleReset?.addEventListener("click", () => {
   renderReferenceZoneStyleLegend();
   referenceZones2025Layer.setStyle(getReferenceZone2025Style);
   referenceZones2025Layer.changed();
+  if (isReferenceZonesTerrainVisible) {
+    rebuildReferenceZonesTerrainDataSource();
+  }
 });
 
 referenceZones2025Layer.getSource()?.on("tileloadend", () => {

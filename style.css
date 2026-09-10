@@ -1671,6 +1671,7 @@ button {
 .map-qkd-wms-toggle,
 .map-kufi-ns-wms-toggle,
 .map-kategori-toke-wms-toggle,
+.map-reference-zones-toggle,
 .map-profile-toggle,
 .map-site-terrain-toggle,
 .map-solar-toggle,
@@ -1779,20 +1780,24 @@ button {
   top: 532px;
 }
 
-.map-profile-toggle {
+.map-reference-zones-toggle {
   top: 572px;
 }
 
-.map-site-terrain-toggle {
+.map-profile-toggle {
   top: 612px;
 }
 
-.map-solar-toggle {
+.map-site-terrain-toggle {
   top: 652px;
 }
 
-.map-sun-toggle {
+.map-solar-toggle {
   top: 692px;
+}
+
+.map-sun-toggle {
+  top: 732px;
 }
 
 .map-terrain-opacity {
@@ -1833,6 +1838,10 @@ button {
   top: 532px;
 }
 
+.map-reference-zones-opacity {
+  top: 572px;
+}
+
 .map-draw3d-type {
   position: absolute;
   top: 252px;
@@ -1869,6 +1878,7 @@ button {
 .map-qkd-wms-toggle:hover,
 .map-kufi-ns-wms-toggle:hover,
 .map-kategori-toke-wms-toggle:hover,
+.map-reference-zones-toggle:hover,
 .map-profile-toggle:hover,
 .map-site-terrain-toggle:hover,
 .map-solar-toggle:hover,
@@ -1897,6 +1907,7 @@ button {
 .map-qkd-wms-toggle.is-active,
 .map-kufi-ns-wms-toggle.is-active,
 .map-kategori-toke-wms-toggle.is-active,
+.map-reference-zones-toggle.is-active,
 .map-profile-toggle.is-active,
 .map-site-terrain-toggle.is-active,
 .map-solar-toggle.is-active,
@@ -1921,6 +1932,7 @@ button {
 .map-qkd-wms-toggle.is-loading,
 .map-kufi-ns-wms-toggle.is-loading,
 .map-kategori-toke-wms-toggle.is-loading,
+.map-reference-zones-toggle.is-loading,
 .map-profile-toggle.is-loading,
 .map-site-terrain-toggle.is-loading,
 .map-solar-toggle.is-loading,
